@@ -1,0 +1,1 @@
+"""Núcleo de la aplicación: composición de dependencias y logging."""

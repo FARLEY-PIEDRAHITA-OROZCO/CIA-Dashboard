@@ -1,0 +1,1 @@
+"""Paquete de dominio: modelos de negocio y contratos (puertos)."""

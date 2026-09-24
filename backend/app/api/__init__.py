@@ -1,0 +1,1 @@
+"""Paquete de la API REST: rutas, esquemas y dependencias de FastAPI."""

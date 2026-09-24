@@ -1,0 +1,1 @@
+"""Adaptadores de infraestructura: Azure DevOps y caché en memoria."""
