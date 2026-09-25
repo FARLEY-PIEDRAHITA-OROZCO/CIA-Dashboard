@@ -13,13 +13,13 @@ def test_env_file_apunta_a_backend_y_se_puede_anular():
     settings = Settings(
         _env_file=None,
         azure_org_url="https://dev.azure.com/org",
-        azure_proyecto="CIA",
+        azure_proyecto="Proyecto de ejemplo",
         azure_pat="secret",
         origen_cors="http://localhost:5173, https://team.example",
     )
 
     assert settings.configurado is True
-    assert settings.area_path_efectivo == "CIA"
+    assert settings.area_path_efectivo == "Proyecto de ejemplo"
     assert settings.origenes_cors == ["http://localhost:5173", "https://team.example"]
 
 
@@ -27,7 +27,7 @@ def test_configuracion_exige_organizacion_proyecto_y_pat():
     settings = Settings(
         _env_file=None,
         azure_org_url="https://dev.azure.com/org",
-        azure_proyecto="CIA",
+        azure_proyecto="Proyecto de ejemplo",
     )
 
     assert settings.configurado is False

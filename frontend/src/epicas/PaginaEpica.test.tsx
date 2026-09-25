@@ -11,7 +11,7 @@ const ARBOL: Epic = {
   titulo: "Canal digital",
   estado: "In Progress",
   descripcion: "Descripción de la épica",
-  url: "https://dev.azure.com/org/CIA/_workitems/edit/100",
+  url: "https://dev.azure.com/organizacion-ejemplo/Proyecto-de-ejemplo/_workitems/edit/100",
   hus: [{ azure_id: 300, titulo: "Directa", estado: "New", descripcion: "" }],
   features: [
     {

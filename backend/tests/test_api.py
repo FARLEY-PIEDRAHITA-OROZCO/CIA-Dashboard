@@ -37,7 +37,7 @@ def test_estado_integracion(cliente_fake):
     assert r.status_code == 200
     assert cuerpo["configurada"] is True
     assert cuerpo["verificado"] is True
-    assert cuerpo["proyecto"] == "CIA (Centro de Inteligencia Artificial)"
+    assert cuerpo["proyecto"] == "Proyecto de ejemplo"
 
 
 def test_lista_epicas(cliente_fake):

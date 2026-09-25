@@ -7,8 +7,8 @@ import Dashboard from "./Dashboard";
 const ESTADO = {
   configurada: true,
   organizacion: "https://dev.azure.com/org",
-  proyecto: "CIA",
-  area_path: "CIA",
+  proyecto: "Proyecto de ejemplo",
+  area_path: "Proyecto de ejemplo",
   verificado: true,
   error: "",
 };

@@ -30,9 +30,9 @@ def servicio_con(repo, ttl=3600, configurado=True) -> ServicioBacklog:
         cache=CacheMemoria(),
         ttl_seg=ttl,
         configuracion=configurado,
-        organizacion="https://dev.azure.com/segurosmundial",
-        proyecto="CIA",
-        area_path="CIA",
+        organizacion="https://dev.azure.com/organizacion-ejemplo",
+        proyecto="Proyecto de ejemplo",
+        area_path="Proyecto de ejemplo",
     )
 
 

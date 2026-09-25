@@ -51,7 +51,7 @@ class SabanaTransporte:
     async def get(self, url: str, params: Optional[Dict] = None) -> Dict:
         self.llamadas.append(("get", url))
         if "/_apis/projects/" in url:
-            return {"name": "CIA (Centro de Inteligencia Artificial)"}
+            return {"name": "Proyecto de ejemplo"}
         if "/workitems?" in url:
             ids_str = url.split("ids=")[1].split("&")[0]
             ids = [int(x) for x in ids_str.split(",")]
@@ -69,7 +69,7 @@ def epica_canonica() -> Epic:
         azure_id=100,
         titulo="Épica del canal digital",
         estado="In Progress",
-        url="https://dev.azure.com/segurosmundial/CIA (Centro de Inteligencia Artificial)/_workitems/edit/100",
+        url="https://dev.azure.com/organizacion-ejemplo/Proyecto de ejemplo/_workitems/edit/100",
         features=[
             Feature(
                 azure_id=101,
@@ -98,7 +98,7 @@ class FakeRepositorio:
     async def verificar_proyecto(self) -> Dict[str, str]:
         if self.sintoma:
             raise self.sintoma
-        return {"proyecto": "CIA (Centro de Inteligencia Artificial)"}
+        return {"proyecto": "Proyecto de ejemplo"}
 
     async def listar_epicas(self):
         if self.sintoma:
@@ -117,9 +117,9 @@ def contenedor_con(repo: FakeRepositorio, configurado: bool = True) -> Contenedo
     from app.infrastructure.cache import CacheMemoria
 
     settings = Settings(
-        azure_org_url="https://dev.azure.com/segurosmundial",
-        azure_proyecto="CIA (Centro de Inteligencia Artificial)",
-        area_path="CIA (Centro de Inteligencia Artificial)",
+        azure_org_url="https://dev.azure.com/organizacion-ejemplo",
+        azure_proyecto="Proyecto de ejemplo",
+        area_path="Proyecto de ejemplo",
         azure_pat="seed",
     )
     cache = CacheMemoria()
