@@ -3,7 +3,7 @@
 > Estrategia y referencia de las suites del proyecto. Meta: **verificar
 > comportamiento sin depender de la red**, con la menor fricción posible.
 
-Estado actual: **Backend 99 pruebas ✓ · Frontend 72 pruebas ✓**
+Estado actual: **Backend 102 pruebas ✓ · Frontend 82 pruebas ✓**
 
 ---
 
@@ -38,14 +38,14 @@ cd backend
 | Archivo | #tests | Qué valida |
 | ------- | ------ | ---------- |
 | `test_transporte.py` | 15 | Auth Basic, errores HTTP seguros, errores de red, JSON inválido/inesperado, estados 203/204/3xx, **PATCH / JSON Patch** (content-type, payload, revisión) y extracción acotada del mensaje de regla |
-| `test_repositorio.py` | 12 | Verificación de proyecto, listado liviano, árbol Task/Bug, caching inexistente en adaptador, hijos omitidos, URLs codificadas, bugs jerárquicos/relacionados, carga perezosa y rechazo de no-épica |
+| `test_repositorio.py` | 15 | Verificación de proyecto, listado liviano, árbol Task/Bug, caching inexistente en adaptador, hijos omitidos, URLs codificadas, bugs jerárquicos/relacionados, carga perezosa, rechazo de no-épica, **exposición de `tags` en HU/tarea/bug** y su presencia en el lote de campos |
 | `test_config.py` | 8 | Ruta de `.env`, configuración completa, split CORS, HTTPS, opt-in de exposición externa y **escritura QA**: apagada por defecto, exige flag + PAT propio, PAT fuera de `repr` y rechazo fuera de loopback |
 | `test_servicio.py` | 12 | Caché del listado (2.ª llamada no relee repo) + invalidación de `CachePort`; caché por épica y variante con bugs; `estado()`; métricas de bugs, incluyendo HUs dentro de Features; **filtro de cerradas**: excluye `Closed` por defecto, los incluye con `incluir_cerradas=True`, el filtrado no rompe la caché completa (1 sola lectura), y un estado vacío no se cuenta como cerrada. El repositorio real ya no tiene caché interna |
 | `test_api.py` | 25 | Contrato HTTP, headers de seguridad, CORS permitido/rechazado, árbol con/sin bugs, endpoint y métricas de bugs, validación de ID positivo, 404 de árbol/upstream, refresh, 409 y 502; más **escritura QA**: 409 sin habilitación, resultado, dry-run, `rev_esperada`, 422 de cuerpo vacío e ID no positivo, 422 de validación local, 409 con detalle de regla y lectura de `rev` |
 | `test_escritura.py` | 16 | Adaptador de escritura: lista blanca de campos, `PATCH` + `validateOnly`, **notas QA append-only y escapado de HTML**, normalización/rechazo de tags, control de concurrencia por `rev` y validación de estado |
 | `test_servicio_escritura.py` | 11 | Servicio: flag deshabilitado, bandera sin adaptador, delegación, `validar`/`rev_esperada`, propagación de errores de Azure con detalle de regla, **invalidación dirigida de caché** (otras épicas siguen cacheadas) y dry-run que no invalida |
 
-**Total: 99.**
+**Total: 102.**
 
 ### Base compartida (`conftest.py`)
 
@@ -95,8 +95,9 @@ Config en `vite.config.ts` (sección `test`): entorno `jsdom`, setup
 | `epicas/TableroBugs.test.tsx` | 5 | Filtros de severidad, tarjetas sanitizadas, apertura del formulario QA, alternancia de tags, aviso de solo lectura y envío del PATCH con los campos tocados |
 | `epicas/PaginaBugs.test.tsx` | 1 | Carga de métricas y tablero de bugs |
 | `epicas/EdicionInline.test.tsx` | 11 | Solo emite campos modificados, no guarda sin cambios, alterna tags QA, valida sin guardar, notas QA separadas, error de mutación, estado guardando, aviso de solo lectura y selector de estados |
+| `epicas/edicionHistoriasTareas.test.tsx` | 10 | **Fase 5**: edición QA en historias y tareas, ocultación de prioridad/severidad donde Azure no las soporta, tags precargados, desplegable de estados, PATCH con solo campos modificados, dry-run y avisos de solo lectura |
 
-**Total: 72 en el frontend (14 archivos) y 99 en el backend.**
+**Total: 82 en el frontend (15 archivos) y 102 en el backend.**
 
 ---
 

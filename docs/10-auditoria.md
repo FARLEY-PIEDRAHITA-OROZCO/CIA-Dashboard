@@ -109,8 +109,8 @@ run.py → app.main:app
 
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
-| Backend pytest | **99 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
-| Frontend Vitest | **72 passed / 14 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs y sanitización. |
+| Backend pytest | **102 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
+| Frontend Vitest | **82 passed / 15 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs y sanitización. |
 | Frontend build | **PASS** | `tsc -b` y `vite build`; bundle generado correctamente. |
 | `pip check` | **PASS** | No hay requisitos Python rotos en el entorno auditado. |
 | `pip-audit --local` | **PASS** | Sin vulnerabilidades conocidas en el lockfile instalado. |
@@ -151,7 +151,7 @@ La auditoría original de `npm audit` reportó:
   dependencia vulnerable de `esbuild`.
 
 El riesgo principal estaba en el servidor de desarrollo y el tooling de
-pruebas. La actualización se validó con las 99 y 72 pruebas y el build actuales;
+pruebas. La actualización se validó con las 102 y 82 pruebas y el build actuales;
 el servidor de Vite debe seguir enlazado a loopback.
 
 #### AUD-02 — BFS falla si Azure omite una relación hija

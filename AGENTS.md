@@ -44,6 +44,7 @@ npm.cmd audit --audit-level=high
 - The backlog has two tree branches: `Epic.features[].hus[].tareas[]` and direct `Epic.hus[].tareas[]`; bugs extend the hierarchy as `User Story → Bug → Task` and are optionally linked with `Related`. A shape change must update domain models, `queries.py`, repository mapping, API schemas/routes, `frontend/src/api/tipos.ts`, runtime validators in `frontend/src/api/cliente.ts`, UI and tests together.
 - `frontend/src/api/cliente.ts` is the only runtime network seam. Query/mutation logic belongs in `frontend/src/epicas/hooks.ts`; presentational descendants receive props and emit events, while data-connected pages/rows may use hooks. `componentes/NavegacionGlobal.tsx` is presentational: `App` supplies `vista`, `configurado`, `refrescando` and `onRefrescar`.
 - QA writing is a **separate, opt-in capability** (ADR-11). `EscrituraBacklogPort` / `infrastructure/azure/escritura.py` are the only write path; `RepositorioBacklogPort` and `repository.py` stay read-only. Any change to the editable field set must update `ActualizacionQA`, the JSON Patch builder, `api/schemas.py`, `frontend/src/api/tipos.ts`, the `EdicionInline` form and tests together.
+- Editable types are **Bug, User Story and Task**; Epics and Features are deliberately excluded. `Priority`/`Severity` only exist on Bugs, so the story/task forms must keep `mostrarPrioridad`/`mostrarSeveridad` in `false`. All three cards share `useEdicionQA`; do not duplicate the mutation.
 
 ## Operational and security gotchas
 

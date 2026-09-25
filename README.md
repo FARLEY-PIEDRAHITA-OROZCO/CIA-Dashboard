@@ -41,7 +41,7 @@ integración Azure, seguridad, pruebas, despliegue y guías de extensión).
 | ---- | ---------- | --------- |
 | Backend | Python 3.14 · FastAPI · httpx · pydantic-settings | `backend/` |
 | Frontend | React 18 · TypeScript · Vite · TanStack Query · DOMPurify | `frontend/` |
-| Pruebas | pytest (99) · Vitest + Testing Library (58) | `backend/tests/` · `frontend/src/**/*.test.tsx` |
+| Pruebas | pytest (102) · Vitest + Testing Library (58) | `backend/tests/` · `frontend/src/**/*.test.tsx` |
 
 ## Puesta en marcha rápida
 
@@ -150,11 +150,11 @@ Ejemplos y contratos en [03-api.md](docs/03-api.md).
 ## Pruebas
 
 ```powershell
-# Backend (99): transporte, repositorio/árbol/bugs, caché, servicio, API y regresiones de seguridad
+# Backend (102): transporte, repositorio/árbol/bugs, caché, servicio, API y regresiones de seguridad
 cd backend
 .\.venv\Scripts\python.exe -m pytest
 
-# Frontend (72): badges, tablas, tableros, rutas, bugs, navegación global, API, Dashboard y sanitización
+# Frontend (82): badges, tablas, tableros, rutas, bugs, navegación global, API, Dashboard y sanitización
 cd ..\frontend
 npm.cmd test
 npm.cmd run build

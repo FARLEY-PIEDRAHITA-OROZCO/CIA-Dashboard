@@ -40,7 +40,7 @@ CIA-Dashboard/                      # raíz del proyecto
 │   │   ├── api/                    # routers, esquemas, inyección FastAPI
 │   │   └── core/                   # contenedor de dependencias + logging
 │   ├── run.py                      # arranque local de uvicorn
-│   ├── tests/                      # 99 pruebas (sin red)
+│   ├── tests/                      # 102 pruebas (sin red)
 │   ├── requirements*.txt           # dependencias runtime / dev
 │   ├── .env.example                # plantilla de configuración (sin secretos)
 │   └── .env                        # secreto local (gitignore; nunca se commitea)

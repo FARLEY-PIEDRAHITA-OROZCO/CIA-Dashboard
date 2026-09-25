@@ -59,6 +59,7 @@ frontend/src/
 │   ├── TableroBugs.tsx       # tablero de bugs (estado, prioridad, severidad, relación)
 │   ├── TarjetaBugEditable.tsx # tarjeta de bug con edición QA opcional
 │   ├── EdicionInline.tsx     # formulario de edición QA (presentacional)
+│   ├── useEdicionQA.tsx      # hook compartido: guardar, validar, errores y aviso
 │   └── index.ts              # barril de exportación
 ├── pages/
 │   └── Dashboard.tsx         # página principal (KPI + tabla)
@@ -457,9 +458,34 @@ el *JSON Patch* recibido: un campo ausente significa "no tocar".
 - Con `habilitado={false}` muestra un aviso de solo lectura en lugar de un
   botón de guardado que fallaría.
 
-`TarjetaBugEditable` envuelve el formulario y conecta `useActualizarWorkItem`
-(data-connected). `TableroBugs` acepta `edicionHabilitada` para propagar el
-estado de la capacidad.
+### Tipos editables y campos por tipo
+
+`EdicionInline` se usa hoy en **bugs, historias y tareas** (no en épicas ni
+features: eso es gestión de estructura, no anotación de testing).
+
+| Tipo | Estado | Prioridad | Severidad | Tags | Notas QA |
+| ---- | ------ | --------- | --------- | ---- | -------- |
+| Bug | texto libre | sí | sí | sí | sí |
+| Historia | desplegable | no | no | sí | sí |
+| Tarea | desplegable | no | no | sí | sí |
+
+`Priority` y `Severity` no existen en historias ni tareas; se ocultan con
+`mostrarPrioridad` / `mostrarSeveridad` en lugar de ofrecer un control que
+Azure rechazaría. Para historias y tareas el estado se ofrece como desplegable
+con las transiciones habituales de Scrum; en bugs queda texto libre porque sus
+estados suelen ser propios de cada proceso.
+
+### `useEdicionQA` (hook compartido)
+
+Concentra lo que las tres tarjetas necesitan —`guardar`, `validar`, `guardando`,
+`error`, `aviso` y `nodoAviso()`— evitando tres copias de la misma mutación.
+`EdicionTarea` y `EdicionHistoria` son presentacionales y solo componen
+`EdicionInline` con los flags de su tipo; `TarjetaBugEditable` mantiene el
+cierre automático del formulario al guardar.
+
+`TableroHistorias`, `TableroTareas` y `TableroBugs` aceptan
+`edicionHabilitada`, que `PaginaEpica` y `PaginaTareas` derivan de
+`useEstadoAzure().data.configurada`.
 
 ---
 
