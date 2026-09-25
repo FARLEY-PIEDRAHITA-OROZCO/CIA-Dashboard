@@ -51,8 +51,10 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
     # ------------------------------------------------------------------ #
     async def verificar_proyecto(self) -> Dict[str, str]:
         """Comprueba que el proyecto exista y el PAT tenga lectura."""
-        url = self._ruta_proyecto(
-            f"_apis/projects/{quote(self._proyecto, safe='')}"
+        # Es un endpoint Core de nivel organizacion. No usar _ruta_proyecto():
+        # anteponer aqui el proyecto duplica el segmento y Azure responde 401.
+        url = (
+            f"{self._org_url}/_apis/projects/{self._proyecto_codificado}"
             f"?api-version={queries.API_VERSION}"
         )
         datos = await self._transporte.get(url)

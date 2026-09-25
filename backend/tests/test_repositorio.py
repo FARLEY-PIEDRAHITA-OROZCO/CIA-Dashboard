@@ -9,9 +9,9 @@ from app.infrastructure.cache import CacheMemoria
 
 from .conftest import SabanaTransporte, item_azure
 
-ORG = "https://dev.azure.com/segurosmundial"
-PROY = "CIA (Centro de Inteligencia Artificial)"
-AREA = "CIA (Centro de Inteligencia Artificial)"
+ORG = "https://dev.azure.com/organizacion-ejemplo"
+PROY = "Proyecto de ejemplo"
+AREA = "Proyecto de ejemplo"
 
 
 def fabricar_repo(wiql_ids, items):
@@ -41,7 +41,7 @@ async def test_resumen_incluye_url_y_proyecto_codificado():
 
     epicas = await repo.listar_epicas()
 
-    assert epicas[0].url.endswith("/CIA%20%28Centro%20de%20Inteligencia%20Artificial%29/_workitems/edit/100")
+    assert epicas[0].url.endswith("/Proyecto%20de%20ejemplo/_workitems/edit/100")
 
 
 @pytest.mark.asyncio
@@ -78,10 +78,19 @@ async def test_repositorio_no_mantiene_una_segunda_cache():
 
 
 @pytest.mark.asyncio
-async def test_verificar_proyecto():
+async def test_verificar_proyecto_usa_endpoint_de_organizacion():
     repo, transporte = fabricar_repo([], [])
+
     resultado = await repo.verificar_proyecto()
-    assert resultado == {"proyecto": "CIA (Centro de Inteligencia Artificial)"}
+
+    assert resultado == {"proyecto": "Proyecto de ejemplo"}
+    assert transporte.llamadas == [
+        (
+            "get",
+            "https://dev.azure.com/organizacion-ejemplo/_apis/projects/"
+            "Proyecto%20de%20ejemplo?api-version=7.1",
+        )
+    ]
 
 
 @pytest.mark.asyncio
