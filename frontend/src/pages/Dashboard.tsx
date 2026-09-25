@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { EstadoTrabajo, tonoEstado } from "../componentes/EstadoTrabajo";
 import { Kpi } from "../componentes/Kpi";
 import { CajaVacia, Cargando, ErrorAlerta } from "../componentes/retroalimentacion";
-import { TablaEpicas, useEpicas, useEstadoAzure, useRefrescar } from "../epicas";
+import { TablaEpicas, useEpicas, useEstadoAzure } from "../epicas";
 
 const ORDEN_ESTADOS = [
   "in progress",
@@ -36,7 +36,6 @@ export default function Dashboard() {
   const configurado = Boolean(estadoIntegracion.data?.configurada);
   const [incluirCerradas, setIncluirCerradas] = useState(false);
   const epicasQ = useEpicas(configurado, incluirCerradas);
-  const refrescar = useRefrescar();
 
   const [expandidas, setExpandidas] = useState<ReadonlySet<number>>(new Set());
 
@@ -85,14 +84,6 @@ export default function Dashboard() {
             />
             Incluir cerradas
           </label>
-          <button
-            type="button"
-            className="btn primario"
-            onClick={() => refrescar.mutate()}
-            disabled={!configurado || refrescar.isPending}
-          >
-            {refrescar.isPending ? "Refrescando…" : "Refrescar"}
-          </button>
         </div>
       </div>
 

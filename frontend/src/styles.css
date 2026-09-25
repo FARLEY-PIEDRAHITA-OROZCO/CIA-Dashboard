@@ -43,32 +43,139 @@ code {
 /* Barra superior                                                      */
 /* ------------------------------------------------------------------ */
 .barra-superior {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
   background: #0f172a;
   color: #e2e8f0;
+  border-bottom: 1px solid #1e293b;
+}
+
+.barra-superior-fila {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px 20px;
+  flex-wrap: wrap;
 }
 
 .marca {
   font-weight: 600;
   letter-spacing: 0.02em;
+  color: #f8fafc;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.enlaces-barra {
+.marca:hover {
+  color: #ffffff;
+}
+
+.marca span {
+  color: var(--acento);
+}
+
+.navegacion-principal {
   display: flex;
-  gap: 16px;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.navegacion-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.navegacion-separador {
+  width: 1px;
+  height: 18px;
+  margin: 0 8px;
+  background: #334155;
+  flex: 0 0 auto;
 }
 
 .enlace-barra {
+  display: inline-block;
   color: #cbd5e1;
   text-decoration: none;
   font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .enlace-barra:hover {
   color: #ffffff;
+  background: #1e293b;
+}
+
+.enlace-barra[aria-current="page"] {
+  color: #ffffff;
+  background: #1d4ed8;
+}
+
+.barra-acciones {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.btn-barra {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-barra:hover:not(:disabled) {
+  background: #334155;
+  color: #ffffff;
+}
+
+.btn-barra:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.barra-error {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 20px 10px;
+  color: #fecaca;
+  font-size: 12.5px;
+}
+
+@media (max-width: 760px) {
+  .barra-superior-fila {
+    padding: 10px 14px;
+    gap: 8px 12px;
+  }
+
+  .navegacion-principal {
+    order: 3;
+    width: 100%;
+    flex: 1 0 100%;
+    padding-bottom: 2px;
+  }
+
+  .barra-acciones {
+    margin-left: auto;
+  }
+
+  .barra-error {
+    padding: 0 14px 10px;
+  }
 }
 
 /* ------------------------------------------------------------------ */
