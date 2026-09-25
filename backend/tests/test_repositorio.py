@@ -179,6 +179,48 @@ async def test_arbol_sin_bugs_conserva_contrato_anterior():
 
 
 @pytest.mark.asyncio
+async def test_arbol_expone_tags_de_historias_y_tareas():
+    """Los tags alimentan el formulario de edición QA (ADR-11, Fase 5)."""
+    items = [
+        item_azure(100, "Epic", titulo="Épica", hijos=[201]),
+        item_azure(201, "User Story", titulo="HU", tags="verificado-qa", hijos=[400]),
+        item_azure(400, "Task", titulo="Tarea", tags="bloqueado,qa"),
+    ]
+    repo, _ = fabricar_repo([100], items)
+
+    epica = await repo.obtener_epica(100, incluir_bugs=True)
+
+    assert epica is not None
+    hu = epica.hus[0]
+    assert hu.tags == "verificado-qa"
+    assert hu.tareas[0].tags == "bloqueado,qa"
+
+
+@pytest.mark.asyncio
+async def test_tags_vacios_en_todos_los_tipos():
+    """Sin tags en Azure, el modelo expone cadena vacía (nunca `None`)."""
+    repo, _ = fabricar_repo([100], _backlog_completo())
+
+    epica = await repo.obtener_epica(100, incluir_bugs=True)
+
+    assert epica is not None
+    assert epica.tags == ""
+    assert all(hu.tags == "" for f in epica.features for hu in f.hus)
+    assert all(bug.tags == "" for f in epica.features for hu in f.hus for bug in (hu.bugs or []))
+
+
+@pytest.mark.asyncio
+async def test_pedir_tags_no_rompe_el_lote_de_listado():
+    items = [item_azure(100, "Epic", titulo="Épica", tags="qa")]
+    repo, transporte = fabricar_repo([100], items)
+
+    await repo.listar_epicas()
+
+    url = next(llamada[1] for llamada in transporte.llamadas if "/workitems?" in llamada[1])
+    assert "System.Tags" in url
+
+
+@pytest.mark.asyncio
 async def test_arbol_carga_perezosa_no_descarga_huertas_de_otras_epicas():
     items = [
         item_azure(100, "Epic", hijos=[101]),

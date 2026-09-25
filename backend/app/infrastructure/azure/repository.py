@@ -314,6 +314,7 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
                 "titulo": queries.campo(item, queries.CAMPO_TITULO),
                 "estado": queries.campo(item, queries.CAMPO_ESTADO),
                 "descripcion": queries.campo(item, queries.CAMPO_DESCRIPCION),
+                "tags": queries.campo(item, queries.CAMPO_TAGS),
                 "relacion": relacion,
             }
 
@@ -414,6 +415,7 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
             "estado": nodo.get("estado", ""),
             "descripcion": nodo.get("descripcion", ""),
             "url": self._url_workitem(int(nodo["azure_id"])),
+            "tags": nodo.get("tags", ""),
         }
         tipo_actual = nodo.get("tipo", "")
         if tipo_actual == "Epic":

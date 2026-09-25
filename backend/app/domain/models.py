@@ -14,13 +14,19 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class WorkItemBase(BaseModel):
-    """Campos comunes de los work items de backlog."""
+    """Campos comunes de los work items de backlog.
+
+    ``tags`` es el texto crudo de ``System.Tags`` (Azure lo separa por ``;``).
+    El backend lo expone para que la UI muestre el valor actual al editar; la
+    normalización ocurre en el adaptador de escritura.
+    """
 
     azure_id: int
     titulo: str = ""
     estado: str = ""
     descripcion: str = ""
     url: str = ""
+    tags: str = ""
 
 
 class Task(WorkItemBase):

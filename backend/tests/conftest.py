@@ -19,6 +19,7 @@ def item_azure(
     titulo: str = "",
     estado: str = "New",
     descripcion: str = "desc",
+    tags: str = "",
     hijos: Optional[List[int]] = None,
     relacionados: Optional[List[int]] = None,
 ) -> Dict:
@@ -29,6 +30,7 @@ def item_azure(
         "System.Title": titulo or f"{tipo} {id_}",
         "System.State": estado,
         "System.Description": descripcion,
+        "System.Tags": tags,
     }
     relaciones = [
         {"rel": "System.LinkTypes.Hierarchy-Forward", "url": f"https://dev.azure.com/o/p/_apis/wit/workitems/{h}"}
