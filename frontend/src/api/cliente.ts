@@ -1,6 +1,7 @@
 /** Cliente HTTP tipado hacia el backend (única costura de red del frontend). */
 
 import type {
+  ActualizacionQA,
   Bug,
   DetalleBugs,
   Epic,
@@ -10,6 +11,7 @@ import type {
   ListaEpicas,
   MetricasBug,
   RespuestaAccion,
+  ResultadoEscritura,
   Tarea,
   UserStory,
 } from "./tipos";
@@ -195,6 +197,31 @@ function validarDetalleBugs(valor: unknown): DetalleBugs {
   };
 }
 
+function validarResultadoEscritura(valor: unknown): ResultadoEscritura {
+  const item = objeto(valor, "resultado de escritura");
+  return {
+    work_item_id: numero(item.work_item_id, "escritura.work_item_id"),
+    rev: numero(item.rev, "escritura.rev"),
+    campos: lista(item.campos, "escritura.campos", (v) => texto(v, "escritura.campo")),
+    validado: booleano(item.validado, "escritura.validado"),
+    detalle: texto(item.detalle ?? "", "escritura.detalle"),
+  };
+}
+
+/** Valida la actualización: solo se admiten los campos de la lista blanca. */
+function validarActualizacion(valor: unknown): ActualizacionQA {
+  const item = objeto(valor, "actualización de QA");
+  const salida: ActualizacionQA = {};
+  for (const campo of ["estado", "prioridad", "severidad", "tags", "notas_qa"] as const) {
+    if (item[campo] === undefined || item[campo] === null) continue;
+    salida[campo] = texto(item[campo], `actualizacion.${campo}`);
+  }
+  if (Object.keys(salida).length === 0) {
+    throw new ApiError("Respuesta inválida: la actualización no incluye campos");
+  }
+  return salida;
+}
+
 function validarAccion(valor: unknown): RespuestaAccion {
   const item = objeto(valor, "respuesta de acción");
   const detalle = opcionalTexto(item.detalle, "accion.detalle");
@@ -256,4 +283,29 @@ export const api = {
     ),
   refrescar: async () =>
     validarAccion(await peticion<unknown>("/epics/refresh", { method: "POST" })),
+
+  /**
+   * Aplica (o valida en seco) una actualización de QA sobre un work item.
+   *
+   * `validar=true` no escribe nada: Azure comprueba las reglas del proyecto y
+   * responde si el cambio sería válido. `revEsperada` evita sobrescribir la
+   * edición de otro QA si el work item cambió desde que se abrió el formulario.
+   */
+  actualizarWorkItem: async (
+    workItemId: number,
+    cambios: ActualizacionQA,
+    opciones: { validar?: boolean; revEsperada?: number } = {},
+  ) => {
+    const validar = opciones.validar ?? false;
+    const query = new URLSearchParams({ validar: String(validar) });
+    if (opciones.revEsperada !== undefined) {
+      query.set("rev_esperada", String(opciones.revEsperada));
+    }
+    return validarResultadoEscritura(
+      await peticion<unknown>(`/workitems/${workItemId}?${query.toString()}`, {
+        method: "PATCH",
+        body: JSON.stringify(validarActualizacion(cambios)),
+      }),
+    );
+  },
 };

@@ -82,6 +82,23 @@ export interface EstadoAzure {
   error: string;
 }
 
+/** Campos de QA que el backend acepta en una escritura (lista blanca). */
+export interface ActualizacionQA {
+  estado?: string;
+  prioridad?: string;
+  severidad?: string;
+  tags?: string;
+  notas_qa?: string;
+}
+
+export interface ResultadoEscritura {
+  work_item_id: number;
+  rev: number;
+  campos: string[];
+  validado: boolean;
+  detalle: string;
+}
+
 export interface ListaEpicas {
   epicas: EpicResumen[];
 }

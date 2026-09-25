@@ -403,6 +403,76 @@ code {
 }
 
 /* ------------------------------------------------------------------ */
+/* Edición QA (ADR-11)                                                 */
+/* ------------------------------------------------------------------ */
+.edicion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--fondo);
+  border: 1px dashed var(--borde);
+  border-radius: 8px;
+}
+
+.edicion-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.edicion-par {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.campo input,
+.campo select,
+.campo textarea {
+  font: inherit;
+  font-size: 13px;
+  color: var(--texto);
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+.campo textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.edicion-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.edicion-acciones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.edicion-acciones .btn {
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+
+/* ------------------------------------------------------------------ */
 /* KPIs y cinturones estatales                                         */
 /* ------------------------------------------------------------------ */
 .kpis {

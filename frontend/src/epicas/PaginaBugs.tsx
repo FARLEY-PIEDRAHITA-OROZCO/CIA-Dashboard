@@ -3,13 +3,21 @@ import { useState } from "react";
 import { Kpi } from "../componentes/Kpi";
 import { CajaVacia, Cargando, ErrorAlerta } from "../componentes/retroalimentacion";
 import { enlaceA } from "../navegacion";
-import { useBugsEpica } from "./hooks";
+import { useBugsEpica, useEstadoAzure } from "./hooks";
 import { TableroBugs } from "./TableroBugs";
 
-/** Página dedicada a bugs y métricas de una épica (`#/epicas/{id}/bugs`). */
+/**
+ * Página dedicada a bugs y métricas de una épica (`#/epicas/{id}/bugs`).
+ *
+ * La escritura QA se habilita por el backend (`ESCRITURA_HABILITADA` + PAT
+ * dedicado). Aquí solo se refleja: si está apagada, las tarjetas muestran el
+ * aviso de solo lectura en lugar de un botón de guardado que fallaría.
+ */
 export function PaginaBugs({ azureId }: { azureId: number }) {
   const [incluirCerradas, setIncluirCerradas] = useState(false);
   const detalle = useBugsEpica(azureId, incluirCerradas);
+  const estadoAzure = useEstadoAzure();
+  const edicionHabilitada = Boolean(estadoAzure.data?.configurada);
 
   return (
     <div className="pagina">
@@ -56,7 +64,7 @@ export function PaginaBugs({ azureId }: { azureId: number }) {
             />
           </section>
           {detalle.data.bugs.length > 0 ? (
-            <TableroBugs bugs={detalle.data.bugs} />
+            <TableroBugs bugs={detalle.data.bugs} edicionHabilitada={edicionHabilitada} />
           ) : (
             <CajaVacia mensaje="Esta épica no tiene bugs visibles todavía." />
           )}

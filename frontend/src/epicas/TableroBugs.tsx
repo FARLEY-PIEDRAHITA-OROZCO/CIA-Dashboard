@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 
 import type { Bug } from "../api/tipos";
-import { ContenidoRico } from "../componentes/ContenidoRico";
-import { EstadoTrabajo, tonoEstado, type TonoEstado } from "../componentes/EstadoTrabajo";
+import { type TonoEstado, tonoEstado } from "../componentes/EstadoTrabajo";
+import { TarjetaBugEditable } from "./TarjetaBugEditable";
 
 const COLUMNAS: ReadonlyArray<{ tono: TonoEstado; titulo: string }> = [
   { tono: "nuevo", titulo: "Nuevo" },
@@ -19,52 +19,14 @@ function opciones(campos: Array<[string, string]>): Array<[string, string]> {
   );
 }
 
-function TarjetaBug({ bug }: { bug: Bug }) {
-  const [abierta, setAbierta] = useState(false);
-  const conDescripcion = Boolean(bug.descripcion?.trim());
-  const tieneDetalle = conDescripcion || Boolean(bug.url);
-
-  return (
-    <article className="hu-card" data-tono={tonoEstado(bug.estado)}>
-      <header className="hu-card-cabecera">
-        <span className="monospace hu-id">#{bug.azure_id}</span>
-        <div className="hu-card-derecha">
-          <EstadoTrabajo estado={bug.estado} />
-          {tieneDetalle && (
-            <button
-              type="button"
-              className="btn-icono"
-              aria-expanded={abierta}
-              aria-label={`${abierta ? "Ocultar" : "Ampliar"} detalle del bug #${bug.azure_id}`}
-              onClick={() => setAbierta((valor) => !valor)}
-            >
-              {abierta ? "−" : "+"}
-            </button>
-          )}
-        </div>
-      </header>
-      <h4>{bug.titulo || "—"}</h4>
-      <p className="hu-contexto small">
-        {bug.relacion === "related" ? "Relacionado" : "Jerárquico"}
-        {bug.prioridad && ` · Prioridad ${bug.prioridad}`}
-        {bug.severidad && ` · ${bug.severidad}`}
-      </p>
-      {bug.asignado_a && <p className="texto-suave small">Asignado a: {bug.asignado_a}</p>}
-      {abierta && conDescripcion && (
-        <div className="hu-card-descripcion">
-          <ContenidoRico html={bug.descripcion} />
-        </div>
-      )}
-      {abierta && bug.url && (
-        <a className="enlace-externo small" href={bug.url} target="_blank" rel="noreferrer">
-          Abrir en Azure ↗
-        </a>
-      )}
-    </article>
-  );
-}
-
-export function TableroBugs({ bugs }: { bugs: Bug[] }) {
+export function TableroBugs({
+  bugs,
+  edicionHabilitada = true,
+}: {
+  bugs: Bug[];
+  /** Muestra el botón de edición QA en cada tarjeta. */
+  edicionHabilitada?: boolean;
+}) {
   const [termino, setTermino] = useState("");
   const [prioridad, setPrioridad] = useState("");
   const [severidad, setSeveridad] = useState("");
@@ -185,7 +147,13 @@ export function TableroBugs({ bugs }: { bugs: Bug[] }) {
             return (
               <section className="hu-columna" key={tono} data-tono={tono}>
                 <h3 className="hu-columna-titulo">{titulo} <span>{items.length}</span></h3>
-                {items.map((bug) => <TarjetaBug key={bug.azure_id} bug={bug} />)}
+                {items.map((bug) => (
+                  <TarjetaBugEditable
+                    key={bug.azure_id}
+                    bug={bug}
+                    habilitado={edicionHabilitada}
+                  />
+                ))}
               </section>
             );
           })}

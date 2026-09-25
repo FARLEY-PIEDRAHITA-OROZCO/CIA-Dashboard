@@ -1,8 +1,9 @@
-/** Hooks de datos del backlog (React Query): estado, listado, árbol y bugs. */
+/** Hooks de datos del backlog (React Query): estado, listado, árbol, bugs y escritura. */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../api/cliente";
+import type { ActualizacionQA } from "../api/tipos";
 
 export const CLAVES_QUERY = {
   estado: ["azure", "estado"] as const,
@@ -57,5 +58,39 @@ export function useRefrescar() {
   return useMutation({
     mutationFn: api.refrescar,
     onSuccess: () => void queryClient.invalidateQueries(),
+  });
+}
+
+export interface OpcionesActualizacion {
+  /** `true` valida contra las reglas de Azure sin escribir nada. */
+  validar?: boolean;
+  /** Revisión conocida; si Azure tiene otra, se aborta el guardado. */
+  revEsperada?: number;
+}
+
+/**
+ * Escritura de QA sobre un work item.
+ *
+ * Tras guardar invalida las queries de épicas/árbol/bugs porque el backend
+ * también invalida su caché de forma dirigida. El error de la mutación expone
+ * el mensaje de regla de Azure para poder mostrarlo al usuario.
+ */
+export function useActualizarWorkItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      workItemId,
+      cambios,
+      opciones,
+    }: {
+      workItemId: number;
+      cambios: ActualizacionQA;
+      opciones?: OpcionesActualizacion;
+    }) => api.actualizarWorkItem(workItemId, cambios, opciones),
+    onSuccess: (resultado) => {
+      if (!resultado.validado) {
+        void queryClient.invalidateQueries({ queryKey: ["epicas"] });
+      }
+    },
   });
 }
