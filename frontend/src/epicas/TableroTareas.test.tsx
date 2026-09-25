@@ -54,9 +54,31 @@ describe("aplanarTareas", () => {
     expect(planas[2].contexto).toBe("");
     expect(planas[2].huAzureId).toBe(203);
   });
-});
+  it("aplana tareas que están debajo de bugs", () => {
+    const bug = {
+      azure_id: 250,
+      titulo: "Error de cálculo",
+      estado: "Active",
+      descripcion: "",
+      prioridad: "1",
+      severidad: "Critical",
+      asignado_a: "",
+      relacion: "hierarchy",
+      tareas: [tarea(330, "Corregir cálculo", "New")],
+    };
+    const conBug = {
+      ...EPICA,
+      hus: [{ ...hu(203, "Directa", [tarea(320, "Empaquetar", "Done")]), bugs: [bug] }],
+    };
 
-describe("agruparTareasPorEstado", () => {
+    const planas = aplanarTareas(conBug);
+
+    expect(planas.map((item) => item.tarea.azure_id)).toEqual([300, 310, 320, 330]);
+    const tareaBug = planas.find((item) => item.tarea.azure_id === 330);
+    expect(tareaBug?.bugId).toBe(250);
+    expect(tareaBug?.bug).toBe("Error de cálculo");
+  });
+
   it("agrupa por tono y ordena por id", () => {
     const grupos = agruparTareasPorEstado([
       tareaConContexto(tarea(400, "T1", "New")),

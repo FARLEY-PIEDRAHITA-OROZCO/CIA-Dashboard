@@ -16,6 +16,9 @@ export interface TareaConContexto {
   huAzureId: number;
   /** ID de la Feature de origen (ausente para HU directas de la épica). */
   featureId?: number;
+  /** Bug bajo el cual está la tarea, si aplica. */
+  bugId?: number;
+  bug?: string;
 }
 
 /** Aplana el árbol de la épica en la lista de tareas con contexto (sin red extra);
@@ -24,28 +27,41 @@ export function aplanarTareas(epica: {
   hus: UserStory[];
   features: Feature[];
 }): TareaConContexto[] {
-  const directas = epica.hus.flatMap((hu) =>
-    (hu.tareas ?? []).map((t) => ({
-      tarea: t,
+  const porId = new Map<number, TareaConContexto>();
+
+  const agregar = (
+    hu: UserStory,
+    tarea: Tarea,
+    contexto: string,
+    featureId: number | undefined,
+    bug?: { azure_id: number; titulo: string },
+  ) => {
+    if (porId.has(tarea.azure_id)) return;
+    porId.set(tarea.azure_id, {
+      tarea,
       hu: hu.titulo,
-      contexto: "",
+      contexto,
       huUrl: hu.url,
       huAzureId: hu.azure_id,
-    })),
-  );
-  const porFeature = epica.features.flatMap((f) =>
-    f.hus.flatMap((hu) =>
-      (hu.tareas ?? []).map((t) => ({
-        tarea: t,
-        hu: hu.titulo,
-        contexto: f.titulo,
-        huUrl: hu.url,
-        huAzureId: hu.azure_id,
-        featureId: f.azure_id,
-      })),
-    ),
-  );
-  return [...directas, ...porFeature].sort((a, b) => a.tarea.azure_id - b.tarea.azure_id);
+      ...(featureId === undefined ? {} : { featureId }),
+      ...(bug === undefined ? {} : { bugId: bug.azure_id, bug: bug.titulo }),
+    });
+  };
+
+  const agregarHu = (hu: UserStory, contexto: string, featureId?: number) => {
+    for (const tarea of hu.tareas ?? []) agregar(hu, tarea, contexto, featureId);
+    for (const bug of hu.bugs ?? []) {
+      for (const tarea of bug.tareas ?? []) {
+        agregar(hu, tarea, contexto, featureId, bug);
+      }
+    }
+  };
+
+  for (const hu of epica.hus) agregarHu(hu, "");
+  for (const feature of epica.features) {
+    for (const hu of feature.hus) agregarHu(hu, feature.titulo, feature.azure_id);
+  }
+  return [...porId.values()].sort((a, b) => a.tarea.azure_id - b.tarea.azure_id);
 }
 
 /** Tonos de estado que forman las columnas del tablero, en orden. */
@@ -132,7 +148,7 @@ export function usarTareasFiltradas(
       if (huAzureId !== null && t.huAzureId !== huAzureId) return false;
       if (q) {
         const texto =
-          `${t.tarea.titulo} ${t.tarea.azure_id} ${t.hu} ${t.contexto}`.toLowerCase();
+          `${t.tarea.titulo} ${t.tarea.azure_id} ${t.hu} ${t.contexto} ${t.bug ?? ""}`.toLowerCase();
         if (!texto.includes(q)) return false;
       }
       return true;
@@ -178,6 +194,7 @@ function TarjetaTarea({
         <span className="monospace">HU #{t.huAzureId}</span> {t.hu || "—"}
       </p>
       {t.contexto && <p className="texto-suave small">Feature: {t.contexto}</p>}
+      {t.bug && <p className="texto-suave small">Bug: {t.bug}</p>}
 
       {abierta && conDescripcion && (
         <div className="hu-card-descripcion">

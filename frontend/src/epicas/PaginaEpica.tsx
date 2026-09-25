@@ -19,6 +19,12 @@ function CabeceraEpica({ epica }: { epica: Epic }) {
         </div>
         <div className="acciones">
           <EstadoTrabajo estado={epica.estado} />
+          <a
+            className="btn secundario"
+            href={enlaceA({ pagina: "epicaBugs", azureId: epica.azure_id })}
+          >
+            Ver bugs ↗
+          </a>
           {tareas.length > 0 && (
             <a
               className="btn secundario"

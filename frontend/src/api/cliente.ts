@@ -1,11 +1,14 @@
 /** Cliente HTTP tipado hacia el backend (única costura de red del frontend). */
 
 import type {
+  Bug,
+  DetalleBugs,
   Epic,
   EpicResumen,
   EstadoAzure,
   Feature,
   ListaEpicas,
+  MetricasBug,
   RespuestaAccion,
   Tarea,
   UserStory,
@@ -68,19 +71,51 @@ function urlOpcional(valor: unknown, nombre: string): { url?: string } {
   return url === undefined ? {} : { url };
 }
 
+function mapaNumeros(valor: unknown, nombre: string): Record<string, number> {
+  const item = objeto(valor, nombre);
+  return Object.fromEntries(
+    Object.entries(item).map(([clave, cantidad]) => [clave, numero(cantidad, `${nombre}.${clave}`)]),
+  );
+}
+
 function validarTarea(valor: unknown): Tarea {
   const item = objeto(valor, "tarea");
+  const bugs =
+    item.bugs === undefined
+      ? undefined
+      : lista(item.bugs, "tarea.bugs", validarBug);
   return {
     azure_id: numero(item.azure_id, "tarea.azure_id"),
     titulo: texto(item.titulo, "tarea.titulo"),
     estado: texto(item.estado, "tarea.estado"),
     descripcion: texto(item.descripcion, "tarea.descripcion"),
     ...urlOpcional(item.url, "tarea.url"),
+    ...(bugs !== undefined ? { bugs } : {}),
+  };
+}
+
+function validarBug(valor: unknown): Bug {
+  const item = objeto(valor, "bug");
+  return {
+    azure_id: numero(item.azure_id, "bug.azure_id"),
+    titulo: texto(item.titulo, "bug.titulo"),
+    estado: texto(item.estado, "bug.estado"),
+    descripcion: texto(item.descripcion, "bug.descripcion"),
+    ...urlOpcional(item.url, "bug.url"),
+    prioridad: texto(item.prioridad ?? "", "bug.prioridad"),
+    severidad: texto(item.severidad ?? "", "bug.severidad"),
+    asignado_a: texto(item.asignado_a ?? "", "bug.asignado_a"),
+    relacion: texto(item.relacion ?? "hierarchy", "bug.relacion"),
+    tareas: lista(item.tareas ?? [], "bug.tareas", validarTarea),
   };
 }
 
 function validarHistoria(valor: unknown): UserStory {
   const item = objeto(valor, "historia");
+  const bugs =
+    item.bugs === undefined
+      ? undefined
+      : lista(item.bugs, "historia.bugs", validarBug);
   return {
     azure_id: numero(item.azure_id, "historia.azure_id"),
     titulo: texto(item.titulo, "historia.titulo"),
@@ -88,6 +123,7 @@ function validarHistoria(valor: unknown): UserStory {
     descripcion: texto(item.descripcion, "historia.descripcion"),
     ...urlOpcional(item.url, "historia.url"),
     tareas: lista(item.tareas ?? [], "historia.tareas", validarTarea),
+    ...(bugs !== undefined ? { bugs } : {}),
   };
 }
 
@@ -138,6 +174,27 @@ function validarEstadoAzure(valor: unknown): EstadoAzure {
   };
 }
 
+function validarMetricas(valor: unknown): MetricasBug {
+  const item = objeto(valor, "métricas de bugs");
+  return {
+    total: numero(item.total, "metricas.total"),
+    abiertos: numero(item.abiertos, "metricas.abiertos"),
+    cerrados: numero(item.cerrados, "metricas.cerrados"),
+    por_estado: mapaNumeros(item.por_estado, "metricas.por_estado"),
+    por_prioridad: mapaNumeros(item.por_prioridad, "metricas.por_prioridad"),
+    por_severidad: mapaNumeros(item.por_severidad, "metricas.por_severidad"),
+    por_relacion: mapaNumeros(item.por_relacion, "metricas.por_relacion"),
+  };
+}
+
+function validarDetalleBugs(valor: unknown): DetalleBugs {
+  const item = objeto(valor, "detalle de bugs");
+  return {
+    bugs: lista(item.bugs, "detalle.bugs", validarBug),
+    metricas: validarMetricas(item.metricas),
+  };
+}
+
 function validarAccion(valor: unknown): RespuestaAccion {
   const item = objeto(valor, "respuesta de acción");
   const detalle = opcionalTexto(item.detalle, "accion.detalle");
@@ -184,8 +241,19 @@ export const api = {
       epicas: lista(respuesta.epicas, "lista.epicas", validarResumen),
     } satisfies ListaEpicas;
   },
-  arbolEpica: async (azureId: number, signal?: AbortSignal) =>
-    validarEpic(await peticion<unknown>(`/epics/${azureId}/arbol`, { signal })),
+  arbolEpica: async (azureId: number, incluirBugs = false, signal?: AbortSignal) =>
+    validarEpic(
+      await peticion<unknown>(`/epics/${azureId}/arbol?incluir_bugs=${incluirBugs}`, {
+        signal,
+      }),
+    ),
+  bugsEpica: async (azureId: number, incluirCerradas = false, signal?: AbortSignal) =>
+    validarDetalleBugs(
+      await peticion<unknown>(
+        `/epics/${azureId}/bugs?incluir_cerradas=${incluirCerradas}`,
+        { signal },
+      ),
+    ),
   refrescar: async () =>
     validarAccion(await peticion<unknown>("/epics/refresh", { method: "POST" })),
 };

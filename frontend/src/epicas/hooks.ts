@@ -1,4 +1,4 @@
-/** Hooks de datos del backlog (React Query): estado, listado y árbol. */
+/** Hooks de datos del backlog (React Query): estado, listado, árbol y bugs. */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -7,7 +7,10 @@ import { api } from "../api/cliente";
 export const CLAVES_QUERY = {
   estado: ["azure", "estado"] as const,
   epicas: ["epicas"] as const,
-  arbol: (azureId: number) => ["epicas", "arbol", azureId] as const,
+  arbol: (azureId: number, incluirBugs = false) =>
+    ["epicas", "arbol", azureId, incluirBugs] as const,
+  bugs: (azureId: number, incluirCerradas = false) =>
+    ["epicas", "bugs", azureId, incluirCerradas] as const,
 };
 
 export function useEstadoAzure() {
@@ -27,10 +30,22 @@ export function useEpicas(activo: boolean, incluirCerradas: boolean) {
   });
 }
 
-export function useArbolEpica(azureId: number | null) {
+export function useArbolEpica(azureId: number | null, incluirBugs = false) {
   return useQuery({
-    queryKey: CLAVES_QUERY.arbol(azureId ?? 0),
-    queryFn: ({ signal }) => api.arbolEpica(azureId as number, signal),
+    queryKey: CLAVES_QUERY.arbol(azureId ?? 0, incluirBugs),
+    queryFn: ({ signal }) =>
+      api.arbolEpica(azureId as number, incluirBugs, signal),
+    enabled: azureId !== null,
+    staleTime: 120_000,
+    gcTime: 300_000,
+  });
+}
+
+export function useBugsEpica(azureId: number | null, incluirCerradas = false) {
+  return useQuery({
+    queryKey: CLAVES_QUERY.bugs(azureId ?? 0, incluirCerradas),
+    queryFn: ({ signal }) =>
+      api.bugsEpica(azureId as number, incluirCerradas, signal),
     enabled: azureId !== null,
     staleTime: 120_000,
     gcTime: 300_000,

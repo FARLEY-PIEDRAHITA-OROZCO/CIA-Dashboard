@@ -31,7 +31,7 @@ function CabeceraEpicaTareas({ epica }: { epica: Epic }) {
       </header>
       <ContenidoRico html={epica.descripcion} />
       <p className="texto-suave small">
-        {epica.features.length} feature(s) · {tareas.length} {tareas.length === 1 ? "tarea" : "tareas"} de usuario
+        {epica.features.length} feature(s) · {tareas.length} {tareas.length === 1 ? "tarea" : "tareas"} del backlog
       </p>
     </div>
   );
@@ -39,7 +39,7 @@ function CabeceraEpicaTareas({ epica }: { epica: Epic }) {
 
 /** Página dedicada a las tareas de una épica (ruta `#/epicas/{id}/tareas`). */
 export function PaginaTareas({ azureId }: { azureId: number }) {
-  const arbol = useArbolEpica(azureId);
+  const arbol = useArbolEpica(azureId, true);
 
   return (
     <div className="pagina">

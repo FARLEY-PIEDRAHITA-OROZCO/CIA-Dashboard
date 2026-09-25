@@ -19,6 +19,10 @@ describe("parsearHash", () => {
       pagina: "epicaTareas",
       azureId: 1,
     });
+    expect(parsearHash("#/epicas/1/bugs")).toEqual({
+      pagina: "epicaBugs",
+      azureId: 1,
+    });
   });
 
   it("degrada a dashboard para rutas vacías o inválidas", () => {
@@ -35,6 +39,8 @@ describe("enlaceA", () => {
   it("genera hrefs coherentes", () => {
     expect(enlaceA({ pagina: "dashboard" })).toBe("#/dashboard");
     expect(enlaceA({ pagina: "epica", azureId: 100 })).toBe("#/epicas/100");
+    expect(enlaceA({ pagina: "epicaTareas", azureId: 100 })).toBe("#/epicas/100/tareas");
+    expect(enlaceA({ pagina: "epicaBugs", azureId: 100 })).toBe("#/epicas/100/bugs");
   });
 });
 

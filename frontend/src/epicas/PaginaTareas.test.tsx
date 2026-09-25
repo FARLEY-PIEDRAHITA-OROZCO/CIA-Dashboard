@@ -67,7 +67,7 @@ describe("PaginaTareas", () => {
     );
 
     expect(await screen.findByText("Crear formulario")).toBeInTheDocument();
-    expect(screen.getByText(/1 tarea de usuario/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 tarea del backlog/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /volver a historias/i })).toHaveAttribute(
       "href",
       "#/epicas/100",

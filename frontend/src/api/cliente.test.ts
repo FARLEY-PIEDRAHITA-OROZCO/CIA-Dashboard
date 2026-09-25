@@ -21,6 +21,48 @@ describe("cliente API", () => {
     await expect(api.epicas()).rejects.toBeInstanceOf(ApiError);
   });
 
+  it("valida el payload de bugs y sus métricas", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          bugs: [
+            {
+              azure_id: 10,
+              titulo: "Bug",
+              estado: "Active",
+              descripcion: "",
+              prioridad: "1",
+              severidad: "Critical",
+              asignado_a: "",
+              relacion: "hierarchy",
+              tareas: [],
+            },
+          ],
+          metricas: {
+            total: 1,
+            abiertos: 1,
+            cerrados: 0,
+            por_estado: {},
+            por_prioridad: {},
+            por_severidad: {},
+            por_relacion: {},
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const detalle = await api.bugsEpica(100);
+
+    expect(detalle.bugs[0].titulo).toBe("Bug");
+    expect(detalle.metricas.total).toBe(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/epics/100/bugs?incluir_cerradas=false",
+      expect.any(Object),
+    );
+  });
+
   it("propaga la señal de cancelación al fetch", async () => {
     const controller = new AbortController();
     const fetchMock = vi.fn(async () =>

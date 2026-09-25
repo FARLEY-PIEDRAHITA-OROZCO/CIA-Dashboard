@@ -1,13 +1,16 @@
 import { useEffect, useReducer } from "react";
 
 /** Rutas del frontend (navegación por hash, sin dependencias):
- * - `#/dashboard`           → lista de épicas (KPIs + tabla)
- * - `#/epicas/{id}`         → página dedicada a las historias de la épica
+ * - `#/dashboard`              → lista de épicas (KPIs + tabla)
+ * - `#/epicas/{id}`            → página dedicada a las historias de la épica
+ * - `#/epicas/{id}/tareas`     → tareas de la épica
+ * - `#/epicas/{id}/bugs`       → bugs y métricas de la épica
  */
 export type Destino =
   | { pagina: "dashboard" }
   | { pagina: "epica"; azureId: number }
-  | { pagina: "epicaTareas"; azureId: number };
+  | { pagina: "epicaTareas"; azureId: number }
+  | { pagina: "epicaBugs"; azureId: number };
 
 export function parsearHash(hash: string): Destino {
   const partes = hash.replace(/^#\/?/, "").split("/").filter(Boolean);
@@ -23,6 +26,9 @@ export function parsearHash(hash: string): Destino {
     if (partes.length === 3 && partes[2].toLowerCase() === "tareas") {
       return { pagina: "epicaTareas", azureId };
     }
+    if (partes.length === 3 && partes[2].toLowerCase() === "bugs") {
+      return { pagina: "epicaBugs", azureId };
+    }
     if (partes.length === 2) {
       return { pagina: "epica", azureId };
     }
@@ -36,6 +42,8 @@ function aRuta(destino: Destino): string {
       return `#/epicas/${destino.azureId}`;
     case "epicaTareas":
       return `#/epicas/${destino.azureId}/tareas`;
+    case "epicaBugs":
+      return `#/epicas/${destino.azureId}/bugs`;
     default:
       return "#/dashboard";
   }

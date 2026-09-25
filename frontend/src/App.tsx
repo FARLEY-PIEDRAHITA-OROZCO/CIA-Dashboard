@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { useVista } from "./navegacion";
 import Dashboard from "./pages/Dashboard";
+import { PaginaBugs } from "./epicas/PaginaBugs";
 import { PaginaEpica } from "./epicas/PaginaEpica";
 import { PaginaTareas } from "./epicas/PaginaTareas";
 
@@ -37,6 +38,8 @@ export default function App() {
           <PaginaEpica key={vista.azureId} azureId={vista.azureId} />
         ) : vista.pagina === "epicaTareas" ? (
           <PaginaTareas key={vista.azureId} azureId={vista.azureId} />
+        ) : vista.pagina === "epicaBugs" ? (
+          <PaginaBugs key={vista.azureId} azureId={vista.azureId} />
         ) : (
           <Dashboard />
         )}
