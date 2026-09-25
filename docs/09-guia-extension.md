@@ -51,7 +51,8 @@ Ejemplo: traer `Microsoft.VSTS.Scheduling.Effort` al modelo.
 
 ## 2. Nuevo nivel del árbol
 
-El soporte de `Task` bajo cada `User Story` ya está implementado. Para añadir un tipo adicional (por ejemplo `Test Plan`):
+El soporte de `Task` bajo cada `User Story` y `Bug` bajo cada `User Story` ya
+está implementado. Para añadir un tipo adicional (por ejemplo `Test Plan`):
 
 1. `queries.py`: añadir el tipo a `TIPOS_HIJOS` y, si hace falta, una función
    de extracción de relaciones/campos.

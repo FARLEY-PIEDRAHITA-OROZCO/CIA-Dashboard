@@ -17,7 +17,8 @@ Todos los endpoints devuelven **JSON** (`application/json`).
 | GET | `/api/health` | Healthcheck sin dependencias | estable |
 | GET | `/api/azure/estado` | Estado de la integración con Azure | estable |
 | GET | `/api/epics` | Listado de épicas (resumen, sin hijos). Por defecto excluye las `Closed`; `?incluir_cerradas=true` las incluye | estable |
-| GET | `/api/epics/{epic_id}/arbol` | Árbol completo Épica → Features/User Stories → Tasks | estable |
+| GET | `/api/epics/{epic_id}/arbol` | Árbol completo. `?incluir_bugs=true` añade bugs jerárquicos/relacionados y tareas de bugs | estable |
+| GET | `/api/epics/{epic_id}/bugs` | Bugs de la épica + métricas; `?incluir_cerradas=true` incluye cerrados | estable |
 | POST | `/api/epics/refresh` | Invalida la caché de aplicación; la siguiente consulta vuelve a Azure | estable |
 
 > No requiere autenticación propia (aplicación local; el secreto vive en el
@@ -126,7 +127,12 @@ Listado de épicas del backlog (resumen: **sin** descripción ni hijos).
 
 ## 5. `GET /api/epics/{epic_id}/arbol`
 
-Árbol jerárquico completo de la épica para el **drill-down**:
+Árbol jerárquico completo de la épica para el **drill-down**. El parámetro
+`incluir_bugs` es opcional y por defecto mantiene el contrato anterior.
+
+| Parámetro | Tipo | Default | Descripción |
+| --------- | ---- | ------- | ----------- |
+| `incluir_bugs` | bool | `false` | Incluye bugs jerárquicos, bugs relacionados con un salto y tareas que están debajo de bugs |
 
 ```
 Épica ──► Features ──► User Stories ──► Tasks
@@ -166,7 +172,7 @@ Detalles:
   `hus` viene `[]`. Cada HU lleva `url` y `tareas[]` (también puede estar vacía).
 - `epica.hus[]` contiene HUs directamente bajo la épica; cada una también
   puede contener `tareas[]`.
-- `Task` solo se materializa cuando es hija de una `User Story`; los tipos
+- `Task` se materializa como hija de una `User Story` o de un `Bug`; los tipos
   no permitidos se descartan durante la construcción del árbol.
 - Épica sin features ⇒ `features: []`; sin historias/tareas ⇒ listas vacías.
 
@@ -180,7 +186,51 @@ Detalles:
 
 ---
 
-## 6. `POST /api/epics/refresh`
+## 6. `GET /api/epics/{epic_id}/bugs`
+
+Proyección de bugs y métricas de la épica. Reutiliza el árbol extendido que
+ya carga el backend; no duplica la lectura de Azure.
+
+| Parámetro | Tipo | Default | Descripción |
+| --------- | ---- | ------- | ----------- |
+| `incluir_cerradas` | bool | `false` | Excluye estados cerrados (`Closed`, `Resolved`, `Done`, `Removed`, etc.) de `bugs`; las métricas siempre describen el total completo |
+
+**200 OK**
+```json
+{
+  "bugs": [
+    {
+      "azure_id": 10,
+      "titulo": "Error de validación",
+      "estado": "Active",
+      "descripcion": "<div>…</div>",
+      "url": "https://dev.azure.com/…/_workitems/edit/10",
+      "prioridad": "1",
+      "severidad": "Critical",
+      "asignado_a": "Persona",
+      "relacion": "hierarchy",
+      "tareas": []
+    }
+  ],
+  "metricas": {
+    "total": 1,
+    "abiertos": 1,
+    "cerrados": 0,
+    "por_estado": { "Active": 1 },
+    "por_prioridad": { "1": 1 },
+    "por_severidad": { "Critical": 1 },
+    "por_relacion": { "hierarchy": 1 }
+  }
+}
+```
+
+- `relacion` es `hierarchy` o `related`.
+- Las métricas se calculan en backend y son la fuente para la vista de bugs.
+- Un bug puede aparecer en más de un contexto; el servicio lo deduplica por ID.
+
+---
+
+## 7. `POST /api/epics/refresh`
 
 Invalida la caché de aplicación. La **próxima** consulta a `/api/epics` o
 `/api/epics/{id}/arbol` vuelve a leer de Azure.
@@ -198,7 +248,7 @@ Invalida la caché de aplicación. La **próxima** consulta a `/api/epics` o
 
 ---
 
-## 7. Modelo de errores
+## 8. Modelo de errores
 
 Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 `detail` (string, o array de detalles de validación).
@@ -223,12 +273,13 @@ Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 
 ---
 
-## 8. Ejemplos de uso
+## 9. Ejemplos de uso
 
 ### PowerShell
 ```powershell
 Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/api/epics
 Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/api/epics/5586/arbol
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/epics/5586/bugs?incluir_cerradas=true"
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/epics/refresh
 ```
 

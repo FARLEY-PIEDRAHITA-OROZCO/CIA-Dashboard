@@ -4,8 +4,8 @@
 > datos con **TanStack Query 5**, sanitización con **DOMPurify 3.4**,
 > pruebas con **Vitest 4 + Testing Library + jsdom**.
 
-La SPA tiene **tres páginas** separadas por **hash**: el dashboard, la página
-dedicada de historias y la página dedicada de tareas.
+La SPA tiene **cuatro páginas** separadas por **hash**: el dashboard, la página
+dedicada de historias, la página de tareas y la página de bugs.
 
 Ruta raíz: `frontend/`.
 
@@ -44,6 +44,7 @@ frontend/src/
 │   ├── ContenidoRico.tsx     # renderizador de texto sanitizado (DOMPurify)
 │   ├── EstadoTrabajo.tsx     # badge de estado normalizado (tonos)
 │   ├── Kpi.tsx               # tarjeta de métrica simple
+│   ├── NavegacionGlobal.tsx   # barra de navegación global (presentacional)
 │   └── retroalimentacion.tsx # avisos: Cargando / ErrorAlerta / CajaVacia
 ├── epicas/                   # feature «épicas»
 │   ├── hooks.ts              # React Query hooks (estado, lista, árbol, refresh)
@@ -53,7 +54,9 @@ frontend/src/
 │   ├── TableroHistorias.tsx  # tablero de historias (cinturón, filtros, densidad)
 │   ├── PaginaEpica.tsx       # página dedicada `#/epicas/{id}` con el tablero completo
 │   ├── PaginaTareas.tsx      # página dedicada `#/epicas/{id}/tareas`
-│   ├── TableroTareas.tsx     # tablero espejo de tareas (filtros y estados)
+│   ├── TableroTareas.tsx     # tablero espejo de tareas (filtros, estados y contexto de bug)
+│   ├── PaginaBugs.tsx        # página dedicada `#/epicas/{id}/bugs` + métricas
+│   ├── TableroBugs.tsx       # tablero de bugs (estado, prioridad, severidad, relación)
 │   └── index.ts              # barril de exportación
 ├── pages/
 │   └── Dashboard.tsx         # página principal (KPI + tabla)
@@ -69,14 +72,15 @@ frontend/src/
 
 ## 3. Enrutado (`navegacion.ts`) y árbol de componentes
 
-La SPA tiene **tres páginas** separadas por **hash** (sin dependencia de
+La SPA tiene **cuatro páginas** separadas por **hash** (sin dependencia de
 router; soporta botón atrás, enlace directo y recarga):
 
 | Hash | Página | Contenido |
 | ---- | ------ | --------- |
 | `#/dashboard` | `Dashboard` | KPIs + cinturones de épicas + tabla explorable |
 | `#/epicas/{id}` | `PaginaEpica` | página dedicada: features + tablero completo de historias |
-| `#/epicas/{id}/tareas` | `PaginaTareas` | página dedicada: tablero de tareas de usuario |
+| `#/epicas/{id}/tareas` | `PaginaTareas` | página dedicada: tablero de tareas del backlog |
+| `#/epicas/{id}/bugs` | `PaginaBugs` | página dedicada: KPIs, filtros y tablero de bugs |
 
 API mínima:
 
@@ -84,25 +88,37 @@ API mínima:
 type Destino =
   | { pagina: "dashboard" }
   | { pagina: "epica"; azureId: number }
-  | { pagina: "epicaTareas"; azureId: number };
+  | { pagina: "epicaTareas"; azureId: number }
+  | { pagina: "epicaBugs"; azureId: number };
 irA(destino);                 // navegar programáticamente
 enlaceA(destino);             // href para <a> normal (back/forward funcionan)
 useVista(): Destino;          // hash reactivo (escucha hashchange)
 ```
 
-`App.tsx` solo decide la página; el `QueryClient` es global y la navegación
-reutiliza sus entradas cacheadas (el árbol de la épica queda disponible para
-volver a entrar sin otra petición inmediata).
+`App.tsx` solo decide la página y conecta la barra global; el `QueryClient` es
+global y la navegación reutiliza sus entradas cacheadas (el árbol de la épica
+queda disponible para volver a entrar sin otra petición inmediata).
 
 ```
 main.tsx
 └── <QueryClientProvider>
-    └── App  (useVista)
+    └── App  (useVista + useEstadoAzure + useRefrescar)
+        │
+        ├── componentes/NavegacionGlobal  ← barra global (presente en todas las páginas)
+        │   ├── marca → #/dashboard
+        │   ├── «Épicas» → #/dashboard
+        │   ├── contexto de épica (solo en vistas de detalle):
+        │   │   «Historias» → #/epicas/{id}
+        │   │   «Tareas»    → #/epicas/{id}/tareas
+        │   │   «Bugs»      → #/epicas/{id}/bugs
+        │   ├── «Actualizar» (useRefrescar; deshabilitado sin Azure o durante el refresco)
+        │   ├── «Salud» (/api/health) · «API» (/docs, pestaña nueva)
+        │   └── aviso de error de refresco (role="alert")
+        │
         ├── #/dashboard -> pages/Dashboard
         │   ├── useEstadoAzure() -> bandera de integración
         │   │           ├── toggle «Incluir cerradas» -> useEpicas(activo, incluirCerradas)
         │   │           ├── Kpi × 4  (épicas activas/totales · estados · en progreso · terminadas)
-        │   ├── «Refrescar datos» (useRefrescar)
         │   ├── «cinturones» de épicas por estado
         │   ├── Cargando / ErrorAlerta / CajaVacia
         │   └── TablaEpicas
@@ -132,20 +148,29 @@ main.tsx
         │               ├── descripción recortada o bajo demanda
         │               └── «Abrir en Azure ↗» al ampliar
         │
-        └── #/epicas/{id}/tareas -> epicas/PaginaTareas
+        ├── #/epicas/{id}/tareas -> epicas/PaginaTareas
+        │   ├── «← Volver a historias» (#/epicas/{id})
+        │   ├── useArbolEpica(id, incluirBugs=true) y aplanarTareas(epica)
+        │   ├── CabeceraEpicaTareas + ContenidoRico
+        │   └── TableroTareas
+        │       ├── filtros combinables: buscador · Feature · HU
+        │       ├── columnas por estado colapsables
+        │       └── TarjetaTarea con contexto de bug, descripción y enlace a Azure
+        │
+        └── #/epicas/{id}/bugs -> epicas/PaginaBugs
             ├── «← Volver a historias» (#/epicas/{id})
-            ├── useArbolEpica(id) y aplanarTareas(epica)
-            ├── CabeceraEpicaTareas + ContenidoRico
-            └── TableroTareas
-                ├── filtros combinables: buscador · Feature · HU
-                ├── columnas por estado colapsables
-                └── TarjetaTarea con descripción y enlace a Azure
+            ├── useBugsEpica(id, incluirCerradas)
+            ├── Kpi × 4 (total · abiertos · cerrados · relacionados)
+            └── TableroBugs
+                ├── filtros: buscador · prioridad · severidad · relación
+                └── columnas por estado con TarjetaBug
 ```
 
 **Regla de separación**: los componentes de presentación (por debajo de
-`FilaEpica`, `PaginaEpica` y `PaginaTareas`) **reciben datos por props** y
-**emiten eventos**; los hooks React Query viven en `FilaEpica`,
-`PaginaEpica`, `PaginaTareas` y `Dashboard`.
+`FilaEpica`, `PaginaEpica`, `PaginaTareas`, `PaginaBugs` y `NavegacionGlobal`)
+**reciben datos por props** y **emiten eventos**; los hooks React Query viven
+en `FilaEpica`, `PaginaEpica`, `PaginaTareas`, `PaginaBugs`, `Dashboard` y
+`App` (que conecta la barra global con `useEstadoAzure` y `useRefrescar`).
 
 **Aplanado para el tablero**: `aplanarHistorias(epica)` (en
 `TableroHistorias.tsx`) convierte el árbol en una lista plana
@@ -156,7 +181,54 @@ y `featureId`. El tablero solo pierde la jerarquía visual, nunca el dato.
 
 ---
 
-## 4. Cliente API (`api/cliente.ts`)
+## 3.1 Navegación global (`componentes/NavegacionGlobal.tsx`)
+
+La barra superior es el **único punto de navegación del sistema**: sustituye a
+los enlaces «volver» sueltos de cada página, que se conservan como atajos
+contextuales dentro del contenido.
+
+**Estructura**
+
+| Zona | Contenido | Comportamiento |
+| ---- | --------- | -------------- |
+| Marca | «▶ CIA · Dashboard de Épicas» | enlace a `#/dashboard` |
+| Navegación principal | «Épicas» | siempre visible; `aria-current="page"` en el dashboard |
+| Contexto de épica | «Historias» · «Tareas» · «Bugs» | solo cuando la vista tiene `azureId`; muestra `aria-current` en la sección activa |
+| Acciones | «Actualizar» · «Salud» · «API» | refresco global, salud del proceso y documentación en pestaña nueva |
+| Aviso | mensaje de error del refresco | `role="alert"`, no interrumpe la navegación |
+
+**Contrato del componente (presentacional)**
+
+```tsx
+<NavegacionGlobal
+  vista={vista}          // Destino actual (useVista)
+  configurado={boolean}  // Azure configurado (useEstadoAzure)
+  refrescando={boolean}  // useRefrescar().isPending
+  errorRefresco={string} // useRefrescar().isError → mensaje
+  onRefrescar={() => …}  // dispara la mutación
+/>
+```
+
+- No hace `fetch` ni usa hooks de datos: `App` es quien conecta
+  `useEstadoAzure()` y `useRefrescar()`, respetando la regla de que la
+  lógica de red vive en `api/cliente.ts` + hooks.
+- El botón «Actualizar» se deshabilita si Azure no está configurado (con
+  `title` explicativo) o mientras hay un refresco en curso (`aria-busy`).
+- `useEstadoAzure()` reutiliza la clave `["azure","estado"]`, por lo que la
+  barra no genera peticiones extra: comparte caché con `Dashboard`.
+- El refresco global llama a `POST /api/epics/refresh` y luego invalida las
+  queries de React Query, así que historias, tareas y bugs se releen de Azure.
+
+**Accesibilidad y responsive**
+
+- `<nav aria-label="Navegación principal">` y `aria-current="page"` permiten
+  que lectores de pantalla y tests identifiquen la sección activa.
+- El menú es texto plano (hash links), por lo que el botón atrás del
+  navegador y los enlaces compartidos siguen funcionando.
+- Por debajo de 760 px la navegación pasa a una segunda línea con scroll
+  horizontal, y las acciones quedan arriba a la derecha.
+
+---
 
 - `const BASE = "/api"` → siempre relativas (proxy en dev, misma origin en
   producción).
@@ -172,8 +244,10 @@ export const api = {
   estadoAzure: (signal) => validarEstadoAzure(await peticion("/azure/estado", { signal })),
   epicas: (incluirCerradas = false, signal) =>
     validarLista(await peticion(`/epics?incluir_cerradas=${incluirCerradas}`, { signal })),
-  arbolEpica: (azureId, signal) =>
-    validarEpic(await peticion(`/epics/${azureId}/arbol`, { signal })),
+  arbolEpica: (azureId, incluirBugs = false, signal) =>
+    validarEpic(await peticion(`/epics/${azureId}/arbol?incluir_bugs=${incluirBugs}`, { signal })),
+  bugsEpica: (azureId, incluirCerradas = false, signal) =>
+    validarDetalleBugs(await peticion(`/epics/${azureId}/bugs?incluir_cerradas=${incluirCerradas}`, { signal })),
   refrescar: () => validarAccion(await peticion("/epics/refresh", { method: "POST" })),
 };
 ```
@@ -187,8 +261,11 @@ Reflejan el contrato del backend (ver [03-api](03-api.md)):
 | Tipo | Campos | Notas |
 | ---- | ------ | ----- |
 | `EpicResumen` | `azure_id, titulo, estado, url` | fila de la tabla |
-| `UserStory` | `azure_id, titulo, estado, descripcion, url?, tareas?` | `tareas` = tareas hijas |
-| `Tarea` | `azure_id, titulo, estado, descripcion, url?` | tarea bajo una HU |
+| `UserStory` | `azure_id, titulo, estado, descripcion, url?, tareas?, bugs?` | `tareas`/`bugs` hijos |
+| `Tarea` | `azure_id, titulo, estado, descripcion, url?, bugs?` | tarea bajo una HU o bug |
+| `Bug` | `azure_id, titulo, estado, descripcion, url?, prioridad, severidad, asignado_a, relacion, tareas?` | jerárquico o relacionado |
+| `MetricasBug` | `total, abiertos, cerrados, por_estado, por_prioridad, por_severidad, por_relacion` | métricas de bugs |
+| `DetalleBugs` | `bugs[], metricas` | respuesta de la página de bugs |
 | `Feature` | `azure_id, titulo, estado, descripcion, url?, hus[]` | `hus` = user stories hijas |
 | `Epic` | `azure_id, titulo, estado, descripcion, features[], hus[], url` | árbol completo |
 | `EstadoAzure` | `configurada, organizacion, proyecto, area_path, verificado, error` | |
@@ -208,12 +285,16 @@ Claves de query y política de caché:
 | ---- | ----- | ----------- | -------- | ---------- |
 | `useEstadoAzure` | `["azure","estado"]` | 60 s | por defecto | siempre |
 | `useEpicas(activo, incluirCerradas)` | `["epicas", incluirCerradas]` | 30 s | por defecto | `activo` (solo si Azure configurado) |
-| `useArbolEpica(azureId\|null)` | `["epicas","arbol",id]` | 120 s | 300 s | solo si `id !== null` |
+| `useArbolEpica(azureId\|null, incluirBugs)` | `["epicas","arbol",id,incluirBugs]` | 120 s | 300 s | solo si `id !== null` |
+| `useBugsEpica(azureId\|null, incluirCerradas)` | `["epicas","bugs",id,incluirCerradas]` | 120 s | 300 s | solo si `id !== null` |
 | `useRefrescar()` | — (mutación) | — | — | — |
 
 - **Filtro de cerradas**: `incluirCerradas` forma parte de la query key, así
   que marcar/desmarcar el toggle provoca un refetch (cada clave tiene su propia
   caché). Por defecto `false`; el conteo real depende del backlog.
+- **Bugs**: `useBugsEpica` usa una query separada y `PaginaBugs` muestra
+  métricas, filtros por prioridad/severidad/relación y el tablero. La opción
+  `incluirCerradas` también forma parte de la key.
 - **Carga perezosa del árbol**: `useArbolEpica` recibe `null` cuando la fila
   está contraída → la query está *disabled* y no consume red. Al expandir se
   dispara; al contraer, la data queda en caché (300 s) y reexpandir es
@@ -336,8 +417,9 @@ por props): `busqueda`, `featureSeleccionadas: Set<string>` (claves
 
 ## 11. Tablero de tareas (`epicas/TableroTareas.tsx`)
 
-`aplanarTareas(epica)` recorre las HUs directas y las HUs de cada Feature,
-convierte sus `tareas` en una lista plana y conserva el contexto de HU/Feature.
+`aplanarTareas(epica)` recorre las HUs directas, las HUs de cada Feature,
+las tareas directas y las tareas que están debajo de `hu.bugs[]`; deduplica
+por ID y conserva el contexto de HU, Feature y Bug.
 No hay endpoint de tareas: la página consume el mismo árbol de
 `/api/epics/{id}/arbol`.
 
@@ -350,7 +432,23 @@ No hay endpoint de tareas: la página consume el mismo árbol de
 
 ---
 
-## 12. KPIs (`componentes/Kpi.tsx`) y avisos (`retroalimentacion.tsx`)
+## 12. Tablero de bugs (`epicas/TableroBugs.tsx`)
+
+La vista de bugs reutiliza `tonoEstado` y `ContenidoRico`, y agrega filtros
+por:
+
+- estado (columnas);
+- prioridad;
+- severidad;
+- relación (`hierarchy` o `related`);
+- búsqueda por título, ID o responsable.
+
+La página `PaginaBugs` muestra KPIs de total, abiertos, cerrados y bugs
+relacionados. Las descripciones siguen pasando por DOMPurify.
+
+---
+
+## 13. KPIs (`componentes/Kpi.tsx`) y avisos (`retroalimentacion.tsx`)
 
 - `Kpi({ etiqueta, valor, tono?, titulo? })`: tarjeta de indicador; `tono` es
   uno de `"ok" | "alerta" | "acento" | "neutro"` (default `neutro`). El

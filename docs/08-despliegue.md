@@ -99,6 +99,7 @@ de `.env.example` son de ejemplo; los defaults del código son cadenas vacías.
 - `GET /api/azure/estado` → `configurada` + `verificado` (conectividad real).
   No es un readiness completo: solo verifica el endpoint de proyecto y no la
   lectura de WIQL/relaciones.
+- `GET /api/epics/{id}/bugs` → bugs y métricas; por defecto excluye cerrados.
 - Logs unificados bajo logger `devops`; `LOG_NIVEL` se aplica tanto a Uvicorn
   como a la aplicación. El transporte no registra bodies ni headers Azure.
 
@@ -118,6 +119,7 @@ Script de comprobación rápida (PowerShell):
 | `/api/epics` → **409** | `AZURE_PAT` vacío/incompleto | completar `.env` y reiniciar |
 | `/api/epics` → **502** `401` | PAT inválido/vencido o sin scope | regenerar PAT con scope `Work Items: Read` |
 | `/api/azure/estado` → `verificado: false` | el proceso puede tener código o variables antiguas; `run.py` no recarga | reiniciar el backend y volver a comprobar la llamada |
+| `/api/epics/{id}/bugs` → 200 sin bugs visibles | los bugs están en estados cerrados o no existen en el AreaPath | usar `?incluir_cerradas=true` y revisar la relación en Azure |
 | `/api/epics` → **502** con `203`/`TF401215` | campo/proyecto erróneo o respuesta no JSON | verificar `queries.py`, `AZURE_PROYECTO` y el manejo de respuestas no exitosas |
 | 0 épicas aunque existen | `AZURE_PROYECTO` vs ÁreaPath | revisar `AREA_PATH` (vacío = proyecto entero) |
 | Dashboard en blanco tras build | `frontend/dist` viejo o ausente | `npm.cmd run build` y reiniciar backend |

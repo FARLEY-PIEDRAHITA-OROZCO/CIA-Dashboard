@@ -4,7 +4,7 @@
 
 - `backend/` and `frontend/` are separate toolchains in one Git repository; there is no root manifest or task runner. Run commands from the corresponding directory.
 - Entrypoints: `backend/run.py` → `app.main:app`; frontend `frontend/src/main.tsx`.
-- The SPA has no router: valid hashes are `#/dashboard`, `#/epicas/{id}` and `#/epicas/{id}/tareas`; malformed/extra-segment hashes fall back to the dashboard.
+- The SPA has no router: valid hashes are `#/dashboard`, `#/epicas/{id}`, `#/epicas/{id}/tareas` and `#/epicas/{id}/bugs`; malformed/extra-segment hashes fall back to the dashboard.
 - FastAPI serves `frontend/dist` only if it exists when the app is created. Rebuilding or removing `dist` requires restarting the backend. In development run Vite separately.
 - Vite proxies `/api`, `/docs` and `/openapi.json` to the hard-coded `http://127.0.0.1:8000`.
 
@@ -41,13 +41,13 @@ npm.cmd audit --audit-level=high
 ## Boundaries
 
 - Main request path: API routes → `ServicioBacklog` → domain `Protocol` ports. Compose concrete Azure/cache adapters in `backend/app/core/container.py`; keep Azure HTTP/WIQL in `backend/app/infrastructure/azure/`.
-- The backlog has two tree branches: `Epic.features[].hus[].tareas[]` and direct `Epic.hus[].tareas[]`. A shape change must update domain models, `queries.py`, repository mapping, API schemas/routes, `frontend/src/api/tipos.ts`, runtime validators in `frontend/src/api/cliente.ts`, UI and tests together.
-- `frontend/src/api/cliente.ts` is the only runtime network seam. Query/mutation logic belongs in `frontend/src/epicas/hooks.ts`; presentational descendants receive props and emit events, while data-connected pages/rows may use hooks.
+- The backlog has two tree branches: `Epic.features[].hus[].tareas[]` and direct `Epic.hus[].tareas[]`; bugs extend the hierarchy as `User Story → Bug → Task` and are optionally linked with `Related`. A shape change must update domain models, `queries.py`, repository mapping, API schemas/routes, `frontend/src/api/tipos.ts`, runtime validators in `frontend/src/api/cliente.ts`, UI and tests together.
+- `frontend/src/api/cliente.ts` is the only runtime network seam. Query/mutation logic belongs in `frontend/src/epicas/hooks.ts`; presentational descendants receive props and emit events, while data-connected pages/rows may use hooks. `componentes/NavegacionGlobal.tsx` is presentational: `App` supplies `vista`, `configurado`, `refrescando` and `onRefrescar`.
 
 ## Operational and security gotchas
 
 - `backend/app/config.py` resolves `.env` by absolute path. The PAT is backend-only, `repr=False`, ignored by Git, and must never be logged, serialized or copied to frontend code. Public docs and fixtures use placeholders.
-- `/api/epics` and `/api/epics/{id}/arbol` return 409 when organization, project or PAT is missing. `/api/health` is process-only; `/api/azure/estado` reports configuration and a safe verification result; refresh remains available.
+- `/api/epics` and `/api/epics/{id}/arbol` return 409 when organization, project or PAT is missing. `/api/health` is process-only; `/api/azure/estado` reports configuration and a safe verification result; `/api/epics/{id}/bugs` returns the bug projection and metrics; refresh remains available.
 - Azure descriptions are raw HTML. Render them only through `ContenidoRico`/DOMPurify; preserve its active/resource tag denylist and `FORBID_ATTR: ["style", "srcset", "formaction"]`.
 - Azure states are open text. Keep the unknown/empty-state fallback to `neutro` in `tonoEstado`.
 - The Core project check must use `{org}/_apis/projects/{project}`; prefixing the project there duplicates the segment and Azure returns 401. Work Item endpoints use the project-scoped helper.

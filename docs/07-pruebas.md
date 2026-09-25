@@ -3,7 +3,7 @@
 > Estrategia y referencia de las suites del proyecto. Meta: **verificar
 > comportamiento sin depender de la red**, con la menor fricción posible.
 
-Estado actual: **Backend 44 pruebas ✓ · Frontend 47 pruebas ✓**
+Estado actual: **Backend 52 pruebas ✓ · Frontend 58 pruebas ✓**
 
 ---
 
@@ -38,12 +38,12 @@ cd backend
 | Archivo | #tests | Qué valida |
 | ------- | ------ | ---------- |
 | `test_transporte.py` | 9 | Auth Basic, errores HTTP seguros, errores de red, JSON inválido/inesperado y estados 203/204/3xx |
-| `test_repositorio.py` | 9 | Verificación de proyecto, listado liviano, árbol Task, caching inexistente en adaptador, hijos omitidos, URLs codificadas, carga perezosa y rechazo de no-épica |
+| `test_repositorio.py` | 12 | Verificación de proyecto, listado liviano, árbol Task/Bug, caching inexistente en adaptador, hijos omitidos, URLs codificadas, bugs jerárquicos/relacionados, carga perezosa y rechazo de no-épica |
 | `test_config.py` | 4 | Ruta de `.env`, configuración completa, split CORS, HTTPS y opt-in de exposición externa |
-| `test_servicio.py` | 9 | Caché del listado (2.ª llamada no relee repo) + invalidación de `CachePort`; caché por épica; `estado()` sin config no toca Azure; `estado()` verifica cuando hay config; no expone excepciones; **filtro de cerradas**: excluye `Closed` por defecto, los incluye con `incluir_cerradas=True`, el filtrado no rompe la caché completa (1 sola lectura), y un estado vacío no se cuenta como cerrada. El repositorio real ya no tiene caché interna |
-| `test_api.py` | 13 | Contrato HTTP, headers de seguridad, CORS permitido/rechazado, validación de ID positivo, 404 de árbol/upstream, refresh, 409 y 502 |
+| `test_servicio.py` | 12 | Caché del listado (2.ª llamada no relee repo) + invalidación de `CachePort`; caché por épica y variante con bugs; `estado()`; métricas de bugs, incluyendo HUs dentro de Features; **filtro de cerradas**: excluye `Closed` por defecto, los incluye con `incluir_cerradas=True`, el filtrado no rompe la caché completa (1 sola lectura), y un estado vacío no se cuenta como cerrada. El repositorio real ya no tiene caché interna |
+| `test_api.py` | 15 | Contrato HTTP, headers de seguridad, CORS permitido/rechazado, árbol con/sin bugs, endpoint y métricas de bugs, validación de ID positivo, 404 de árbol/upstream, refresh, 409 y 502 |
 
-**Total: 44.**
+**Total: 52.**
 
 ### Base compartida (`conftest.py`)
 
@@ -79,17 +79,20 @@ Config en `vite.config.ts` (sección `test`): entorno `jsdom`, setup
 | Archivo | #tests | Qué valida |
 | ------- | ------ | ---------- |
 | `componentes/EstadoTrabajo.test.tsx` | 4 | `tonoEstado`: mapea estados conocidos normalizando texto; **fallback neutro** para desconocidos; render con la clase de tono correcta; tolera estados vacíos |
+| `componentes/NavegacionGlobal.test.tsx` | 6 | Barra global: acceso base en el dashboard, contexto de épica con `aria-current`, disparo del refresco, estado pendiente/bloqueo, deshabilitado sin Azure y aviso de error |
 | `epicas/TablaEpicas.test.tsx` | 3 | Lista las épicas del backlog; expande una fila y muestra **Features** + botón de acceso a historias; contrae la fila expandida |
 | `epicas/TableroHistorias.test.tsx` | 13 | Agrupación/aplanado, render, filtros, densidad, colapso, enlace Azure sin descripción y avisos |
 | `epicas/PaginaEpica.test.tsx` | 2 | Carga la página, navegación de historias, tareas y enlaces Azure |
 | `epicas/PaginaTareas.test.tsx` | 1 | Carga integrada de la ruta de tareas, contador, tablero y navegación de regreso |
-| `epicas/TableroTareas.test.tsx` | 8 | Aplanado, agrupación, filtros, tarjetas, enlaces sin descripción, colapso restaurable y estados vacíos |
-| `navegacion.test.tsx` | 4 | `parsearHash` estricto (incluida `epicaTareas`), `enlaceA` y `useVista` |
+| `epicas/TableroTareas.test.tsx` | 9 | Aplanado, agrupación, filtros, tarjetas, tareas bajo bugs, enlaces sin descripción, colapso restaurable y estados vacíos |
+| `navegacion.test.tsx` | 4 | `parsearHash` estricto (incluidas `epicaTareas` y `epicaBugs`), `enlaceA` y `useVista` |
 | `componentes/ContenidoRico.test.tsx` | 8 | Sanitización de scripts, handlers, estilos, protocolos peligrosos, etiquetas activas/recursos y render seguro |
 | `pages/Dashboard.test.tsx` | 2 | KPIs normalizados y estado de carga del listado |
-| `api/cliente.test.ts` | 2 | Validación runtime del contrato y propagación de `AbortSignal` |
+| `api/cliente.test.ts` | 3 | Validación runtime del contrato, bugs/métricas y propagación de `AbortSignal` |
+| `epicas/TableroBugs.test.tsx` | 2 | Filtros de severidad y tarjetas de bug sanitizadas |
+| `epicas/PaginaBugs.test.tsx` | 1 | Carga de métricas y tablero de bugs |
 
-**Total: 47 en el frontend (10 archivos) y 44 en el backend.**
+**Total: 58 en el frontend (13 archivos) y 52 en el backend.**
 
 ---
 

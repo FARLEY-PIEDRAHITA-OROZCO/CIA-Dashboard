@@ -99,7 +99,12 @@ tipos permitidos** por `TIPOS_HIJOS`:
 | ---- | ---------------- |
 | `Epic` | `Feature`, `User Story` |
 | `Feature` | `User Story` |
-| `User Story` | `Task` |
+| `User Story` | `Task`, `Bug` |
+| `Bug` | `Task` |
+
+La política también admite asociaciones `System.LinkTypes.Related` de un solo
+salto. Solo se convierten en `Bug` cuando el work item destino es de ese
+tipo; no se sigue la red completa ni se acepta `Hierarchy-Reverse`.
 
 Consecuencia directa del diseño:
 
@@ -107,8 +112,10 @@ Consecuencia directa del diseño:
 - Una **Épica** puede tener **Features** y, además, **User Stories directas**
   (`epic.hus`) — compatibles con backlogs que cuelgan HUs directamente de la
   épica.
-- Cada **User Story** puede tener **Tasks** (`hu.tareas`); los tipos no
-  permitidos se descartan al construir la salida.
+- Cada **User Story** puede tener **Tasks** (`hu.tareas`) y **Bugs**
+  (`hu.bugs`); cada Bug jerárquico puede tener sus propias `tareas`. Los
+  bugs relacionados se incluyen con `relacion="related"` y no se mezclan con
+  la descendencia jerárquica.
 - El recorrido procesa todos los hijos de un nivel en lotes de hasta 200 y
   encola únicamente IDs que Azure devolvió; una respuesta parcial no produce
   `KeyError`.
@@ -123,8 +130,11 @@ Consecuencia directa del diseño:
 | `System.Title` | `titulo: str` |
 | `System.State` | `estado: str` — **se conserva tal cual** (texto libre; el frontend lo normaliza a tonos) |
 | `System.Description` | `descripcion: str` — **HTML crudo**, entregado sin transformar (sanitiza el frontend) |
-| relations `Hierarchy-Forward` | `features[]` / `hus[]` / `tareas[]` |
-| — | URL local para épica, Feature, HU y Task; el resumen también la incluye |
+| `Microsoft.VSTS.Common.Priority` / `Severity` | `prioridad` / `severidad` de un bug |
+| `System.AssignedTo` | `asignado_a` de un bug |
+| relations `Hierarchy-Forward` | `features[]` / `hus[]` / `bugs[]` / `tareas[]` |
+| relation `Related` | bugs asociados de un salto, con `relacion="related"` |
+| — | URL local para épica, Feature, HU, Bug y Task; el resumen también la incluye |
 
 `queries.campo(item, nombre)` devuelve siempre texto (vacío si el campo no
 existe), lo que hace el mapeo robusto ante work items sin descripción.

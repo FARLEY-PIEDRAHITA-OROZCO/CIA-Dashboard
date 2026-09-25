@@ -75,17 +75,19 @@ el `.gitignore` y **no debe commitearse** (ver [Seguridad](06-seguridad.md)).
 ### `models.py`
 
 ```python
-class Task(BaseModel):      azure_id: int; titulo: str; estado: str
-                          descripcion: str = ""; url: str = ""
-class UserStory(BaseModel): azure_id: int; titulo: str; estado: str
-                          descripcion: str = ""; url: str = ""
-                          tareas: List[Task] = []
-class Feature(BaseModel):   azure_id: int; titulo: str; estado: str
-                          descripcion: str = ""; url: str = ""
-                          hus: List[UserStory] = []
-class Epic(BaseModel):      azure_id: int; titulo: str; estado: str; url: str
-                          descripcion: str = ""; features: List[Feature] = []
-                          hus: List[UserStory] = []
+class WorkItemBase(BaseModel):  # campos comunes
+                           azure_id: int; titulo: str; estado: str
+                           descripcion: str = ""; url: str = ""
+class Task(WorkItemBase):    bugs: list[Bug] | None = None
+class Bug(WorkItemBase):     prioridad: str = ""; severidad: str = ""
+                           asignado_a: str = ""; relacion: str = "hierarchy"
+                           tareas: list[Task] = []
+class UserStory(WorkItemBase): tareas: list[Task] = []; bugs: list[Bug] | None = None
+class Feature(WorkItemBase): hus: list[UserStory] = []
+class Epic(WorkItemBase):    features: list[Feature] = []; hus: list[UserStory] = []
+class MetricasBug(BaseModel): total: int; abiertos: int; cerrados: int
+                           por_estado/prioridad/severidad/relacion: dict[str, int]
+class DetalleBugs(BaseModel): bugs: list[Bug]; metricas: MetricasBug
 class EstadoIntegracion(BaseModel):
     configurada: bool = False; organizacion: str = ""; proyecto: str = ""
     area_path: str = ""; verificado: bool = False; error: str = ""
@@ -108,7 +110,7 @@ class TransportePort(Protocol):
 class RepositorioBacklogPort(Protocol):
     async def verificar_proyecto(self) -> dict
     async def listar_epicas(self) -> list[Epic]
-    async def obtener_epica(self, epic_id: int) -> Epic | None
+    async def obtener_epica(self, epic_id: int, *, incluir_bugs: bool = False) -> Epic | None
 
 class CachePort(Protocol):
     def obtener(self, clave: str) -> Any | None
@@ -147,8 +149,10 @@ caso de uso. `TransportePort` declara `cerrar()` y el lifespan lo invoca en un
 | Constante | Valor / propósito |
 | --------- | ----------------- |
 | `wiql_epicas(area_path)` | Construye la WIQL de épicas según área (ver [Integración Azure](05-integracion-azure.md)) |
-| `TIPOS_HIJOS` | Tipos de work item y descendientes permitidos: Epic → Feature/User Story → Task |
+| `TIPOS_HIJOS` / `hijos_permitidos` | Política de descendencia: Epic → Feature/User Story, Feature → User Story, User Story → Task/Bug, Bug → Task |
+| `RELACION_HIJO` / `RELACION_RELATED` | Jerarquía `System.LinkTypes.Hierarchy-Forward` y asociación de un salto `System.LinkTypes.Related` |
 | `CAMPO_DESCRIPCION` / `CAMPO_TITULO` / `CAMPO_ESTADO` | Nombres de campos canónicos de Azure |
+| `CAMPO_PRIORIDAD` / `CAMPO_SEVERIDAD` / `CAMPO_ASIGNADO` | Campos opcionales para métricas y contexto de bugs |
 
 ### `repository.py` — `AzureBacklogRepositorio`
 
@@ -158,7 +162,7 @@ Orquesta transporte + queries y **mapea JSON de Azure a modelos Pydantic**:
 | ------ | -------- |
 | `verificar_proyecto()` | `GET /_apis/projects/{proyecto}` → devuelve `{"proyecto": nombre}` |
 | `listar_epicas()` | WIQL de épicas → toma IDs → batch de `workitems` (hasta 200) → mapea a `list[Epic]` |
-| `obtener_epica(epic_id)` | `GET workitems/{id}?$expand=relations` → construye el **árbol completo** con BFS (ver [05-integracion-azure.md](05-integracion-azure.md#4-algoritmo-del-árbol)) |
+| `obtener_epica(epic_id, incluir_bugs=False)` | BFS de jerarquía; con `incluir_bugs=True` añade Bugs y asociaciones `Related` de un salto. La variante de bugs usa otra clave de caché |
 
 Detalles de robustez:
 - El listado usa lotes de hasta **200** IDs, solicita únicamente los campos
@@ -170,7 +174,10 @@ Detalles de robustez:
   proyecto es una operación Core de nivel organización y usa
   `/_apis/projects/{proyecto}` sin anteponer el proyecto.
 - El resumen de la lista incluye `url`; también se construyen URLs para
-  `Feature`, HU y `Task`.
+  `Feature`, HU, `Bug` y `Task`.
+- El repositorio registra un resumen por carga (`items`, `batches`,
+  `hierarchy_edges`, `related_edges`, `bugs`, `duration_ms`) sin incluir el
+  PAT ni cuerpos upstream.
 - La API exige `epic_id` entero y positivo (`Path(gt=0)`).
 
 ---
@@ -199,7 +206,10 @@ caché en el flujo normal y `refrescar()` la invalida.
 async def estado()            -> EstadoIntegracion   # configuración + verificación
 async def listar_epicas(incluir_cerradas=False) -> list[Epic]
                               # caché; por defecto excluye estado "Closed"
-async def arbol_epica(id)     -> Epic | None         # clave "epica:{id}"
+async def arbol_epica(id, incluir_bugs=False) -> Epic | None
+                              # clave "epica:{id}" o "epica:{id}:bugs"
+async def bugs_epica(id, incluir_cerradas=False) -> DetalleBugs | None
+                              # bugs visibles + métricas del total completo
 def    refrescar()            -> None                # caché.limpiar()
 ```
 
@@ -218,6 +228,7 @@ Claves de caché normalizadas:
 | ----- | --------- |
 | `CLAVE_EPICAS = "epicas"` | Lista completa de épicas |
 | `CLAVE_ARBOL = "epica:{0}"` | Árbol de la épica `{0}` |
+| `CLAVE_ARBOL_BUGS = "epica:{0}:bugs"` | Árbol extendido con bugs y tareas de bugs |
 
 - Si el listado aún no está cacheado, la llamada original se hace una vez y
   se vuelca a caché; las siguientes responden desde memoria sin tocar Azure.
@@ -241,7 +252,8 @@ Claves de caché normalizadas:
 | `/api/health` | GET | `Health` | — |
 | `/api/azure/estado` | GET | `EstadoAzure` | — |
 | `/api/epics` | GET | `ListaEpicas` (query: `incluir_cerradas`, default `false`) | 409 / 502 |
-| `/api/epics/{epic_id}/arbol` | GET | `Epic` | 409 / 404 / 502 |
+| `/api/epics/{epic_id}/arbol` | GET | `Epic` (query: `incluir_bugs`, default `false`) | 409 / 404 / 502 |
+| `/api/epics/{epic_id}/bugs` | GET | `DetalleBugs` (query: `incluir_cerradas`, default `false`) | 409 / 404 / 502 |
 | `/api/epics/refresh` | POST | `Mensaje` | — |
 
 Traducción de errores centralizada:
@@ -258,6 +270,7 @@ Traducción de errores centralizada:
 | `EpicaResumen` | `azure_id:int, titulo:str, estado:str, url:str` |
 | `ListaEpicas` | `epicas: list[EpicaResumen]` |
 | `EstadoAzure` | idéntico a `EstadoIntegracion` |
+| `DetalleBugs` | `bugs:list[Bug], metricas:MetricasBug` |
 | `Mensaje` | `ok:bool, detalle:str` |
 | `Health` | `estado:"ok", version:"0.1.0"` |
 

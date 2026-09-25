@@ -13,6 +13,13 @@
   `verificado: true` con la configuración local.
 - Se actualizaron las acciones de CI a versiones con runtime Node 24.
 - Se añadió `frontend/public/favicon.svg` y su declaración en `index.html`.
+- Se incorporó el grafo de bugs: `Bug` puede ser hijo de una HU y padre de
+  tareas; también se cargan asociaciones `Related` de un salto. La API ofrece
+  `incluir_bugs` y un endpoint de métricas.
+- Se sustituyeron los enlaces sueltos por una **barra de navegación global**
+  (`NavegacionGlobal`) presente en todas las páginas: acceso a épica,
+  historias, tareas y bugs con `aria-current`, refresco global, salud y API.
+  El botón de refresco se unificó (ya no se duplica en el dashboard).
 - La documentación y las fixtures usan ahora organización/proyecto de ejemplo;
   el repositorio es público y no contiene credenciales.
 
@@ -97,8 +104,8 @@ run.py → app.main:app
 
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
-| Backend pytest | **44 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
-| Frontend Vitest | **47 passed / 10 files** | Incluye regresiones de Dashboard, API, rutas, tareas, navegación y sanitización. |
+| Backend pytest | **52 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
+| Frontend Vitest | **58 passed / 13 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs y sanitización. |
 | Frontend build | **PASS** | `tsc -b` y `vite build`; bundle generado correctamente. |
 | `pip check` | **PASS** | No hay requisitos Python rotos en el entorno auditado. |
 | `pip-audit --local` | **PASS** | Sin vulnerabilidades conocidas en el lockfile instalado. |
@@ -139,7 +146,7 @@ La auditoría original de `npm audit` reportó:
   dependencia vulnerable de `esbuild`.
 
 El riesgo principal estaba en el servidor de desarrollo y el tooling de
-pruebas. La actualización se validó con las 47 pruebas y el build actuales;
+pruebas. La actualización se validó con las 52 pruebas y el build actuales;
 el servidor de Vite debe seguir enlazado a loopback.
 
 #### AUD-02 — BFS falla si Azure omite una relación hija
@@ -248,6 +255,13 @@ confirme teclado y lector de pantalla.
 
 **Estado:** resuelto. La configuración bloquea etiquetas activas y recursos
 externos, y hay una prueba específica para evitar regresiones.
+
+#### AUD-20 — Bugs y tareas bajo bugs no se representaban
+
+**Estado:** resuelto. La política de descendencia incluye `User Story → Bug →
+Task`; las asociaciones `Related` se cargan de un solo salto, se deduplican
+y no siguen backlinks. La API conserva `incluir_bugs=false` por defecto y
+ofrece una proyección con métricas.
 
 ### Riesgo operativo y mantenimiento
 

@@ -2,13 +2,15 @@
 
 Dashboard de **solo lectura** que extrae del backlog de **Azure DevOps** las
 épicas del proyecto configurado y las presenta
-con tres vistas: **tabla de épicas** (KPIs, filtro de cerradas y drill-down
+con cuatro vistas: **tabla de épicas** (KPIs, filtro de cerradas y drill-down
 que muestra sus **Features**), y **página dedicada por épica** con un
 **tablero de historias por estado** (cinturón de estados, buscador, filtros
-por feature y densidad ajustable). Cada épica ofrece además una **página de
-tareas** con su propio tablero espejo (`#/epicas/{id}/tareas`), todo con
+por feature y densidad ajustable). Cada épica ofrece además páginas dedicadas
+para sus **tareas** (`#/epicas/{id}/tareas`) y **bugs**
+(`#/epicas/{id}/bugs`), con tabler, filtros y métricas propias. Todo con
 estados, descripciones, enlaces a Azure y navegación por hash
-(`#/dashboard`, `#/epicas/{id}`, `#/epicas/{id}/tareas`).
+(`#/dashboard`, `#/epicas/{id}`, `#/epicas/{id}/tareas`,
+`#/epicas/{id}/bugs`).
 
 Proyecto independiente, modular, con arquitectura limpia en backend y SPA React.
 
@@ -39,7 +41,7 @@ integración Azure, seguridad, pruebas, despliegue y guías de extensión).
 | ---- | ---------- | --------- |
 | Backend | Python 3.14 · FastAPI · httpx · pydantic-settings | `backend/` |
 | Frontend | React 18 · TypeScript · Vite · TanStack Query · DOMPurify | `frontend/` |
-| Pruebas | pytest (44) · Vitest + Testing Library (47) | `backend/tests/` · `frontend/src/**/*.test.tsx` |
+| Pruebas | pytest (52) · Vitest + Testing Library (58) | `backend/tests/` · `frontend/src/**/*.test.tsx` |
 
 ## Puesta en marcha rápida
 
@@ -84,7 +86,8 @@ cd ..\backend
 | GET | `/api/health` | Healthcheck (sin Azure) |
 | GET | `/api/azure/estado` | Configuración + conectividad real (sin secretos) |
 | GET | `/api/epics` | Lista liviana de épicas del ÁreaPath (por defecto excluye `Closed`; `?incluir_cerradas=true` las incluye) |
-| GET | `/api/epics/{id}/arbol` | Árbol completo Épica → Features/User Stories → Tasks |
+| GET | `/api/epics/{id}/arbol?incluir_bugs=true` | Árbol completo; opcionalmente incluye bugs jerárquicos/relacionados |
+| GET | `/api/epics/{id}/bugs` | Bugs de la épica + métricas por estado, prioridad, severidad y relación |
 | POST | `/api/epics/refresh` | Invalida la caché |
 
 Ejemplos y contratos en [03-api.md](docs/03-api.md).
@@ -113,11 +116,11 @@ Ejemplos y contratos en [03-api.md](docs/03-api.md).
 ## Pruebas
 
 ```powershell
-# Backend (44): transporte, repositorio/árbol, caché, servicio, API y regresiones de seguridad
+# Backend (52): transporte, repositorio/árbol/bugs, caché, servicio, API y regresiones de seguridad
 cd backend
 .\.venv\Scripts\python.exe -m pytest
 
-# Frontend (47): badges, tablas, tableros, rutas, API, Dashboard y sanitización
+# Frontend (58): badges, tablas, tableros, rutas, bugs, navegación global, API, Dashboard y sanitización
 cd ..\frontend
 npm.cmd test
 npm.cmd run build

@@ -3,7 +3,7 @@
 > **Resumen**: proyecto independiente de solo lectura que extrae las épicas
 > del backlog de **Azure DevOps** (proyecto y área configurados) y las presenta
 > en un **dashboard web** con **drill-down** completo
-> `Épica → Feature/User Story → Task`.
+> `Épica → Feature/User Story → Bug → Task`.
 
 ---
 
@@ -40,7 +40,7 @@ CIA-Dashboard/                      # raíz del proyecto
 │   │   ├── api/                    # routers, esquemas, inyección FastAPI
 │   │   └── core/                   # contenedor de dependencias + logging
 │   ├── run.py                      # arranque local de uvicorn
-│   ├── tests/                      # 44 pruebas (sin red)
+│   ├── tests/                      # 52 pruebas (sin red)
 │   ├── requirements*.txt           # dependencias runtime / dev
 │   ├── .env.example                # plantilla de configuración (sin secretos)
 │   └── .env                        # secreto local (gitignore; nunca se commitea)
@@ -48,8 +48,8 @@ CIA-Dashboard/                      # raíz del proyecto
     ├── src/
     │   ├── api/                    # cliente HTTP tipado + tipos de dominio
     │   ├── componentes/            # UI genérica (badges, KPI, avisos, sanitizer)
-    │   ├── epicas/                 # feature «épicas» (tabla, historias, tareas, páginas, hooks)
-    │   ├── navegacion.ts           # enrutado por hash (#/dashboard, #/epicas/{id}, #/epicas/{id}/tareas)
+    │   ├── epicas/                 # feature «épicas» (tabla, historias, tareas, bugs, páginas, hooks)
+    │   ├── navegacion.ts           # enrutado por hash (#/dashboard, #/epicas/{id}, #/epicas/{id}/tareas, #/epicas/{id}/bugs)
     │   ├── pages/                  # Dashboard (página principal)
     │   └── test/                   # setup de vitest
     ├── public/
@@ -155,8 +155,9 @@ con el algoritmo de relaciones jerárquicas (ver [Integración Azure](05-integra
 | 5 | **Caché TTL por defecto en memoria** | Satisfactorio para uso local; puerto `CachePort` permite swap a Redis sin tocar el dominio (ver [09](09-guia-extension.md#swap-caché-a-redis)). |
 | 6 | **Estados como texto abierto** | Las plantillas de proceso de Azure varían (Scrum/Agile/Basic); un enum rompería ante estados nuevos. |
 | 7 | **Descripciones HTML sanitizadas con DOMPurify** | Azure guarda la descripción como HTML; se renderiza seguro (XSS) con estilo propio (ver [06-seguridad](06-seguridad.md#3-sanitización-de-contenido)). |
-| 8 | **Tres páginas separadas por hash** (`#/dashboard`, `#/epicas/{id}`, `#/epicas/{id}/tareas`) | Las historias y las tareas merecen vistas dedicadas con espacio y filtros propios; el hash no requiere router ni reconfiguración del backend y preserva atrás/compartir. |
+| 8 | **Cuatro páginas separadas por hash** (`#/dashboard`, `#/epicas/{id}`, `#/epicas/{id}/tareas`, `#/epicas/{id}/bugs`) | Historias, tareas y bugs merecen vistas dedicadas con espacio, filtros y métricas propios; el hash no requiere router ni reconfiguración del backend y preserva atrás/compartir. |
 | 9 | **Respuestas JSON de dominio = contrato** | Los modelos Pydantic del dominio se reutilizan como esquemas de salida; el mapper construye URLs de todos los niveles y el cliente frontend valida la forma en runtime. |
+| 10 | **Grafo de work items configurable** | Jerarquía (`Hierarchy-Forward`) y asociaciones `Related` se procesan con políticas centralizadas; los bugs pueden ser hijos de HUs y padres de tareas sin duplicar el código de mapeo. |
 
 > **Caché:** el servicio usa `CachePort` como única capa de caché del flujo
 > normal; el repositorio ya no mantiene una segunda copia. Refresh invalida
@@ -183,14 +184,17 @@ main.crear_app(contenedor) ──► api.routes ──► ServicioBacklog
 
 ```
 main.tsx ──► QueryClientProvider
-  └─► App ──► pages/Dashboard
-                ├─► hooks (React Query): useEstadoAzure, useEpicas, useRefrescar
-                ├─► componentes: Kpi, EstadoTrabajo, Cargando/ErrorAlerta/CajaVacia
-                └─► epicas/TablaEpicas
-                      └─► epicas/FilaEpica ──► useArbolEpica(expandida) ──► DetalleEpica
-                            ├─► #/epicas/{id} → PaginaEpica → TableroHistorias
-                            └─► #/epicas/{id}/tareas → PaginaTareas → TableroTareas
-                              Componentes de dominio solo reciben props y devuelven eventos.
+  └─► App
+        ├─► componentes/NavegacionGlobal (barra global:Épicas · contexto de épica · Actualizar · Salud · API)
+        ├─► hooks (React Query): useEstadoAzure, useRefrescar
+        └─► páginas (según useVista)
+              ├─► #/dashboard          → pages/Dashboard → Kpi, EstadoTrabajo, retroalimentación
+              │     └─► epicas/TablaEpicas → epicas/FilaEpica ──► useArbolEpica(expandida) ──► DetalleEpica
+              ├─► #/epicas/{id}        → PaginaEpica → useArbolEpica → TableroHistorias
+              ├─► #/epicas/{id}/tareas → PaginaTareas → useArbolEpica(incluirBugs) → TableroTareas
+              └─► #/epicas/{id}/bugs   → PaginaBugs → useBugsEpica → TableroBugs
+
+              Componentes de dominio y NavegacionGlobal solo reciben props y devuelven eventos.
 ```
 
 ---
