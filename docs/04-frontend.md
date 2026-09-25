@@ -1,8 +1,8 @@
 # 04 · Frontend (React / TypeScript / Vite)
 
-> Referencia completa de la SPA. Stack: **React 18 + TypeScript 5.9 + Vite 5**,
+> Referencia completa de la SPA. Stack: **React 18 + TypeScript 5.9 + Vite 6**,
 > datos con **TanStack Query 5**, sanitización con **DOMPurify 3.4**,
-> pruebas con **Vitest + Testing Library + jsdom**.
+> pruebas con **Vitest 4 + Testing Library + jsdom**.
 
 La SPA tiene **tres páginas** separadas por **hash**: el dashboard, la página
 dedicada de historias y la página dedicada de tareas.
@@ -14,7 +14,7 @@ Ruta raíz: `frontend/`.
 ## 1. Scripts
 
 ```powershell
-npm.cmd ci            # instalar dependencias desde package-lock.json (npm.ps1 está bloqueado por la policy local)
+npm.cmd ci            # instalar dependencias desde package-lock.json (usar npm.cmd en PowerShell)
 npm.cmd run dev       # Vite dev server en http://localhost:5173  (proxy /api → :8000)
 npm.cmd run build     # typecheck (tsc -b) + build de producción → frontend/dist
 npm.cmd test          # suite de pruebas (vitest run)
@@ -37,8 +37,9 @@ frontend/src/
 ├── navegacion.ts             # navegación por hash: Destino, irA(), enlaceA(), useVista()
 ├── styles.css                # diseño global: variables, layout, badges, tablero
 ├── api/
-│   ├── tipos.ts              # interfaces TypeScript (contrato del backend)
-│   └── cliente.ts            # única costura de red: fetch tipado + ApiError
+│   ├── index.ts               # reexports de la costura de API
+│   ├── tipos.ts               # interfaces TypeScript (contrato del backend)
+│   └── cliente.ts             # única costura de red: fetch tipado + ApiError
 ├── componentes/              # UI genérica reutilizable
 │   ├── ContenidoRico.tsx     # renderizador de texto sanitizado (DOMPurify)
 │   ├── EstadoTrabajo.tsx     # badge de estado normalizado (tonos)
@@ -59,6 +60,10 @@ frontend/src/
 └── test/
     └── setup.ts              # setUp de Testing Library (jest-dom)
 ```
+
+`frontend/public/favicon.svg` es un asset estático que Vite copia a la raíz de
+`frontend/dist`; `index.html` lo declara para evitar la petición automática a
+`/favicon.ico`.
 
 ---
 
@@ -85,8 +90,9 @@ enlaceA(destino);             // href para <a> normal (back/forward funcionan)
 useVista(): Destino;          // hash reactivo (escucha hashchange)
 ```
 
-`App.tsx` solo decide la página; cada página conserva su propia caché de
-React Query (el árbol de la épica ya está en caché desde el drill-down).
+`App.tsx` solo decide la página; el `QueryClient` es global y la navegación
+reutiliza sus entradas cacheadas (el árbol de la épica queda disponible para
+volver a entrar sin otra petición inmediata).
 
 ```
 main.tsx
@@ -155,9 +161,9 @@ y `featureId`. El tablero solo pierde la jerarquía visual, nunca el dato.
 - `const BASE = "/api"` → siempre relativas (proxy en dev, misma origin en
   producción).
 - `peticion<T>(ruta, opciones)`: `fetch`, headers JSON; si `respuesta.ok`
-  false lanza `ApiError` con el `detail` del backend (o un fallback).
-- Errores: `ApiError` lleva `status` y mensaje; el cliente valida la forma
-  JSON de cada respuesta y solo reintenta errores transitorios de red.
+  false lanza `ApiError` con el `detail` del backend (o un fallback). El
+  cliente valida la forma JSON de cada respuesta; la política de reintentos
+  está en el `QueryClient` (`429`/`5xx`).
 - `peticion` propaga `AbortSignal` desde React Query; el `QueryClient` no
   reintenta 4xx deterministas.
 

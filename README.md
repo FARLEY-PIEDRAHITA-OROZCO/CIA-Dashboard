@@ -1,7 +1,7 @@
 # CIA — Dashboard de Épicas (Azure DevOps)
 
 Dashboard de **solo lectura** que extrae del backlog de **Azure DevOps** las
-épicas del proyecto *CIA (Centro de Inteligencia Artificial)* y las presenta
+épicas del proyecto configurado y las presenta
 con tres vistas: **tabla de épicas** (KPIs, filtro de cerradas y drill-down
 que muestra sus **Features**), y **página dedicada por épica** con un
 **tablero de historias por estado** (cinturón de estados, buscador, filtros
@@ -39,7 +39,7 @@ integración Azure, seguridad, pruebas, despliegue y guías de extensión).
 | ---- | ---------- | --------- |
 | Backend | Python 3.14 · FastAPI · httpx · pydantic-settings | `backend/` |
 | Frontend | React 18 · TypeScript · Vite · TanStack Query · DOMPurify | `frontend/` |
-| Pruebas | pytest (42) · Vitest + Testing Library (47) | `backend/tests/` · `frontend/src/**/*.test.tsx` |
+| Pruebas | pytest (44) · Vitest + Testing Library (47) | `backend/tests/` · `frontend/src/**/*.test.tsx` |
 
 ## Puesta en marcha rápida
 
@@ -49,7 +49,7 @@ integración Azure, seguridad, pruebas, despliegue y guías de extensión).
 cd backend
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.lock
-Copy-Item .env.example .env        # editar y completar AZURE_PAT
+Copy-Item .env.example .env        # editar organización, proyecto y AZURE_PAT
 .\.venv\Scripts\python.exe run.py  # http://127.0.0.1:8000  (Swagger en /docs)
 ```
 
@@ -113,7 +113,7 @@ Ejemplos y contratos en [03-api.md](docs/03-api.md).
 ## Pruebas
 
 ```powershell
-# Backend (42): transporte, repositorio/árbol, caché, servicio, API y regresiones de seguridad
+# Backend (44): transporte, repositorio/árbol, caché, servicio, API y regresiones de seguridad
 cd backend
 .\.venv\Scripts\python.exe -m pytest
 

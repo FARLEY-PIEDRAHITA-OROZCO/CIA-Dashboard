@@ -105,8 +105,8 @@ Checklist antes de commitear (todo el equipo):
 - [ ] ¿Alguna respuesta o log nuevo incluye el PAT? (no debe)
 - [ ] `npm.cmd test` y `pytest` en verde
 - [ ] Build del frontend OK (`npm.cmd run build`)
-- [ ] `npm.cmd audit` completo revisado; el resultado actual es 0 vulnerabilidades.
-- [ ] `git diff`/historial revisado cuando exista metadata Git; este workspace actual no tiene `.git`.
+- [ ] `npm.cmd audit --audit-level=high` revisado; el resultado actual es 0 vulnerabilidades.
+- [ ] `git diff`/historial revisado cuando exista metadata Git; este repositorio sí tiene metadata Git.
 
 Herramienta de verificación rápida de secretos:
 
@@ -143,6 +143,8 @@ Nunca exponer el backend directamente con bind `0.0.0.0` sin auth.
 
 - El dashboard lee **solamente** IDs, títulos, estados, descripciones y URLs de
   work items. No expone nada fuera de esos campos (los schemas filtran).
+- El repositorio público no debe incluir datos organizativos reales en la
+  documentación; la plantilla y las fixtures usan valores de ejemplo.
 - Los schemas no incluyen el PAT, pero un `Settings.model_dump()` explícito
   sí contendría el valor: nunca serializar el objeto completo.
 - `LOG_NIVEL` se aplica tanto a Uvicorn como al logger de la aplicación;

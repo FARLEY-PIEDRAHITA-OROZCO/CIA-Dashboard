@@ -1,8 +1,20 @@
 # 10 · Auditoría técnica y operativa
 
-> **Fecha:** 2026-09-24
+> **Fecha:** 2026-09-24; **actualizado:** 2026-09-25
 > **Alcance:** backend FastAPI, integración Azure DevOps, SPA React/Vite, pruebas, dependencias, seguridad, despliegue y documentación.
 > **Regla de evidencia:** el código ejecutable, los manifiestos y los comandos de verificación prevalecen sobre la documentación existente.
+
+## Actualización 2026-09-25
+
+- Se corrigió `verificar_proyecto()` para usar el endpoint Core de organización
+  `/_apis/projects/{proyecto}`; la ruta anterior duplicaba el proyecto y Azure
+  respondía 401. Se añadió una prueba de regresión de URL.
+- Se verificó la integración real: `/api/azure/estado` devuelve
+  `verificado: true` con la configuración local.
+- Se actualizaron las acciones de CI a versiones con runtime Node 24.
+- Se añadió `frontend/public/favicon.svg` y su declaración en `index.html`.
+- La documentación y las fixtures usan ahora organización/proyecto de ejemplo;
+  el repositorio es público y no contiene credenciales.
 
 ## 1. Dictamen ejecutivo
 
@@ -14,9 +26,13 @@ Estado actual prioritario:
 2. BFS, URLs de resumen/features, refresh de caché, validación de respuestas, logging y lifecycle fueron corregidos con pruebas de regresión.
 3. El colapso del tablero, KPIs, estados de carga, enlaces sin descripción, parser de hash, cancelación, retry selectivo y etiquetas HTML activas fueron corregidos.
 4. Python ya tiene lockfile con hashes y el binding externo exige opt-in; no hay readiness, autenticación ni rate limiting externo configurados.
-5. No se ejercitó conectividad real con Azure; las pruebas siguen sin red por diseño.
+5. La verificación real contra Azure se comprobó el 2026-09-25; las pruebas
+   automatizadas siguen siendo sin red por diseño.
 
-La documentación tenía deriva histórica que se corrigió en esta remediación: rutas, árbol, defaults, conteos de pruebas, caché y errores ahora describen el código ejecutable. Los puntos abiertos y criterios de aceptación están debajo.
+La documentación tiene deriva histórica que esta remediación corrige: rutas,
+árbol, defaults, conteos de pruebas, caché, errores, toolchain y operación
+describen el código ejecutable. Los puntos abiertos y criterios de aceptación
+están debajo.
 
 ## 2. Método y límites
 
@@ -41,11 +57,12 @@ npm.cmd ls --depth=0
 npm.cmd outdated --depth=0
 ```
 
-No se ejecutó una llamada real a Azure DevOps: las pruebas sustituyen el
-transporte/repositorio y la auditoría no debe depender de un PAT real.
-`pip-audit` ya está incluido en el lockfile y pasa; `ruff`/`mypy` siguen sin
-configurarse. El árbol de trabajo examinado no contiene metadata `.git`; CI
-está definido en `.github/workflows/ci.yml`.
+Se ejecutó una llamada real controlada a Azure DevOps el 2026-09-25 para
+verificar la operación de `/api/azure/estado`; las pruebas automatizadas siguen
+sustituyendo transporte/repositorio y no dependen de un PAT real. `pip-audit` ya
+está incluido en el lockfile y pasa; `ruff`/`mypy` siguen sin configurarse. El
+repositorio tiene metadata Git y CI está definido en
+`.github/workflows/ci.yml`.
 
 ## 3. Mapa técnico confirmado
 
@@ -80,13 +97,13 @@ run.py → app.main:app
 
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
-| Backend pytest | **42 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
+| Backend pytest | **44 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
 | Frontend Vitest | **47 passed / 10 files** | Incluye regresiones de Dashboard, API, rutas, tareas, navegación y sanitización. |
 | Frontend build | **PASS** | `tsc -b` y `vite build`; bundle generado correctamente. |
 | `pip check` | **PASS** | No hay requisitos Python rotos en el entorno auditado. |
 | `pip-audit --local` | **PASS** | Sin vulnerabilidades conocidas en el lockfile instalado. |
 | `npm audit --omit=dev` | **0 vulnerabilidades** | No se observan vulnerabilidades en dependencias de producción. |
-| `npm audit` completo | **0 vulnerabilidades** | Vite/Vitest actualizados; la auditoría de producción también queda en cero. |
+| `npm audit --audit-level=high` | **0 vulnerabilidades** | Vite/Vitest actualizados; la auditoría de producción también queda en cero. |
 | CI/lint/format/typecheck Python | **CI parcial** | CI ejecuta pytest, auditorías, tests y build; aún no hay lint/typecheck Python. |
 
 ### Alineación aplicada
@@ -164,7 +181,8 @@ absoluta y las pruebas verifican el comportamiento.
 #### AUD-09 — Las URLs de proyecto no se codifican de forma uniforme
 
 **Estado:** resuelto. `AzureBacklogRepositorio` centraliza el segmento de
-proyecto con `quote(..., safe="")` y lo usa en todas las URLs.
+proyecto con `quote(..., safe="")` para Work Items y usa el endpoint Core de
+organización para verificar el proyecto.
 
 #### AUD-10 — El batch “liviano” solicita más campos de los necesarios
 
@@ -241,7 +259,8 @@ externos, y hay una prueba específica para evitar regresiones.
   configuración de despliegue.
 - Las cachés son locales a cada proceso; con múltiples workers no hay invalidación compartida.
 - El healthcheck es de proceso, no de conectividad Azure; no usarlo como readiness de Azure.
-- La documentación y la plantilla contienen nombres de organización/proyecto y conteos reales. Si el repositorio deja de ser privado, sustituir esos datos por placeholders y revisar el historial.
+- El repositorio es público; la documentación, `.env.example` y las fixtures
+  usan datos de ejemplo. No se versionaron PATs ni otros secretos.
 
 ## 6. Controles que sí están bien alineados
 
@@ -271,7 +290,6 @@ externos, y hay una prueba específica para evitar regresiones.
 1. Ejecutar auditoría axe/browser y validar el foco al cambiar de hash.
 2. Probar SPA estático y readiness; CORS ya tiene regresión de origen permitido/rechazado.
 3. Resolver los warnings de deprecación de Starlette/httpx.
-4. Retirar datos organizativos reales de documentación pública.
 
 ## 8. Criterios de cierre recomendados
 

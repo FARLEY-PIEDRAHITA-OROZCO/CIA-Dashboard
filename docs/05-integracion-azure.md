@@ -1,26 +1,25 @@
 # 05 · Integración con Azure DevOps
 
-> Cómo el backend lee el backlog real del proyecto **CIA (Centro de
-> Inteligencia Artificial)** de la organización `segurosmundial`. Aplica para
-> cualquiera que toque `infrastructure/azure/*` o diagnostique problemas de
-> datos.
+> Cómo el backend lee el backlog real del proyecto y área configurados en
+> `backend/.env`. Aplica para cualquiera que toque
+> `infrastructure/azure/*` o diagnostique problemas de datos.
 
 ---
 
-## 1. Datos del entorno (valores observados; revisar privacidad)
+## 1. Datos del entorno (plantilla sin datos reales)
 
 | Dato | Valor |
 | ---- | ----- |
-| Organización (org) | `https://dev.azure.com/segurosmundial` |
-| Proyecto | `CIA (Centro de Inteligencia Artificial)` |
+| Organización (org) | `https://dev.azure.com/<organizacion>` |
+| Proyecto | `<proyecto>` |
 | ÁreaPath por defecto | igual al proyecto (si `AREA_PATH` está vacío el repositorio lo deriva del proyecto) |
-| URL del backlog vista en el portal | `https://dev.azure.com/segurosmundial/CIA%20(Centro%20de%20Inteligencia%20Artificial)/_backlogs/backlog/Épicas` |
+| URL del backlog vista en el portal | `https://dev.azure.com/<organizacion>/<proyecto-codificado>/_backlogs/backlog/Épicas` |
 | Autenticación | PAT (Personal Access Token) en `backend/.env` → `AZURE_PAT` (ambito `Work Items → Read`) |
 | API de Work Item Tracking | versión **7.1** (`API_VERSION`) |
 
 El doble uso de **proyecto** y **ÁreaPath** es clave: el proyecto es el
-contenedor de nivel superior de Azure; el ÁreaPath filtra "solo lo del CIA"
-dentro del proyecto.
+contenedor de nivel superior de Azure; el ÁreaPath filtra el subconjunto
+deseado dentro del proyecto.
 
 ---
 
@@ -37,7 +36,10 @@ con `api-version=7.1` (cuando el endpoint es de WIT).
 | Detallar lote (árbol) | `GET {org}/{proyecto}/_apis/wit/workitems?ids=...&$expand=relations&$fields=...&api-version=7.1` | construcción del árbol (lote de hasta **200** ids) |
 | Obtener uno | `GET {org}/{proyecto}/_apis/wit/workitems/{id}?$expand=relations&api-version=7.1` | árbol de una épica (raíz) |
 
-- Todas las rutas usan `_ruta_proyecto()`, que aplica
+- `verificar_proyecto()` usa el endpoint Core de nivel organización
+  (`{org}/_apis/projects/{proyecto}`); no debe anteponerse el proyecto con
+  `_ruta_proyecto()` porque esa ruta duplicada responde 401.
+- Las rutas de Work Items usan `_ruta_proyecto()`, que aplica
   `urllib.parse.quote(proyecto, safe='')` al segmento del proyecto. El mismo
   helper construye los enlaces editables de los work items.
 - `$expand=relations` trae el bloque `relations[]` con los enlaces
@@ -141,7 +143,7 @@ no un contrato estable: vuelve a medir antes de usarlos como expectativa.
 - El backlog *del equipo* que ves en Azure **oculta las épicas `Closed`** de
   su conteo: **132 − 12 = 120**.
 - Las áreas **coinciden** al 100% (las 132 están en
-  `CIA (Centro de Inteligencia Artificial)`), así que esa hipótesis quedó
+  `<proyecto>`), así que esa hipótesis quedó
   descartada; el mecanismo es el filtro de estado.
 
 Comportamiento del dashboard (configurable):

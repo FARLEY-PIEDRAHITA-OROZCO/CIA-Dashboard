@@ -118,9 +118,8 @@ class CachePort(Protocol):
 
 Los protocolos son la frontera de la arquitectura limpia: usar un doble de
 cualquiera de ellos en pruebas sustituye la implementación real sin tocar el
-caso de uso. `TransportePort` todavía no declara `cerrar()`; el lifespan lo
-resuelve dinámicamente y el repositorio está anotado con la implementación
-concreta del transporte.
+caso de uso. `TransportePort` declara `cerrar()` y el lifespan lo invoca en un
+`finally`; el repositorio depende del protocolo, no de la clase concreta.
 
 ---
 
@@ -137,10 +136,9 @@ concreta del transporte.
 
 - Cliente único `httpx.AsyncClient` reutilizado en todas las llamadas.
 - **Traducción de errores**: los errores de red y cualquier estado `>=400` se
-  envuelven en `AzureError`; el mensaje incluye el status y hasta 240 caracteres
-  de la respuesta. No hay redacción sistemática del cuerpo upstream.
-- Los estados HTTP `203`, `204` o redirecciones se rechazan como
-  inesperados; también se valida que el JSON sea un objeto.
+  envuelven en `AzureError` con un mensaje seguro según el estado; el cuerpo
+  upstream no se devuelve. Los estados HTTP `203`, `204` o redirecciones se
+  rechazan como inesperados; también se valida que el JSON sea un objeto.
 - Los errores no devuelven el cuerpo upstream y el transporte no registra
   headers ni tiene logging `debug` propio.
 
@@ -167,8 +165,10 @@ Detalles de robustez:
   canónicos con `$fields` y no pide relaciones; el árbol sí las expande.
 - El BFS procesa todos los hijos de cada nivel en lotes y solo encola IDs que
   Azure devolvió; una respuesta parcial no produce `KeyError`.
-- Todas las rutas de proyecto y URLs de work item usan
-  `quote(proyecto, safe='')` mediante un helper único.
+- Las rutas de proyecto de Work Items y las URLs de work item usan
+  `quote(proyecto, safe='')` mediante un helper único. La verificación de
+  proyecto es una operación Core de nivel organización y usa
+  `/_apis/projects/{proyecto}` sin anteponer el proyecto.
 - El resumen de la lista incluye `url`; también se construyen URLs para
   `Feature`, HU y `Task`.
 - La API exige `epic_id` entero y positivo (`Path(gt=0)`).
@@ -274,9 +274,9 @@ hijos) para no saturar la red — el detalle solo sale en `/arbol`.
 crear_contenedor() -> Contenedor
 # 1. Settings
 # 2. AzureTransporte(settings.azure_pat, timeout_seg)
-# 3. AzureBacklogRepositorio(transporte, queries, settings)
+# 3. AzureBacklogRepositorio(cfg.azure_org_url, cfg.azure_proyecto, cfg.area_path_efectivo, transporte)
 # 4. CacheMemoria()
-# 5. ServicioBacklog(repositorio, cache, ttl_seg, configurado=bool(pat), …)
+# 5. ServicioBacklog(repositorio, cache, cfg.cache_ttl_seg, configurado=cfg.configurado, …)
 ```
 
 `crear_contenedor(settings=…)` acepta settings inyectables para pruebas.

@@ -48,7 +48,7 @@ Estado de configuración y conectividad real con Azure DevOps.
 
 | Campo | Tipo | Descripción |
 | ----- | ---- | ----------- |
-| `configurada` | bool | ¿Hay PAT configurado en `.env`? |
+| `configurada` | bool | ¿Están organización, proyecto y PAT configurados en `.env`? |
 | `organizacion` | string | `AZURE_ORG_URL` (sin `/` final) |
 | `proyecto` | string | nombre del proyecto |
 | `area_path` | string | ÁreaPath configurado (puede ser `""`) |
@@ -59,9 +59,9 @@ Estado de configuración y conectividad real con Azure DevOps.
 ```json
 {
   "configurada": true,
-  "organizacion": "https://dev.azure.com/segurosmundial",
-  "proyecto": "CIA (Centro de Inteligencia Artificial)",
-  "area_path": "",
+  "organizacion": "https://dev.azure.com/<organizacion>",
+  "proyecto": "<proyecto>",
+  "area_path": "<area-path>",
   "verificado": true,
   "error": ""
 }
@@ -73,15 +73,17 @@ Estado de configuración y conectividad real con Azure DevOps.
   "configurada": false,
   "organizacion": "",
   "proyecto": "",
-  "area_path": "CIA (Centro de Inteligencia Artificial)",
+  "area_path": "",
   "verificado": false,
   "error": ""
 }
 ```
 
 - `configurada: false` ⇒ `GET /api/epics*` devuelve **409**.
-- Si Azure devuelve 401/403, la app lo reporta en `error` con un mensaje
-  seguro; los estados 203/204/3xx se rechazan como respuestas inesperadas.
+- Si Azure devuelve un error durante la verificación, el endpoint de estado
+  responde 200 con `verificado: false` y un mensaje de error de la aplicación
+  (sin exponer el cuerpo upstream); los endpoints de backlog traducen el
+  `AzureError` a **502** con un detalle seguro.
 
 ---
 
@@ -100,7 +102,7 @@ Listado de épicas del backlog (resumen: **sin** descripción ni hijos).
 {
   "epicas": [
     { "azure_id": 5586, "titulo": "Epic- IA Mundial Express",
-      "estado": "Active", "url": "https://dev.azure.com/segurosmundial/CIA (Centro de Inteligencia Artificial)/_workitems/edit/5586" },
+      "estado": "Active", "url": "https://dev.azure.com/<organizacion>/<proyecto>/_workitems/edit/5586" },
     { "azure_id": 5587, "titulo": "Epic- Banca Digital", "estado": "Active", "url": "…" }
   ]
 }
@@ -114,7 +116,7 @@ Listado de épicas del backlog (resumen: **sin** descripción ni hijos).
 | `estado` | string | `System.State` (**texto libre**, ej.: `Active`, `Resolved`, `Closed`) |
 | `url` | string | enlace directo al work item; el listado lo construye con el proyecto codificado |
 
-- Datos posibles en el entorno real de CIA: **120** activas por defecto y **132** incluyendo las 12 cerradas. (El portal del backlog del equipo oculta las épicas `Closed`; nuestro WIQL lee todo el proyecto — ver [05-integracion-azure](05-integracion-azure.md).)
+- En el entorno observado había **120** activas por defecto y **132** incluyendo las 12 cerradas. (El portal del backlog del equipo oculta las épicas `Closed`; nuestro WIQL lee todo el proyecto — ver [05-integracion-azure](05-integracion-azure.md).)
 - Si el backlog está vacío: `{ "epicas": [] }` (200, no error).
 - La lista NO viene ordenada por fecha de creación; el orden lo define Azure.
 - **Error 409** si falta organización, proyecto o PAT; **502** si Azure
@@ -137,7 +139,7 @@ Listado de épicas del backlog (resumen: **sin** descripción ni hijos).
   "azure_id": 5586,
   "titulo": "Epic- IA Mundial Express",
   "estado": "Active",
-  "url": "https://dev.azure.com/segurosmundial/CIA (Centro de Inteligencia Artificial)/_workitems/edit/5586",
+  "url": "https://dev.azure.com/<organizacion>/<proyecto>/_workitems/edit/5586",
   "descripcion": "<div><div style=\"font-family:Arial;font-size:13.3333px\">Desarrollar un sistema IA…</div></div>",
   "features": [
     {
@@ -172,7 +174,7 @@ Detalles:
 
 | Código | Caso | Cuerpo `detail` (ejemplo) |
 | ------ | ---- | ------------------------- |
-| `409` | PAT no configurado | instrucciones de `.env` |
+| `409` | Configuración incompleta (organización, proyecto o PAT) | instrucciones de `.env` |
 | `404` | la API recibió `None` del repositorio | `"Épica 999999 no encontrada."` |
 | `502` | error de red/HTTP/JSON del adaptador, incluidos estados 203/204/3xx | mensaje seguro con estado; no se devuelve el cuerpo upstream |
 
@@ -210,7 +212,7 @@ Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 | Código | Significado | Origen |
 | ------ | ----------- | ------ |
 | `200` | OK | — |
-| `409` | Configuración ausente (PAT vacío) | rutas |
+| `409` | Configuración ausente (organización, proyecto o PAT) | rutas |
 | `404` | La raíz no existe o no se encuentra | rutas |
 | `422` | Validación de `{epic_id}` (no entero o no positivo) | FastAPI/pydantic |
 | `502` | Error upstream de Azure; 203/204/3xx o JSON inválido | transporte + rutas |

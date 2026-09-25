@@ -38,11 +38,13 @@ Ejemplo: traer `Microsoft.VSTS.Scheduling.Effort` al modelo.
    (`queries.campo(...)` o parseo numérico tolerante).
 
 **Frontend**
-4. `api/tipos.ts`: añadir `esfuerzo?: number` a las interfaces.
-5. Mostrarlo donde aplique (p. ej. en `DetalleEpica`/`FilaEpica`).
+4. `frontend/src/api/tipos.ts`: añadir `esfuerzo?: number` a las interfaces.
+5. `frontend/src/api/cliente.ts`: actualizar los validadores runtime; las
+   interfaces por sí solas no protegen el contrato.
+6. Mostrarlo donde aplique (p. ej. en `DetalleEpica`/`FilaEpica`).
 
 **Pruebas**
-6. `test_repositorio.py`: en `item_azure`/caso verificar que el campo se
+7. `test_repositorio.py`: en `item_azure`/caso verificar que el campo se
    mapea; frontend: caso de render con el nuevo valor.
 
 ---
@@ -56,7 +58,8 @@ El soporte de `Task` bajo cada `User Story` ya está implementado. Para añadir 
 2. `domain/models.py`: crear el modelo de dominio con defaults seguros y
    anidarlo bajo el nivel correspondiente.
 3. `repository.py`: construir/mapear el nodo en `_construir_arbol` y `_a_epica`.
-4. `api/tipos.ts` y el tablero/componente correspondiente: reflejar el nuevo
+4. `frontend/src/api/tipos.ts`, `frontend/src/api/cliente.ts` (validadores
+   runtime) y el tablero/componente correspondiente: reflejar el nuevo
    contrato sin hacer fetch desde componentes de presentación.
 5. Pruebas: ampliar `_backlog_completo()` y añadir un caso frontend de la
    nueva ruta/columna.
@@ -84,7 +87,8 @@ El soporte de `Task` bajo cada `User Story` ya está implementado. Para añadir 
    `ServicioBacklog` (caso de uso), **no** a la ruta (mantiene el flujo de
    dependencias → dominio).
 3. `api/schemas.py`: nuevo modelo de respuesta.
-4. `api/cliente.ts`: `estadisticas: () => peticion<Estadisticas>("/epics/estadisticas")`.
+4. `frontend/src/api/tipos.ts` y `frontend/src/api/cliente.ts` (validadores
+   runtime) para el nuevo contrato; `epicas/hooks.ts` si requiere otra query.
 5. Pruebas: `test_api.py` (status + contrato) y, si hay lógica, `test_servicio.py`.
 
 ---

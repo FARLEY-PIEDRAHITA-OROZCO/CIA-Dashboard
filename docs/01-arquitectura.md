@@ -1,20 +1,20 @@
 # 01 · Arquitectura
 
 > **Resumen**: proyecto independiente de solo lectura que extrae las épicas
-> del backlog de **Azure DevOps** (proyecto *CIA — Centro de Inteligencia
-> Artificial*) y las presenta en un **dashboard web** con **drill-down**
-> completo `Épica → Feature/User Story → Task`.
+> del backlog de **Azure DevOps** (proyecto y área configurados) y las presenta
+> en un **dashboard web** con **drill-down** completo
+> `Épica → Feature/User Story → Task`.
 
 ---
 
 ## 1. Stack tecnológico
 
-| Capa | Tecnología | Versión mínima |
-| ---- | ---------- | -------------- |
+| Capa | Tecnología | Versión verificada |
+| ---- | ---------- | ------------------- |
 | Backend | Python + FastAPI + httpx + pydantic-settings | Python 3.14 · FastAPI 0.141 · httpx 0.28 · pydantic 2.13 |
-| Frontend | React + TypeScript + Vite + TanStack Query + DOMPurify | React 18.3 · TS 5.9 · Vite 5.4 · Query 5.x · DOMPurify 3.4 |
+| Frontend | React + TypeScript + Vite + TanStack Query + DOMPurify | React 18.3 · TS 5.9 · Vite 6.4 · Query 5.x · DOMPurify 3.4 |
 | Pruebas backend | pytest + pytest-asyncio | pytest 9.x |
-| Pruebas frontend | Vitest + Testing Library + jsdom | Vitest 2.1 · jsdom 25 |
+| Pruebas frontend | Vitest + Testing Library + jsdom | Vitest 4.1 · jsdom 25 |
 
 El backend expone una **API REST** (`/api/*`), sirve el **build estático del
 frontend** cuando existe (`frontend/dist`) y documenta la API en
@@ -34,13 +34,13 @@ CIA-Dashboard/                      # raíz del proyecto
 │   ├── app/
 │   │   ├── main.py                 # fábrica de la app FastAPI
 │   │   ├── config.py               # Settings (.env / variables de entorno)
-│   │   ├── run.py                  # arranque local (uvicorn)
 │   │   ├── domain/                 # modelos + puertos (sin dependencias técnicas)
 │   │   ├── application/            # caso de uso ServicioBacklog (caché)
 │   │   ├── infrastructure/         # adaptadores: Azure DevOps + caché
 │   │   ├── api/                    # routers, esquemas, inyección FastAPI
 │   │   └── core/                   # contenedor de dependencias + logging
-│   ├── tests/                      # 42 pruebas (sin red)
+│   ├── run.py                      # arranque local de uvicorn
+│   ├── tests/                      # 44 pruebas (sin red)
 │   ├── requirements*.txt           # dependencias runtime / dev
 │   ├── .env.example                # plantilla de configuración (sin secretos)
 │   └── .env                        # secreto local (gitignore; nunca se commitea)
@@ -52,7 +52,9 @@ CIA-Dashboard/                      # raíz del proyecto
     │   ├── navegacion.ts           # enrutado por hash (#/dashboard, #/epicas/{id}, #/epicas/{id}/tareas)
     │   ├── pages/                  # Dashboard (página principal)
     │   └── test/                   # setup de vitest
-    └── vite.config.ts              # proxy /api en dev, config de tests; `/docs` no está proxied
+    ├── public/
+    │   └── favicon.svg             # icono estático servido en la raíz
+    └── vite.config.ts              # proxy de /api, /docs y /openapi.json en dev; config de tests
 ```
 
 ---
@@ -197,7 +199,7 @@ main.tsx ──► QueryClientProvider
 
 - **Idioma**: nombres de módulos, clases y variables en español (dominios de negocio también). Identificadores de librerías en inglés.
 - **Backend**: `async/await` en todo transporte; *type hints* completos; *docstrings* con la responsabilidad de cada símbolo; `Protocol` para puertos.
-- **Frontend**: componentes con *props* tipadas; lógica de datos en hooks de React Query; *presentación pura* (los componentes no llaman a `fetch`).
+- **Frontend**: componentes con *props* tipadas; la lógica de datos y las consultas viven en `api/cliente.ts` y hooks de React Query; los componentes de presentación no llaman a `fetch`.
 - **Pruebas**: sin red (doubles); cada suite aísla una capa.
 - `format` / `lint`: ninguno impuesto todavía; el *typecheck* de TS (`tsc -b`) y la corrección de Python los verifica la suite. (Ver [07-pruebas](07-pruebas.md)).
 

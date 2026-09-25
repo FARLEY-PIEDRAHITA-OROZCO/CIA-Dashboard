@@ -22,7 +22,7 @@
 cd backend
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.lock
-Copy-Item .env.example .env            # ← luego editar .env y poner AZURE_PAT
+Copy-Item .env.example .env            # ← luego editar .env: organización, proyecto y AZURE_PAT
 .\.venv\Scripts\python.exe run.py       # http://127.0.0.1:8000
 
 # Terminal 2 — frontend (con hot reload)
@@ -32,13 +32,15 @@ npm.cmd run dev                         # http://localhost:5173 (proxy /api → 
 ```
 
 - El API queda en `:8000` (Swagger en `/docs`).
-- Vite sirve la SPA en `:5173` y hace proxy de `/api` hacia el backend.
+- Vite sirve la SPA en `:5173` y hace proxy de `/api`, `/docs` y
+  `/openapi.json` hacia el backend.
 - El `.env` se resuelve por ruta absoluta desde `config.py`; ejecutar desde
   `backend/` sigue siendo la forma documentada.
 - El proceso rechaza `HOST` externo mientras `PERMITIR_EXTERNO=false`; activar
   el opt-in solo detrás de TLS/autenticación/rate limiting.
-- `requirements.lock` se genera desde `requirements-dev.txt` con `pip-compile
-  --generate-hashes`; no editarlo manualmente.
+- `requirements.lock` se genera desde `requirements-dev.txt` con
+  `pip-compile --generate-hashes --output-file=requirements.lock requirements-dev.txt`;
+  no editarlo manualmente.
 - Si cambia `PUERTO`, actualizar también el proxy de Vite o usar el puerto 8000
   durante desarrollo.
 - **IPv4 en localhost**: si `run.py` falla por resolución IPv6 en tu máquina,
@@ -115,6 +117,7 @@ Script de comprobación rápida (PowerShell):
 | ------- | -------------- | -------- |
 | `/api/epics` → **409** | `AZURE_PAT` vacío/incompleto | completar `.env` y reiniciar |
 | `/api/epics` → **502** `401` | PAT inválido/vencido o sin scope | regenerar PAT con scope `Work Items: Read` |
+| `/api/azure/estado` → `verificado: false` | el proceso puede tener código o variables antiguas; `run.py` no recarga | reiniciar el backend y volver a comprobar la llamada |
 | `/api/epics` → **502** con `203`/`TF401215` | campo/proyecto erróneo o respuesta no JSON | verificar `queries.py`, `AZURE_PROYECTO` y el manejo de respuestas no exitosas |
 | 0 épicas aunque existen | `AZURE_PROYECTO` vs ÁreaPath | revisar `AREA_PATH` (vacío = proyecto entero) |
 | Dashboard en blanco tras build | `frontend/dist` viejo o ausente | `npm.cmd run build` y reiniciar backend |
