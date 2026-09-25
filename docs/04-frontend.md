@@ -57,6 +57,8 @@ frontend/src/
 │   ├── TableroTareas.tsx     # tablero espejo de tareas (filtros, estados y contexto de bug)
 │   ├── PaginaBugs.tsx        # página dedicada `#/epicas/{id}/bugs` + métricas
 │   ├── TableroBugs.tsx       # tablero de bugs (estado, prioridad, severidad, relación)
+│   ├── TarjetaBugEditable.tsx # tarjeta de bug con edición QA opcional
+│   ├── EdicionInline.tsx     # formulario de edición QA (presentacional)
 │   └── index.ts              # barril de exportación
 ├── pages/
 │   └── Dashboard.tsx         # página principal (KPI + tabla)
@@ -248,6 +250,10 @@ export const api = {
     validarEpic(await peticion(`/epics/${azureId}/arbol?incluir_bugs=${incluirBugs}`, { signal })),
   bugsEpica: (azureId, incluirCerradas = false, signal) =>
     validarDetalleBugs(await peticion(`/epics/${azureId}/bugs?incluir_cerradas=${incluirCerradas}`, { signal })),
+  actualizarWorkItem: (workItemId, cambios, { validar, revEsperada }) =>
+    validarResultadoEscritura(await peticion(`/workitems/${workItemId}?validar=${…}`, {
+      method: "PATCH", body: JSON.stringify(validarActualizacion(cambios)),
+    })),
   refrescar: () => validarAccion(await peticion("/epics/refresh", { method: "POST" })),
 };
 ```
@@ -287,6 +293,7 @@ Claves de query y política de caché:
 | `useEpicas(activo, incluirCerradas)` | `["epicas", incluirCerradas]` | 30 s | por defecto | `activo` (solo si Azure configurado) |
 | `useArbolEpica(azureId\|null, incluirBugs)` | `["epicas","arbol",id,incluirBugs]` | 120 s | 300 s | solo si `id !== null` |
 | `useBugsEpica(azureId\|null, incluirCerradas)` | `["epicas","bugs",id,incluirCerradas]` | 120 s | 300 s | solo si `id !== null` |
+| `useActualizarWorkItem()` | — (mutación) | — | — | escritura QA habilitada |
 | `useRefrescar()` | — (mutación) | — | — | — |
 
 - **Filtro de cerradas**: `incluirCerradas` forma parte de la query key, así
@@ -295,6 +302,9 @@ Claves de query y política de caché:
 - **Bugs**: `useBugsEpica` usa una query separada y `PaginaBugs` muestra
   métricas, filtros por prioridad/severidad/relación y el tablero. La opción
   `incluirCerradas` también forma parte de la key.
+- **Escritura QA**: `useActualizarWorkItem` invalida `["epicas"]` tras guardar
+  (no al validar en seco), de modo que las tarjetas reflijen el cambio sin
+  esperar a que expire el TTL del backend.
 - **Carga perezosa del árbol**: `useArbolEpica` recibe `null` cuando la fila
   está contraída → la query está *disabled* y no consume red. Al expandir se
   dispara; al contraer, la data queda en caché (300 s) y reexpandir es
@@ -429,6 +439,27 @@ No hay endpoint de tareas: la página consume el mismo árbol de
   la cabecera permanece visible y se puede volver a expandir.
 - **Tarjetas**: muestran estado, HU de origen, Feature de origen, descripción
   sanitizada y enlace al work item aunque la descripción esté vacía.
+
+---
+
+## 11.1 Edición QA (`epicas/EdicionInline.tsx`)
+
+Formulario **presentacional** para editar los campos de QA de un work item
+(ADR-11). Recibe los valores actuales y emite `onGuardar` / `onValidar` con
+**solo los campos que el usuario cambió**, porque el backend aplica exactamente
+el *JSON Patch* recibido: un campo ausente significa "no tocar".
+
+- Campos: estado, prioridad, severidad, tags y notas QA.
+- `TAGS_QA` ofrece chips sugeridos (`verificado-qa`, `no-reproducible`,
+  `reproducible`, `bloqueado`, `necesita-info`) que se alternan con un clic.
+- Las notas QA viajan en `notas_qa` y el backend las **agrega al final** de la
+  descripción; nunca reemplazan el HTML existente.
+- Con `habilitado={false}` muestra un aviso de solo lectura en lugar de un
+  botón de guardado que fallaría.
+
+`TarjetaBugEditable` envuelve el formulario y conecta `useActualizarWorkItem`
+(data-connected). `TableroBugs` acepta `edicionHabilitada` para propagar el
+estado de la capacidad.
 
 ---
 

@@ -41,7 +41,7 @@ integración Azure, seguridad, pruebas, despliegue y guías de extensión).
 | ---- | ---------- | --------- |
 | Backend | Python 3.14 · FastAPI · httpx · pydantic-settings | `backend/` |
 | Frontend | React 18 · TypeScript · Vite · TanStack Query · DOMPurify | `frontend/` |
-| Pruebas | pytest (52) · Vitest + Testing Library (58) | `backend/tests/` · `frontend/src/**/*.test.tsx` |
+| Pruebas | pytest (99) · Vitest + Testing Library (58) | `backend/tests/` · `frontend/src/**/*.test.tsx` |
 
 ## Puesta en marcha rápida
 
@@ -57,6 +57,38 @@ Copy-Item .env.example .env        # editar organización, proyecto y AZURE_PAT
 
 El PAT se crea en `https://dev.azure.com/<org>/_usersSettings/tokens` con
 scope `WorkItems → Read`. **Nunca commits `.env`** (está en `.gitignore`).
+
+<details>
+<summary><b>Escritura QA (opcional, ADR-11)</b></summary>
+
+El sistema es de **solo lectura** por defecto. Para permitir editar tags,
+estado, prioridad/severidad y notas QA de un work item:
+
+1. Crea un PAT **dedicado** con scope `WorkItems → Read & Write` (Azure envía un
+   correo de notificación al crearlo).
+2. En `backend/.env`:
+   ```dotenv
+   AZURE_PAT_ESCRITURA=<tu-pat-de-escritura>
+   ESCRITURA_HABILITADA=true
+   ```
+3. Reinicia el backend.
+
+Notas importantes:
+
+- El PAT de escritura es **independiente** del de lectura, para poder revocar
+  la escritura sin perder la consulta.
+- Solo funciona con `HOST` en loopback: el proceso **rechaza** la configuración
+  si se habilita escritura con un binding externo, porque esta app no tiene
+  autenticación propia.
+- El alcance está acotado: solo `tags`, `estado`, `prioridad`, `severidad` y
+  notas QA. Las notas se **agregan al final** de la descripción y nunca
+  reemplazan el contenido existente.
+- Para apagar la escritura basta con dejar `ESCRITURA_HABILITADA=false` y
+  reiniciar.
+
+Ver [06-seguridad](docs/06-seguridad.md) para el análisis de riesgo completo.
+
+</details>
 
 ### 2. Frontend (desarrollo, hot reload)
 
@@ -89,6 +121,8 @@ cd ..\backend
 | GET | `/api/epics/{id}/arbol?incluir_bugs=true` | Árbol completo; opcionalmente incluye bugs jerárquicos/relacionados |
 | GET | `/api/epics/{id}/bugs` | Bugs de la épica + métricas por estado, prioridad, severidad y relación |
 | POST | `/api/epics/refresh` | Invalida la caché |
+| PATCH | `/api/workitems/{id}` | **Escritura QA** (opt-in): tags, estado, prioridad/severidad, notas. `?validar=true` no escribe |
+| GET | `/api/workitems/{id}/rev` | Revisión actual (control de concurrencia) |
 
 Ejemplos y contratos en [03-api.md](docs/03-api.md).
 
@@ -116,11 +150,11 @@ Ejemplos y contratos en [03-api.md](docs/03-api.md).
 ## Pruebas
 
 ```powershell
-# Backend (52): transporte, repositorio/árbol/bugs, caché, servicio, API y regresiones de seguridad
+# Backend (99): transporte, repositorio/árbol/bugs, caché, servicio, API y regresiones de seguridad
 cd backend
 .\.venv\Scripts\python.exe -m pytest
 
-# Frontend (58): badges, tablas, tableros, rutas, bugs, navegación global, API, Dashboard y sanitización
+# Frontend (72): badges, tablas, tableros, rutas, bugs, navegación global, API, Dashboard y sanitización
 cd ..\frontend
 npm.cmd test
 npm.cmd run build

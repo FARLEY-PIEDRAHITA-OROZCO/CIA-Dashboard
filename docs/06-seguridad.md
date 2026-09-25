@@ -117,7 +117,50 @@ Test-Path backend/.env                       # presencia local (nunca subir)
 
 ---
 
-## 6. Cómo exponer esta app más allá de localhost (cuando toque)
+## 6. Escritura QA (opt-in) — modelo de riesgo
+
+A partir de ADR-11 el sistema puede **editar** work items, pero sigue siendo de
+solo lectura por defecto. La escritura es una capacidad con su propio riesgo,
+separada de la lectura.
+
+### Controles implementados
+
+| Control | Mecanismo |
+| ------- | --------- |
+| Flag explícito | `ESCRITURA_HABILITADA=false` por defecto |
+| PAT dedicado | `AZURE_PAT_ESCRITURA` separado de `AZURE_PAT` (lectura) |
+| Sin PAT, sin escritura | `configurado_escritura` exige flag **y** PAT propio |
+| Solo loopback | `config.py` **rechaza** habilitar escritura con `HOST` externo |
+| Lista blanca | Solo `estado`, `prioridad`, `severidad`, `tags`, `notas_qa` |
+| Sin bypass de reglas | Nunca se envía `bypassRules`; las reglas del proyecto se respetan |
+| Notas append-only | Las notas QA se agregan al final; nunca se reemplaza la descripción |
+| Escape de HTML | El texto del usuario se escapa antes de incrustarlo en el HTML de Azure |
+| Concurrencia | `rev_esperada` aborta si otro QA editó antes |
+| Invalidación dirigida | Tras guardar solo se borran las claves de caché del elemento |
+| Trazabilidad | Se registra `work_item id`, campos y `rev`; el historial de Azure guarda autor y fecha |
+
+### Riesgo residual aceptado
+
+Con la escritura habilitada, **cualquier proceso o usuario con acceso al puerto
+loopback puede modificar el backlog**. Es el mismo riesgo que un script local con
+el PAT, y por eso la escritura se rechaza fuera de loopback. No hay mitigación
+adicional: esta aplicación **no tiene autenticación propia**.
+
+Controles de concurrencia que reducen el daño de ediciones simultáneas:
+
+- `rev_esperada` aborta el guardado si el work item cambió desde que se abrió
+  el formulario, de modo que un QA no pisa el trabajo de otro sin avisar.
+- El historial de revisiones de Azure DevOps registra autor, fecha y valor
+  anterior de cada campo, por lo que todo cambio es auditable y reversible
+  desde el propio portal de Azure.
+
+> **Consecuencia:** exponer la escritura en una red requiere antes un proxy con
+> autenticación (ver la sección siguiente). Hasta entonces, la escritura y la
+> exposición de red son mutuamente excluyentes por diseño.
+
+---
+
+## 7. Cómo exponer esta app más allá de localhost (cuando toque)
 
 El proyecto está pensado para **uso local/equipo**. No existe autenticación
 propia, rate limiting ni readiness; la aplicación solo añade headers básicos
@@ -132,7 +175,7 @@ de exponerlo:
 3. Portar el secreto fuera de variables literales: secret manager/`getSecret`
    en el entorno de despliegue (ver [08-despliegue](08-despliegue.md)).
 4. Considerar **limitación de rate** en el proxy (los endpoints son de solo
-   lectura con caché).
+   lectura con caché; `PATCH /api/workitems/{id}` sí escribe en Azure).
 5. Quitar/limitar `/docs` (Swagger) si no se desea público.
 
 Nunca exponer el backend directamente con bind `0.0.0.0` sin auth.

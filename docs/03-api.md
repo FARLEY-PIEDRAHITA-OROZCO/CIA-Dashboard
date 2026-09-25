@@ -230,7 +230,63 @@ ya carga el backend; no duplica la lectura de Azure.
 
 ---
 
-## 7. `POST /api/epics/refresh`
+## 7. `PATCH /api/workitems/{work_item_id}` (escritura QA, opt-in)
+
+Actualiza los campos de QA de un work item **directamente en Azure DevOps**.
+Solo está disponible si el backend se inició con `ESCRITURA_HABILITADA=true` y
+`AZURE_PAT_ESCRITURA` (ADR-11). Sin eso responde `409`.
+
+| Parámetro | Tipo | Default | Descripción |
+| --------- | ---- | ------- | ----------- |
+| `validar` | bool | `false` | Valida contra las reglas del proyecto **sin escribir** (`validateOnly`) |
+| `rev_esperada` | int | — | Si el work item tiene otra revisión, aborta para no sobrescribir a otro QA |
+
+**Cuerpo (JSON)** — todos los campos son opcionales; un campo ausente significa
+"no tocar". Se exige **al menos uno**.
+
+| Campo | Tipo | Notas |
+| ----- | ---- | ----- |
+| `estado` | string | Se valida contra las reglas de Azure |
+| `prioridad` | string | 1–4 |
+| `severidad` | string | `1 - Critical` … `4 - Low` |
+| `tags` | string | Lista separada por comas. Se rechazan `;` y `*` |
+| `notas_qa` | string | Se **agregan al final** de la descripción; nunca la reemplazan |
+
+```json
+{ "estado": "Verificado", "tags": "verificado-qa, reproducible" }
+```
+
+**200 OK**
+```json
+{
+  "work_item_id": 300,
+  "rev": 6,
+  "campos": ["estado", "tags"],
+  "validado": false,
+  "detalle": "Cambio aplicado en Azure DevOps."
+}
+```
+
+### Errores
+
+| Código | Causa | Significado |
+| ------ | ----- | ----------- |
+| `409` | Escritura deshabilitada | Falta el flag o el PAT dedicado |
+| `409` | Regla de Azure | El `detail` incluye el mensaje de regla (ej. `TF401321: …`) |
+| `422` | Validación local | Campo vacío, tags con `;`/`*`, conflicto de `rev`, o cuerpo sin campos |
+| `502` | Error de red/upstream | Fallo genérico de Azure |
+
+> La invalidación de caché tras guardar es **dirigida**: solo se borran la lista
+> de épicas y el árbol del work item modificado.
+
+### `GET /api/workitems/{id}/rev`
+
+Devuelve la revisión actual en `detalle`, para el control de concurrencia.
+También responde `409` si la escritura está deshabilitada.
+
+---
+
+## 8. `POST /api/epics/refresh`
 
 Invalida la caché de aplicación. La **próxima** consulta a `/api/epics` o
 `/api/epics/{id}/arbol` vuelve a leer de Azure.
@@ -248,7 +304,7 @@ Invalida la caché de aplicación. La **próxima** consulta a `/api/epics` o
 
 ---
 
-## 8. Modelo de errores
+## 9. Modelo de errores
 
 Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 `detail` (string, o array de detalles de validación).
@@ -273,7 +329,7 @@ Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 
 ---
 
-## 9. Ejemplos de uso
+## 10. Ejemplos de uso
 
 ### PowerShell
 ```powershell

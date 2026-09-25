@@ -151,6 +151,7 @@ caso de uso. `TransportePort` declara `cerrar()` y el lifespan lo invoca en un
 | `wiql_epicas(area_path)` | Construye la WIQL de épicas según área (ver [Integración Azure](05-integracion-azure.md)) |
 | `TIPOS_HIJOS` / `hijos_permitidos` | Política de descendencia: Epic → Feature/User Story, Feature → User Story, User Story → Task/Bug, Bug → Task |
 | `RELACION_HIJO` / `RELACION_RELATED` | Jerarquía `System.LinkTypes.Hierarchy-Forward` y asociación de un salto `System.LinkTypes.Related` |
+| `CAMPO_TAGS` | `System.Tags`, usado por la escritura QA |
 | `CAMPO_DESCRIPCION` / `CAMPO_TITULO` / `CAMPO_ESTADO` | Nombres de campos canónicos de Azure |
 | `CAMPO_PRIORIDAD` / `CAMPO_SEVERIDAD` / `CAMPO_ASIGNADO` | Campos opcionales para métricas y contexto de bugs |
 
@@ -180,6 +181,28 @@ Detalles de robustez:
   PAT ni cuerpos upstream.
 - La API exige `epic_id` entero y positivo (`Path(gt=0)`).
 
+### `escritura.py` — `AzureEscrituraRepositorio` (opt-in, ADR-11)
+
+Complemento **de solo escritura**, separado de `repository.py`:
+
+| Método | Qué hace |
+| ------ | -------- |
+| `obtener_revision(id)` | `GET workitems/{id}` → `rev` actual (control de concurrencia) |
+| `actualizar_work_item(id, cambios, validar=, rev_esperada=)` | Traduce `ActualizacionQA` a *JSON Patch* y aplica `PATCH workitems/{id}` |
+
+Garantías del adaptador:
+- **Lista blanca estricta**: solo genera operaciones para los campos de
+  `ActualizacionQA`; nada más puede llegar a Azure.
+- **Notas QA append-only**: lee la descripción actual y agrega el bloque al
+  final, preservando el formato HTML del autor original.
+- **Escape de HTML**: el texto del usuario se escapa con `html.escape` antes
+  de incrustarlo en la descripción de Azure.
+- **Tags acotados**: rechaza `;` (separador de Azure), `*` (jerárquico) y
+  exceso de longitud; normaliza y deduplica.
+- **Concurrencia**: si `rev_esperada` no coincide con la revisión actual, aborta
+  **antes** de escribir.
+- **Nunca** envía `bypassRules`: las reglas del proyecto se respetan siempre.
+
 ---
 
 ## 5. Caché (`infrastructure/cache.py`)
@@ -191,6 +214,8 @@ Detalles de robustez:
   Pydantic son mutables, por lo que un consumidor interno podría alterar una
   entrada cacheada.
 - `limpiar` vacía la caché del servicio cuando se llama refresh.
+- `eliminar(clave)` hace **invalidación dirigida**: tras una escritura solo se
+  borran las claves del work item afectado, sin releer todo el backlog.
 
 El TTL por defecto del servicio es **120 s** (`CACHE_TTL_SEG`). El repositorio
 Azure no mantiene una segunda caché: `ServicioBacklog` es la única capa de
@@ -211,6 +236,9 @@ async def arbol_epica(id, incluir_bugs=False) -> Epic | None
 async def bugs_epica(id, incluir_cerradas=False) -> DetalleBugs | None
                               # bugs visibles + métricas del total completo
 def    refrescar()            -> None                # caché.limpiar()
+async def actualizar_work_item(id, cambios, validar=False, rev_esperada=None)
+                              -> ResultadoActualizacion   # requiere escritura habilitada
+async def revision_work_item(id) -> int
 ```
 
 El filtro de cerradas (`ESTADO_CERRADO = "closed"`, comparado normalizado):

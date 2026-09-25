@@ -35,7 +35,17 @@ con `api-version=7.1` (cuando el endpoint es de WIT).
 | Detallar lote (listado) | `GET {org}/{proyecto}/_apis/wit/workitems?ids=...&$fields=...&api-version=7.1` | resumen sin relaciones (lote de hasta **200** ids) |
 | Detallar lote (árbol) | `GET {org}/{proyecto}/_apis/wit/workitems?ids=...&$expand=relations&$fields=...&api-version=7.1` | construcción del árbol (lote de hasta **200** ids) |
 | Obtener uno | `GET {org}/{proyecto}/_apis/wit/workitems/{id}?$expand=relations&api-version=7.1` | árbol de una épica (raíz) |
+| Obtener revisión | `GET {org}/{proyecto}/_apis/wit/workitems/{id}?$fields=System.Id&api-version=7.1` | escritura QA — `rev` para control de concurrencia |
+| Leer descripción | `GET {org}/{proyecto}/_apis/wit/workitems/{id}?$fields=System.Description&api-version=7.1` | escritura QA — preservar el HTML antes de añadir notas |
+| **Actualizar (escritura QA)** | `PATCH {org}/{proyecto}/_apis/wit/workitems/{id}?api-version=7.1` con `Content-Type: application/json-patch+json` | tags, estado, prioridad, severidad y notas QA |
 
+- La escritura usa `PATCH` con *JSON Patch* (`application/json-patch+json`),
+  un cuerpo **array** de operaciones `{op, path, value}` sobre
+  `/fields/System.*`. `?validateOnly=true` hace que Azure compruebe las reglas
+  sin persistir. **Nunca** se envía `bypassRules`.
+- Los errores 4xx de Azure traen `{"message": …}` con la regla que rechazó el
+  cambio (ej. `TF401321`); el transporte lo extrae, lo acota a 300 caracteres y
+  lo expone como `AzureError.detalle` para que la UI pueda explicarlo.
 - `verificar_proyecto()` usa el endpoint Core de nivel organización
   (`{org}/_apis/projects/{proyecto}`); no debe anteponerse el proyecto con
   `_ruta_proyecto()` porque esa ruta duplicada responde 401.

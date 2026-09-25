@@ -20,6 +20,11 @@
   (`NavegacionGlobal`) presente en todas las páginas: acceso a épica,
   historias, tareas y bugs con `aria-current`, refresco global, salud y API.
   El botón de refresco se unificó (ya no se duplica en el dashboard).
+- Se añadió la **escritura QA opt-in** (ADR-11): `PATCH /api/workitems/{id}`
+  para tags, estado, prioridad/severidad y notas QA. Sigue siendo de solo
+  lectura por defecto (`ESCRITURA_HABILITADA=false`), exige un PAT dedicado y
+  se niega a arrancar con binding externo. Notas QA son append-only y el texto
+  se escapa antes de incrustarse en el HTML de Azure.
 - La documentación y las fixtures usan ahora organización/proyecto de ejemplo;
   el repositorio es público y no contiene credenciales.
 
@@ -104,8 +109,8 @@ run.py → app.main:app
 
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
-| Backend pytest | **52 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
-| Frontend Vitest | **58 passed / 13 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs y sanitización. |
+| Backend pytest | **99 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
+| Frontend Vitest | **72 passed / 14 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs y sanitización. |
 | Frontend build | **PASS** | `tsc -b` y `vite build`; bundle generado correctamente. |
 | `pip check` | **PASS** | No hay requisitos Python rotos en el entorno auditado. |
 | `pip-audit --local` | **PASS** | Sin vulnerabilidades conocidas en el lockfile instalado. |
@@ -146,7 +151,7 @@ La auditoría original de `npm audit` reportó:
   dependencia vulnerable de `esbuild`.
 
 El riesgo principal estaba en el servidor de desarrollo y el tooling de
-pruebas. La actualización se validó con las 52 pruebas y el build actuales;
+pruebas. La actualización se validó con las 99 y 72 pruebas y el build actuales;
 el servidor de Vite debe seguir enlazado a loopback.
 
 #### AUD-02 — BFS falla si Azure omite una relación hija

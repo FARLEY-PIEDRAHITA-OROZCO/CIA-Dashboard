@@ -40,7 +40,7 @@ CIA-Dashboard/                      # raíz del proyecto
 │   │   ├── api/                    # routers, esquemas, inyección FastAPI
 │   │   └── core/                   # contenedor de dependencias + logging
 │   ├── run.py                      # arranque local de uvicorn
-│   ├── tests/                      # 52 pruebas (sin red)
+│   ├── tests/                      # 99 pruebas (sin red)
 │   ├── requirements*.txt           # dependencias runtime / dev
 │   ├── .env.example                # plantilla de configuración (sin secretos)
 │   └── .env                        # secreto local (gitignore; nunca se commitea)
@@ -149,7 +149,7 @@ con el algoritmo de relaciones jerárquicas (ver [Integración Azure](05-integra
 | # | Decisión | Justificación |
 | - | -------- | ------------- |
 | 1 | **Proyecto independiente** (no módulo de CIA-Gestor) | Aislamiento de ciclos de despliegue, dependencias y pruebas; integración por API. |
-| 2 | **Solo lectura** de Azure | El dashboard no muta el backlog: elimina riesgo de corrupción de datos y reduce permisos del PAT a `WorkItems: Read`. |
+| 2 | **Solo lectura por defecto** de Azure (ver ADR-11) | El sistema no muta el backlog salvo que se habilite explícitamente la escritura QA con un PAT dedicado; por defecto el PAT es `WorkItems: Read`. |
 | 3 | **WIQL + batch de workitems + `$expand=relations`** | Mantiene el árbol real del backlog (jerarquía), sin depender de widgets/analytics de Azure. |
 | 4 | **Carga perezosa** (lista sin hijos, árbol bajo demanda) | Listado rápido incluso con cientos de épicas; el árbol solo se paga al expandir. |
 | 5 | **Caché TTL por defecto en memoria** | Satisfactorio para uso local; puerto `CachePort` permite swap a Redis sin tocar el dominio (ver [09](09-guia-extension.md#swap-caché-a-redis)). |
@@ -158,6 +158,7 @@ con el algoritmo de relaciones jerárquicas (ver [Integración Azure](05-integra
 | 8 | **Cuatro páginas separadas por hash** (`#/dashboard`, `#/epicas/{id}`, `#/epicas/{id}/tareas`, `#/epicas/{id}/bugs`) | Historias, tareas y bugs merecen vistas dedicadas con espacio, filtros y métricas propios; el hash no requiere router ni reconfiguración del backend y preserva atrás/compartir. |
 | 9 | **Respuestas JSON de dominio = contrato** | Los modelos Pydantic del dominio se reutilizan como esquemas de salida; el mapper construye URLs de todos los niveles y el cliente frontend valida la forma en runtime. |
 | 10 | **Grafo de work items configurable** | Jerarquía (`Hierarchy-Forward`) y asociaciones `Related` se procesan con políticas centralizadas; los bugs pueden ser hijos de HUs y padres de tareas sin duplicar el código de mapeo. |
+| 11 | **Escritura QA opt-in y reversible** (2026-09-25) | Editar el backlog es mutar un sistema de la organización. La escritura vive en un puerto y adaptador **separados**, con lista blanca de campos, PAT dedicado, flag `ESCRITURA_HABILITADA` (por defecto `false`) y prohibición de binding externo. Apagar el flag restaura el comportamiento de solo lectura sin tocar el lector. |
 
 > **Caché:** el servicio usa `CachePort` como única capa de caché del flujo
 > normal; el repositorio ya no mantiene una segunda copia. Refresh invalida

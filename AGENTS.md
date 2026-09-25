@@ -43,11 +43,13 @@ npm.cmd audit --audit-level=high
 - Main request path: API routes → `ServicioBacklog` → domain `Protocol` ports. Compose concrete Azure/cache adapters in `backend/app/core/container.py`; keep Azure HTTP/WIQL in `backend/app/infrastructure/azure/`.
 - The backlog has two tree branches: `Epic.features[].hus[].tareas[]` and direct `Epic.hus[].tareas[]`; bugs extend the hierarchy as `User Story → Bug → Task` and are optionally linked with `Related`. A shape change must update domain models, `queries.py`, repository mapping, API schemas/routes, `frontend/src/api/tipos.ts`, runtime validators in `frontend/src/api/cliente.ts`, UI and tests together.
 - `frontend/src/api/cliente.ts` is the only runtime network seam. Query/mutation logic belongs in `frontend/src/epicas/hooks.ts`; presentational descendants receive props and emit events, while data-connected pages/rows may use hooks. `componentes/NavegacionGlobal.tsx` is presentational: `App` supplies `vista`, `configurado`, `refrescando` and `onRefrescar`.
+- QA writing is a **separate, opt-in capability** (ADR-11). `EscrituraBacklogPort` / `infrastructure/azure/escritura.py` are the only write path; `RepositorioBacklogPort` and `repository.py` stay read-only. Any change to the editable field set must update `ActualizacionQA`, the JSON Patch builder, `api/schemas.py`, `frontend/src/api/tipos.ts`, the `EdicionInline` form and tests together.
 
 ## Operational and security gotchas
 
 - `backend/app/config.py` resolves `.env` by absolute path. The PAT is backend-only, `repr=False`, ignored by Git, and must never be logged, serialized or copied to frontend code. Public docs and fixtures use placeholders.
-- `/api/epics` and `/api/epics/{id}/arbol` return 409 when organization, project or PAT is missing. `/api/health` is process-only; `/api/azure/estado` reports configuration and a safe verification result; `/api/epics/{id}/bugs` returns the bug projection and metrics; refresh remains available.
+- QA writing is off unless `ESCRITURA_HABILITADA=true` **and** `AZURE_PAT_ESCRITURA` is set; `config.py` refuses to start with write enabled on a non-loopback `HOST`. Keep the write PAT separate from the read PAT. QA notes are append-only and HTML-escaped; never add `bypassRules`.
+- `/api/epics` and `/api/epics/{id}/arbol` return 409 when organization, project or PAT is missing. `/api/health` is process-only; `/api/azure/estado` reports configuration and a safe verification result; `/api/epics/{id}/bugs` returns the bug projection and metrics; refresh remains available. `PATCH /api/workitems/{id}` returns 409 when writing is disabled or Azure rejects the transition, and 422 for local validation (empty body, bad tags, `rev` conflict).
 - Azure descriptions are raw HTML. Render them only through `ContenidoRico`/DOMPurify; preserve its active/resource tag denylist and `FORBID_ATTR: ["style", "srcset", "formaction"]`.
 - Azure states are open text. Keep the unknown/empty-state fallback to `neutro` in `tonoEstado`.
 - The Core project check must use `{org}/_apis/projects/{project}`; prefixing the project there duplicates the segment and Azure returns 401. Work Item endpoints use the project-scoped helper.
@@ -56,7 +58,7 @@ npm.cmd audit --audit-level=high
 
 ## Testing and Git
 
-- Tests must not call Azure or the internet. Backend tests use the protocol fakes in `backend/tests/conftest.py`; the shared API fixture uses TTL 0. Frontend tests use local `QueryClient`/fetch stubs.
+- Tests must not call Azure or the internet. Backend tests use the protocol fakes in `backend/tests/conftest.py` (`FakeRepositorio`, `FakeEscritura`, `SabanaTransporte`); the shared API fixture uses TTL 0. Frontend tests use local `QueryClient`/fetch stubs; components that call `useActualizarWorkItem` need a `QueryClientProvider` wrapper.
 - CI is `.github/workflows/ci.yml`; it has no codegen, migration, Docker or deployment pipeline.
 - Use Conventional Commits and keep one logical change per commit. Inspect `git status`/`git diff --cached`; never stage `.env`, PATs, `.venv`, `node_modules`, `dist` or build metadata. Do not amend, reset, force-push or push without explicit authorization.
 - `docs/10-auditoria.md` is the risk/backlog reference; executable manifests, source and CI take precedence when prose conflicts.
