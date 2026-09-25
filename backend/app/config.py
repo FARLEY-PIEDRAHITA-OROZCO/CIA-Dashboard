@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     azure_pat: str = Field(default="", repr=False)
     area_path: str = ""
 
+    # --- Escritura (opt-in, ver ADR-11) ---------------------------------- #
+    # PAT **dedicado** con scope "Work Items: Read & Write". Se mantiene
+    # separado del PAT de lectura para poder revocar la escritura sin
+    # quedarse sin la capacidad de consultar el backlog.
+    azure_pat_escritura: str = Field(default="", repr=False)
+    escritura_habilitada: bool = False
+
     # --- Servidor -------------------------------------------------------- #
     host: str = "127.0.0.1"
     puerto: int = 8000
@@ -66,10 +73,44 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def _exigir_loopback_para_escritura(self) -> "Settings":
+        """La escritura nunca puede quedar expuesta a una red sin autenticación.
+
+        Este sistema **no tiene login propio**: la única defensa es el binding
+        a loopback. Publicar una capacidad de escritura detrás de un proxy sin
+        autenticación permitiría que cualquiera alcanzara el backlog del equipo,
+        por lo que se rechaza la configuración en lugar de solo advertir.
+        """
+        loopback = {"127.0.0.1", "localhost", "::1"}
+        if self.escritura_habilitada and self.host.strip().lower() not in loopback:
+            raise ValueError(
+                "La escritura está habilitada pero HOST no es loopback. Este "
+                "sistema no tiene autenticación propia: para exponer la "
+                "escritura en red se requiere antes un proxy con "
+                "autenticación (ADR-11)."
+            )
+        return self
+
     @property
     def configurado(self) -> bool:
         """True solo si hay credenciales suficientes para leer el backlog."""
         return bool(self.azure_org_url and self.azure_proyecto and self.azure_pat)
+
+    @property
+    def configurado_escritura(self) -> bool:
+        """True solo si la escritura está habilitada Y tiene su propio PAT.
+
+        La escritura es *opt-in* y además requiere un PAT dedicado: sin
+        ``AZURE_PAT_ESCRITURA`` el sistema se comporta como solo lectura aunque
+        el flag esté activo.
+        """
+        return bool(
+            self.escritura_habilitada
+            and self.azure_pat_escritura
+            and self.azure_org_url
+            and self.azure_proyecto
+        )
 
     @property
     def area_path_efectivo(self) -> str:

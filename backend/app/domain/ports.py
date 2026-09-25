@@ -8,7 +8,7 @@ sin tocar la capa de negocio.
 
 from typing import Any, Dict, List, Optional, Protocol
 
-from .models import Epic
+from .models import ActualizacionQA, Epic, ResultadoActualizacion
 
 
 class TransportePort(Protocol):
@@ -17,6 +17,14 @@ class TransportePort(Protocol):
     async def get(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]: ...
 
     async def post(self, url: str, body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]: ...
+
+    async def patch(
+        self,
+        url: str,
+        body: Optional[Any] = None,
+        *,
+        content_type: str = "application/json-patch+json",
+    ) -> Dict[str, Any]: ...
 
     async def cerrar(self) -> None: ...
 
@@ -40,4 +48,26 @@ class CachePort(Protocol):
 
     def guardar(self, clave: str, valor: Any, ttl_seg: float) -> None: ...
 
+    def eliminar(self, clave: str) -> None: ...
+
     def limpiar(self) -> None: ...
+
+
+class EscrituraBacklogPort(Protocol):
+    """Capacidad de escritura **opt-in** sobre work items (ADR-11).
+
+    Vive separada de :class:`RepositorioBacklogPort` a propósito: el sistema
+    es un lector de solo lectura y la escritura es un adaptador adicional que
+    se puede retirar sin tocar la lectura.
+    """
+
+    async def actualizar_work_item(
+        self,
+        work_item_id: int,
+        cambios: ActualizacionQA,
+        *,
+        validar: bool = False,
+        rev_esperada: int | None = None,
+    ) -> ResultadoActualizacion: ...
+
+    async def obtener_revision(self, work_item_id: int) -> int: ...

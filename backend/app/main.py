@@ -44,6 +44,8 @@ def crear_app(contenedor: Contenedor | None = None) -> FastAPI:
             yield
         finally:
             await container.transporte.cerrar()
+            if container.transporte_escritura is not None:
+                await container.transporte_escritura.cerrar()
 
     app = FastAPI(
         title="Dashboard de Épicas — Azure DevOps",
@@ -70,7 +72,9 @@ def crear_app(contenedor: Contenedor | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[f"http://{cfg.host}:{cfg.puerto}"] + cfg.origenes_cors,
-        allow_methods=["GET", "POST"],
+        # PATCH está presente para la escritura QA (ADR-11); sin él el
+        # navegador bloquearía /api/workitems/{id} en desarrollo.
+        allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["Authorization", "Content-Type"],
     )
 

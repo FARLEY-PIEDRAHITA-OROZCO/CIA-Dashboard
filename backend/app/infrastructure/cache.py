@@ -29,6 +29,15 @@ class CacheMemoria(CachePort):
     def guardar(self, clave: str, valor: Any, ttl_seg: float) -> None:
         self._datos[clave] = (time.monotonic() + max(0.0, ttl_seg), valor)
 
+    def eliminar(self, clave: str) -> None:
+        """Invalidación dirigida: borra solo esa clave.
+
+        Tras una escritura en Azure hay que refrescar únicamente lo afectado
+        (la épica y su árbol), sin tirar la caché completa que obligaría a
+        releer todo el backlog.
+        """
+        self._datos.pop(clave, None)
+
     def limpiar(self) -> None:
         self._datos.clear()
 

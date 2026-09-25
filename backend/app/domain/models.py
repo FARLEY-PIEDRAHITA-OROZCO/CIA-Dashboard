@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class WorkItemBase(BaseModel):
@@ -87,3 +87,42 @@ class EstadoIntegracion(BaseModel):
     area_path: str = ""
     verificado: bool = False
     error: str = ""
+
+
+class ActualizacionQA(BaseModel):
+    """Campos que QA puede modificar (lista blanca, ADR-11).
+
+    Todos son opcionales y ``None`` significa "no tocar". El adaptador de
+    escritura traduce esto a un JSON Patch acotado: cualquier campo fuera de
+    este modelo se rechaza antes de llegar a Azure.
+    """
+
+    estado: Optional[str] = None
+    prioridad: Optional[str] = None
+    severidad: Optional[str] = None
+    tags: Optional[str] = None
+    notas_qa: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _exigir_al_menos_un_campo(self) -> "ActualizacionQA":
+        if not self.campos_modificados():
+            raise ValueError("Indica al menos un campo a actualizar.")
+        return self
+
+    def campos_modificados(self) -> List[str]:
+        """Nombres de los campos presentes en la actualización."""
+        return [
+            nombre
+            for nombre in ("estado", "prioridad", "severidad", "tags", "notas_qa")
+            if getattr(self, nombre) is not None
+        ]
+
+
+class ResultadoActualizacion(BaseModel):
+    """Resultado de una escritura (o de su validación en seco)."""
+
+    work_item_id: int
+    rev: int
+    campos: List[str] = Field(default_factory=list)
+    validado: bool = False
+    detalle: str = ""

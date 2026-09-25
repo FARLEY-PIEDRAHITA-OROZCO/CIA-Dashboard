@@ -5,10 +5,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import crear_app
+from app.infrastructure.azure.escritura import ErrorValidacionEscritura
 from app.infrastructure.azure.transport import AzureError
 from app.domain.models import Epic
 
-from .conftest import FakeRepositorio, contenedor_con, epica_canonica, epica_con_bugs
+from .conftest import (
+    FakeEscritura,
+    FakeRepositorio,
+    contenedor_con,
+    epica_canonica,
+    epica_con_bugs,
+)
 
 
 def test_health(cliente_fake):
@@ -122,6 +129,118 @@ def test_epics_sin_configuracion_409():
 
     cliente = TestClient(crear_app(contenedor))
     r = cliente.get("/api/epics")
+    assert r.status_code == 409
+
+
+# --------------------------------------------------------------------- #
+# Escritura QA (ADR-11)
+# --------------------------------------------------------------------- #
+def test_escritura_requiere_habilitacion_explicita():
+    cliente = TestClient(crear_app(contenedor_con(FakeRepositorio())))
+
+    r = cliente.patch(
+        "/api/workitems/300", json={"estado": "Verificado"}
+    )
+
+    assert r.status_code == 409
+    assert "ESCRITURA_HABILITADA" in r.json()["detail"]
+
+
+def test_actualizar_work_item_devuelve_resultado():
+    escritura = FakeEscritura(rev=6)
+    cliente = TestClient(crear_app(contenedor_con(FakeRepositorio(), escritura=escritura)))
+
+    r = cliente.patch("/api/workitems/300", json={"estado": "Verificado", "tags": "qa"})
+
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["work_item_id"] == 300
+    assert cuerpo["rev"] == 6
+    assert cuerpo["campos"] == ["estado", "tags"]
+    assert escritura.llamadas == [(300, ["estado", "tags"], False, None)]
+
+
+def test_validar_usa_dry_run():
+    escritura = FakeEscritura()
+    cliente = TestClient(crear_app(contenedor_con(FakeRepositorio(), escritura=escritura)))
+
+    r = cliente.patch("/api/workitems/300?validar=true", json={"estado": "New"})
+
+    assert r.status_code == 200
+    assert r.json()["validado"] is True
+    assert escritura.llamadas[0][2] is True
+
+
+def test_rev_esperada_se_traslada_al_adaptador():
+    escritura = FakeEscritura()
+    cliente = TestClient(crear_app(contenedor_con(FakeRepositorio(), escritura=escritura)))
+
+    cliente.patch("/api/workitems/300?rev_esperada=3", json={"estado": "New"})
+
+    assert escritura.llamadas[0][3] == 3
+
+
+def test_cuerpo_vacio_es_422():
+    cliente = TestClient(
+        crear_app(contenedor_con(FakeRepositorio(), escritura=FakeEscritura()))
+    )
+
+    r = cliente.patch("/api/workitems/300", json={})
+
+    assert r.status_code == 422
+
+
+def test_id_no_positivo_es_422():
+    cliente = TestClient(
+        crear_app(contenedor_con(FakeRepositorio(), escritura=FakeEscritura()))
+    )
+
+    r = cliente.patch("/api/workitems/0", json={"estado": "New"})
+
+    assert r.status_code == 422
+
+
+def test_error_de_validacion_local_es_422():
+    escritura = FakeEscritura(error=ErrorValidacionEscritura("Los tags no pueden usar '*'"))
+    cliente = TestClient(crear_app(contenedor_con(FakeRepositorio(), escritura=escritura)))
+
+    r = cliente.patch("/api/workitems/300", json={"tags": "padre*"})
+
+    assert r.status_code == 422
+    assert "*" in r.json()["detail"]
+
+
+def test_regla_rechazada_por_azure_es_409_con_detalle():
+    error = AzureError(
+        "Azure respondió HTTP 400.",
+        400,
+        detalle="TF401321: el estado destino no es válido",
+    )
+    escritura = FakeEscritura(error=error)
+    cliente = TestClient(crear_app(contenedor_con(FakeRepositorio(), escritura=escritura)))
+
+    r = cliente.patch("/api/workitems/300", json={"estado": "Verificado"})
+
+    assert r.status_code == 409
+    assert "TF401321" in r.json()["detail"]
+
+
+def test_revision_work_item():
+    escritura = FakeEscritura(rev=9)
+    cliente = TestClient(crear_app(contenedor_con(FakeRepositorio(), escritura=escritura)))
+
+    r = cliente.get("/api/workitems/300/rev")
+
+    assert r.status_code == 200
+    assert r.json()["detalle"] == "9"
+    assert escritura.revisiones == [300]
+
+
+def test_revision_requiere_habilitacion():
+    cliente = TestClient(crear_app(contenedor_con(FakeRepositorio())))
+
+    r = cliente.get("/api/workitems/300/rev")
+
     assert r.status_code == 409
 
 

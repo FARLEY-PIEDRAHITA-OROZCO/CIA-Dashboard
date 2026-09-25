@@ -8,8 +8,16 @@ import logging
 from collections import Counter
 from typing import Dict, List, Optional
 
-from ..domain.models import Bug, DetalleBugs, Epic, EstadoIntegracion, MetricasBug
-from ..domain.ports import CachePort, RepositorioBacklogPort
+from ..domain.models import (
+    ActualizacionQA,
+    Bug,
+    DetalleBugs,
+    Epic,
+    EstadoIntegracion,
+    MetricasBug,
+    ResultadoActualizacion,
+)
+from ..domain.ports import CachePort, EscrituraBacklogPort, RepositorioBacklogPort
 
 logger = logging.getLogger("devops")
 
@@ -38,6 +46,14 @@ def _es_cerrada(epica: Epic) -> bool:
 
 def _es_bug_cerrado(bug: Bug) -> bool:
     return (bug.estado or "").strip().lower() in ESTADOS_CERRADOS_BUG
+
+
+class EscrituraNoHabilitadaError(RuntimeError):
+    """Se intentó escribir con la capacidad de escritura apagada.
+
+    Es un error de configuración, no de Azure: la API lo traduce a 409 para
+    que sea evidente que la operación nunca llegó a la red.
+    """
 
 
 def _bugs_de_epica(epica: Epic) -> List[Bug]:
@@ -90,6 +106,8 @@ class ServicioBacklog:
         repositorio: RepositorioBacklogPort,
         cache: CachePort,
         *,
+        escritura: Optional[EscrituraBacklogPort] = None,
+        escritura_habilitada: bool = False,
         ttl_seg: int = 120,
         configuracion: bool = False,
         organizacion: str = "",
@@ -98,6 +116,8 @@ class ServicioBacklog:
     ) -> None:
         self._repo = repositorio
         self._cache = cache
+        self._escritura = escritura
+        self.escritura_habilitada = bool(escritura_habilitada and escritura)
         self._ttl_seg = float(ttl_seg)
         self.configurado = configuracion
         self._organizacion = (organizacion or "").strip().rstrip("/")
@@ -188,3 +208,55 @@ class ServicioBacklog:
         """Invalida la caché para forzar una lectura fresca de Azure."""
         self._cache.limpiar()
         logger.info("Caché del backlog invalidada")
+
+    # ------------------------------------------------------------------ #
+    # Escritura (opt-in, ADR-11)
+    # ------------------------------------------------------------------ #
+    def _invalidar_work_item(self, work_item_id: int) -> None:
+        """Invalidación dirigida tras editar un work item.
+
+        Solo se borran las claves que realmente pueden contener el elemento
+        modificado; el resto del backlog sigue servido desde caché.
+        """
+        self._cache.eliminar(CLAVE_EPICAS)
+        for prefijo in (CLAVE_ARBOL, CLAVE_ARBOL_BUGS):
+            self._cache.eliminar(prefijo.format(work_item_id))
+        logger.info("Caché invalidada para el work item %s", work_item_id)
+
+    async def revision_work_item(self, work_item_id: int) -> int:
+        """Revisión actual del work item (control de concurrencia)."""
+        if not self.escritura_habilitada or self._escritura is None:
+            raise EscrituraNoHabilitadaError(
+                "La escritura está deshabilitada; no hay revisión que leer."
+            )
+        return await self._escritura.obtener_revision(work_item_id)
+
+    async def actualizar_work_item(
+        self,
+        work_item_id: int,
+        cambios: ActualizacionQA,
+        *,
+        validar: bool = False,
+        rev_esperada: Optional[int] = None,
+    ) -> ResultadoActualizacion:
+        """Aplica cambios de QA a un work item de Azure.
+
+        Es el único camino de escritura del sistema. Delega en el adaptador
+        dedicado, que garantiza la lista blanca de campos, y tras guardar
+        invalida únicamente las claves de caché afectadas.
+        """
+        if not self.escritura_habilitada or self._escritura is None:
+            raise EscrituraNoHabilitadaError(
+                "La escritura está deshabilitada. Define "
+                "ESCRITURA_HABILITADA=true y AZURE_PAT_ESCRITURA en el .env "
+                "del backend para habilitarla."
+            )
+        resultado = await self._escritura.actualizar_work_item(
+            work_item_id,
+            cambios,
+            validar=validar,
+            rev_esperada=rev_esperada,
+        )
+        if not validar:
+            self._invalidar_work_item(work_item_id)
+        return resultado

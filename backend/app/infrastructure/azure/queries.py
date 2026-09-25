@@ -37,6 +37,7 @@ CAMPO_DESCRIPCION = "System.Description"
 CAMPO_PRIORIDAD = "Microsoft.VSTS.Common.Priority"
 CAMPO_SEVERIDAD = "Microsoft.VSTS.Common.Severity"
 CAMPO_ASIGNADO = "System.AssignedTo"
+CAMPO_TAGS = "System.Tags"
 CAMPOS_LISTADO = ",".join(
     (
         CAMPO_ID,

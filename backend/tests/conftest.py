@@ -174,7 +174,52 @@ class FakeRepositorio:
         return None
 
 
-def contenedor_con(repo: FakeRepositorio, configurado: bool = True) -> Contenedor:
+class FakeEscritura:
+    """Doble de `EscrituraBacklogPort` para las pruebas de la API."""
+
+    def __init__(
+        self,
+        rev: int = 4,
+        error: Optional[Exception] = None,
+    ) -> None:
+        self.rev = rev
+        self.error = error
+        self.llamadas: List[tuple] = []
+        self.revisiones: List[int] = []
+
+    async def actualizar_work_item(
+        self,
+        work_item_id: int,
+        cambios,
+        *,
+        validar: bool = False,
+        rev_esperada: Optional[int] = None,
+    ):
+        campos = cambios.campos_modificados()
+        self.llamadas.append((work_item_id, campos, validar, rev_esperada))
+        if self.error is not None:
+            raise self.error
+        from app.domain.models import ResultadoActualizacion
+
+        return ResultadoActualizacion(
+            work_item_id=work_item_id,
+            rev=self.rev,
+            campos=campos,
+            validado=validar,
+            detalle="validado" if validar else "aplicado",
+        )
+
+    async def obtener_revision(self, work_item_id: int) -> int:
+        self.revisiones.append(work_item_id)
+        return self.rev
+
+
+def contenedor_con(
+    repo: FakeRepositorio,
+    configurado: bool = True,
+    *,
+    escritura: Optional[FakeEscritura] = None,
+) -> Contenedor:
     from app.infrastructure.cache import CacheMemoria
 
     settings = Settings(
@@ -182,11 +227,15 @@ def contenedor_con(repo: FakeRepositorio, configurado: bool = True) -> Contenedo
         azure_proyecto="Proyecto de ejemplo",
         area_path="Proyecto de ejemplo",
         azure_pat="seed",
+        azure_pat_escritura="seed-escritura" if escritura else "",
+        escritura_habilitada=escritura is not None,
     )
     cache = CacheMemoria()
     servicio = ServicioBacklog(
         repositorio=repo,
         cache=cache,
+        escritura=escritura,
+        escritura_habilitada=escritura is not None,
         ttl_seg=0,  # toda cascada guardada expira al instante -> cache neutral
         configuracion=configurado,
         organizacion=settings.azure_org_url,
@@ -199,6 +248,7 @@ def contenedor_con(repo: FakeRepositorio, configurado: bool = True) -> Contenedo
         repositorio=repo,
         cache=cache,
         servicio=servicio,
+        escritura=escritura,
     )
 
 

@@ -16,8 +16,12 @@ from .schemas import (
     Health,
     ListaEpicas,
     Mensaje,
+    ResultadoEscritura,
     a_resumen,
 )
+from ..domain.models import ActualizacionQA
+from ..application.services import EscrituraNoHabilitadaError
+from ..infrastructure.azure.escritura import ErrorValidacionEscritura
 
 logger = logging.getLogger("devops")
 router = APIRouter()
@@ -116,3 +120,66 @@ async def api_refrescar(servicio: ServicioDep) -> Mensaje:
         ok=True,
         detalle="Caché invalidada. La próxima consulta leerá de Azure.",
     )
+
+
+# ---------------------------------------------------------------------- #
+# Escritura QA (opt-in, ADR-11)
+# ---------------------------------------------------------------------- #
+@router.patch(
+    "/api/workitems/{work_item_id}",
+    response_model=ResultadoEscritura,
+    tags=["Escritura"],
+)
+async def api_actualizar_work_item(
+    servicio: ServicioDep,
+    work_item_id: Annotated[int, Path(gt=0)],
+    cambios: ActualizacionQA,
+    validar: bool = False,
+    rev_esperada: int | None = None,
+) -> ResultadoEscritura:
+    """Actualiza un work item con los campos de QA (tags, estado, notas…).
+
+    Con ``?validar=true`` no escribe nada: Azure comprueba las reglas del
+    proyecto y responde si el cambio sería válido (equivale a
+    ``validateOnly``). ``rev_esperada`` protege contra sobrescribir la edición
+    de otro QA.
+    """
+    try:
+        resultado = await servicio.actualizar_work_item(
+            work_item_id,
+            cambios,
+            validar=validar,
+            rev_esperada=rev_esperada,
+        )
+    except EscrituraNoHabilitadaError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ErrorValidacionEscritura as exc:
+        # Validación local: la petición nunca alcanzó Azure.
+        raise HTTPException(status_code=422, detail=str(exc))
+    except AzureError as exc:
+        logger.warning("Error al escribir el work item %s: %s", work_item_id, exc)
+        detalle = exc.detalle or "Azure rechazó el cambio."
+        raise HTTPException(status_code=409, detail=detalle)
+    return ResultadoEscritura(**resultado.model_dump())
+
+
+@router.get(
+    "/api/workitems/{work_item_id}/rev",
+    response_model=Mensaje,
+    tags=["Escritura"],
+)
+async def api_revision_work_item(
+    servicio: ServicioDep,
+    work_item_id: Annotated[int, Path(gt=0)],
+) -> Mensaje:
+    """Revisión actual del work item, para control de concurrencia."""
+    if not servicio.escritura_habilitada:
+        raise HTTPException(
+            status_code=409,
+            detail="La escritura está deshabilitada; no hay revisión que leer.",
+        )
+    try:
+        rev = await servicio.revision_work_item(work_item_id)
+    except AzureError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return Mensaje(ok=True, detalle=str(rev))

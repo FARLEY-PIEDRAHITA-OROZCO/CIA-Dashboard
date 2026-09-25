@@ -23,6 +23,10 @@ class ClienteHTTPDoble:
         self.solicitudes.append({"metodo": "post", "url": url, "headers": headers, "json": json})
         return self.respuestas.pop(0)
 
+    async def patch(self, url, json=None, headers=None, timeout=None):
+        self.solicitudes.append({"metodo": "patch", "url": url, "headers": headers, "json": json})
+        return self.respuestas.pop(0)
+
 
 @pytest.mark.asyncio
 async def test_auth_basic_usa_pat():
@@ -105,3 +109,77 @@ async def test_el_error_http_conserva_status_y_redacta_pat():
     assert exc.value.status_code == 404
     assert "pat-secreto" not in str(exc.value)
     assert "Azure respondió HTTP 404" in str(exc.value)
+
+
+# --------------------------------------------------------------------- #
+# PATCH / JSON Patch (escritura QA)
+# --------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_patch_envia_json_patch_content_type():
+    cliente = ClienteHTTPDoble([httpx.Response(200, json={"id": 1, "rev": 4})])
+    tr = AzureTransporte("pat", cliente=cliente)  # type: ignore[arg-type]
+
+    await tr.patch("https://dev.azure.com/x/_apis/wit/workitems/1", [{"op": "add"}])
+
+    solicitud = cliente.solicitudes[0]
+    assert solicitud["metodo"] == "patch"
+    assert solicitud["headers"]["Content-Type"] == "application/json-patch+json"
+
+
+@pytest.mark.asyncio
+async def test_patch_admite_content_type_personalizado():
+    cliente = ClienteHTTPDoble([httpx.Response(200, json={})])
+    tr = AzureTransporte("pat", cliente=cliente)  # type: ignore[arg-type]
+
+    await tr.patch("https://dev.azure.com/x", {"q": 1}, content_type="application/json")
+
+    assert cliente.solicitudes[0]["headers"]["Content-Type"] == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_patch_extrae_el_work_item_actualizado():
+    cliente = ClienteHTTPDoble([httpx.Response(200, json={"id": 300, "rev": 7})])
+    tr = AzureTransporte("pat", cliente=cliente)  # type: ignore[arg-type]
+
+    datos = await tr.patch("https://dev.azure.com/x/_apis/wit/workitems/300", [])
+
+    assert datos["rev"] == 7
+
+
+@pytest.mark.asyncio
+async def test_patch_propaga_el_detalle_de_regla_de_azure():
+    """El mensaje de regla ayuda al usuario; se acota y no filtra el PAT."""
+    cuerpo = {"message": "TF401321: el estado destino no es válido", "typeKey": "RuleError"}
+    cliente = ClienteHTTPDoble([httpx.Response(400, json=cuerpo)])
+    tr = AzureTransporte("pat-secreto", cliente=cliente)  # type: ignore[arg-type]
+
+    with pytest.raises(AzureError) as exc:
+        await tr.patch("https://dev.azure.com/x/_apis/wit/workitems/1", [])
+
+    assert "TF401321" in exc.value.detalle
+    assert "pat-secreto" not in exc.value.detalle
+
+
+@pytest.mark.asyncio
+async def test_detalle_de_error_se_acota():
+    cliente = ClienteHTTPDoble(
+        [httpx.Response(400, json={"message": "x" * 5000})]
+    )
+    tr = AzureTransporte("pat", cliente=cliente)  # type: ignore[arg-type]
+
+    with pytest.raises(AzureError) as exc:
+        await tr.patch("https://dev.azure.com/x", [])
+
+    assert len(exc.value.detalle) == AzureError.MAX_DETALLE
+
+
+@pytest.mark.asyncio
+async def test_error_de_patch_sin_cuerpo_json_no_rompe():
+    cliente = ClienteHTTPDoble([httpx.Response(500, text="<html>error</html>")])
+    tr = AzureTransporte("pat", cliente=cliente)  # type: ignore[arg-type]
+
+    with pytest.raises(AzureError) as exc:
+        await tr.patch("https://dev.azure.com/x", [])
+
+    assert exc.value.status_code == 500
+    assert exc.value.detalle == ""

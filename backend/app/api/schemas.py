@@ -45,6 +45,16 @@ class DetalleBugs(BaseModel):
     metricas: MetricasBug
 
 
+class ResultadoEscritura(BaseModel):
+    """Resultado de una escritura de QA (o de su validación en seco)."""
+
+    work_item_id: int
+    rev: int
+    campos: List[str] = []
+    validado: bool = False
+    detalle: str = ""
+
+
 class Mensaje(BaseModel):
     ok: bool = True
     detalle: str = ""
