@@ -8,7 +8,7 @@ from app.main import crear_app
 from app.infrastructure.azure.transport import AzureError
 from app.domain.models import Epic
 
-from .conftest import FakeRepositorio, contenedor_con, epica_canonica
+from .conftest import FakeRepositorio, contenedor_con, epica_canonica, epica_con_bugs
 
 
 def test_health(cliente_fake):
@@ -61,6 +61,34 @@ def test_arbol_epica(cliente_fake):
     assert árbol["azure_id"] == 100
     assert [f["azure_id"] for f in árbol["features"]] == [101, 102]
     assert árbol["features"][0]["hus"][0]["titulo"] == "HU Registro"
+
+
+def test_arbol_epica_incluye_bugs_opcionalmente():
+    cliente = TestClient(crear_app(contenedor_con(FakeRepositorio(arbol=epica_canonica()))))
+    sin_bugs = cliente.get("/api/epics/100/arbol").json()
+
+    cliente_con_bugs = TestClient(
+        crear_app(contenedor_con(FakeRepositorio(arbol=epica_con_bugs())))
+    )
+    con_bugs = cliente_con_bugs.get("/api/epics/100/arbol?incluir_bugs=true").json()
+
+    assert "bugs" not in sin_bugs["features"][0]["hus"][0]
+    assert [bug["azure_id"] for bug in con_bugs["hus"][0]["bugs"]] == [300, 302]
+
+
+def test_bugs_epica_devuelve_bugs_y_metricas():
+    repo = FakeRepositorio(arbol=epica_con_bugs())
+    cliente = TestClient(crear_app(contenedor_con(repo)))
+
+    r = cliente.get("/api/epics/100/bugs")
+
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert [bug["azure_id"] for bug in cuerpo["bugs"]] == [300]
+    assert cuerpo["metricas"]["total"] == 2
+    assert cuerpo["metricas"]["abiertos"] == 1
+    assert cuerpo["metricas"]["cerrados"] == 1
+    assert cuerpo["metricas"]["por_relacion"] == {"hierarchy": 1, "related": 1}
 
 
 def test_arbol_epica_inexistente_404(cliente_fake):

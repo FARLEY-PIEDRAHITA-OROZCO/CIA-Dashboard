@@ -10,6 +10,7 @@ from ..domain.models import Epic
 from ..infrastructure.azure.transport import AzureError
 from .deps import ServicioDep
 from .schemas import (
+    DetalleBugs,
     EpicaResumen,
     EstadoAzure,
     Health,
@@ -66,20 +67,45 @@ async def api_listar_epicas(
     return ListaEpicas(epicas=[a_resumen(e) for e in epicas])
 
 
-@router.get("/api/epics/{epic_id}/arbol", response_model=Epic, tags=["Epicas"])
+@router.get(
+    "/api/epics/{epic_id}/arbol",
+    response_model=Epic,
+    response_model_exclude_none=True,
+    tags=["Epicas"],
+)
 async def api_arbol_epica(
     servicio: ServicioDep,
     epic_id: Annotated[int, Path(gt=0)],
+    incluir_bugs: bool = False,
 ) -> Epic:
-    """Árbol completo Épica -> Features -> User Stories -> Tasks."""
+    """Árbol completo Épica -> Features/User Stories -> Bugs/Tasks."""
     _requiere_configuracion(servicio)
     try:
-        epica = await servicio.arbol_epica(epic_id)
+        epica = await servicio.arbol_epica(epic_id, incluir_bugs=incluir_bugs)
     except AzureError as exc:
         raise _error_azure(exc, not_found=True)
     if epica is None:
         raise HTTPException(status_code=404, detail=f"Épica {epic_id} no encontrada.")
     return epica
+
+
+@router.get("/api/epics/{epic_id}/bugs", response_model=DetalleBugs, tags=["Epicas"])
+async def api_bugs_epica(
+    servicio: ServicioDep,
+    epic_id: Annotated[int, Path(gt=0)],
+    incluir_cerradas: bool = False,
+) -> DetalleBugs:
+    """Bugs relacionados con la épica y métricas agregadas."""
+    _requiere_configuracion(servicio)
+    try:
+        detalle = await servicio.bugs_epica(
+            epic_id, incluir_cerradas=incluir_cerradas
+        )
+    except AzureError as exc:
+        raise _error_azure(exc, not_found=True)
+    if detalle is None:
+        raise HTTPException(status_code=404, detail=f"Épica {epic_id} no encontrada.")
+    return detalle
 
 
 @router.post("/api/epics/refresh", response_model=Mensaje, tags=["Epicas"])

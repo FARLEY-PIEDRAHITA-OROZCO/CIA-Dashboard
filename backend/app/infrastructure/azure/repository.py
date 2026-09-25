@@ -1,22 +1,34 @@
 """Adaptador de repositorio del backlog sobre la API de Azure DevOps.
 
-Compone WIQL + ``workitems`` (batch con ``$expand=relations``) y camina las
-relaciones jerárquicas para armar el árbol Épica -> Feature -> User Story -> Task.
-La carga es perezosa: el listado de épicas es liviano (sin hijos) y cada
-árbol completo se construye solo bajo demanda durante el drill-down.
+Compone WIQL + ``workitems`` (batch con ``$expand=relations``) y camina un
+grafo de work items para construir Épica -> Feature -> User Story -> Bug ->
+Task. Las asociaciones ``Related`` se cargan de un solo salto y solo cuando el
+destino es realmente un ``Bug``.
+
+La carga es perezosa: el listado de épicas es liviano (sin hijos) y cada árbol
+completo se construye solo bajo demanda durante el drill-down.
 """
 
 import logging
+import time
 from collections import deque
-from typing import Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Set
 from urllib.parse import quote
 
-from ...domain.models import Epic, Feature, Task, UserStory
+from ...domain.models import Bug, Epic, Feature, Task, UserStory
 from ...domain.ports import RepositorioBacklogPort, TransportePort
 from . import queries
 from .transport import AzureError
 
 logger = logging.getLogger("devops")
+
+
+@dataclass
+class _GrafoCargado:
+    por_id: Dict[int, Dict] = field(default_factory=dict)
+    relacionados: Dict[int, Set[int]] = field(default_factory=dict)
+    stats: Dict[str, int] = field(default_factory=dict)
 
 
 class AzureBacklogRepositorio(RepositorioBacklogPort):
@@ -76,45 +88,51 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
             if (item := items.get(id_)) is not None
         ]
 
-    async def obtener_epica(self, epic_id: int) -> Optional[Epic]:
+    async def obtener_epica(
+        self,
+        epic_id: int,
+        *,
+        incluir_bugs: bool = False,
+    ) -> Optional[Epic]:
         """Árbol completo de una épica, construido bajo demanda."""
-        return await self._obtener_epica_sin_cache(epic_id)
+        return await self._obtener_epica_sin_cache(epic_id, incluir_bugs=incluir_bugs)
 
-    async def _obtener_epica_sin_cache(self, epic_id: int) -> Optional[Epic]:
-        """Construye el árbol desde Azure mediante BFS por niveles."""
+    async def _obtener_epica_sin_cache(
+        self,
+        epic_id: int,
+        *,
+        incluir_bugs: bool = False,
+    ) -> Optional[Epic]:
+        """Construye el grafo y su árbol de dominio desde Azure."""
+        inicio = time.perf_counter()
         raiz = await self._obtener_item(epic_id)
         if queries.tipo(raiz) != "Epic":
             raise AzureError(f"El work item {epic_id} no es una épica.")
 
-        por_id: Dict[int, Dict] = {epic_id: raiz}
-        pendientes: deque[int] = deque([epic_id])
-        while pendientes:
-            nivel = list(pendientes)
-            pendientes.clear()
-            nuevos: List[int] = []
-            for actual in nivel:
-                if actual not in por_id:
-                    continue
-                for hijo in queries.ids_relaciones_hijas(por_id[actual]):
-                    if hijo not in por_id and hijo not in nuevos:
-                        nuevos.append(hijo)
-            if not nuevos:
-                continue
-            recibidos = await self._detallar_lote(
-                nuevos,
-                incluir_relaciones=True,
-                campos=queries.CAMPOS_ARBOL,
-            )
-            for id_, item in recibidos.items():
-                if id_ in nuevos:
-                    por_id[id_] = item
-            pendientes.extend(id_ for id_ in nuevos if id_ in por_id)
-
-        arbol = self._construir_arbol(por_id, epic_id)
-        return self._a_epica(por_id[epic_id], arbol)
+        grafo = await self._cargar_grafo(raiz, incluir_bugs=incluir_bugs)
+        arbol = self._construir_arbol(
+            grafo.por_id,
+            epic_id,
+            relacionados=grafo.relacionados,
+            incluir_bugs=incluir_bugs,
+        )
+        epica = self._a_modelo(arbol)
+        grafo.stats["duration_ms"] = int((time.perf_counter() - inicio) * 1000)
+        logger.info(
+            "Carga de épica %s: items=%d batches=%d hierarchy_edges=%d "
+            "related_edges=%d bugs=%d duration_ms=%d",
+            epic_id,
+            grafo.stats.get("items", 0),
+            grafo.stats.get("batches", 0),
+            grafo.stats.get("hierarchy_edges", 0),
+            grafo.stats.get("related_edges", 0),
+            grafo.stats.get("bugs", 0),
+            grafo.stats.get("duration_ms", 0),
+        )
+        return epica
 
     # ------------------------------------------------------------------ #
-    # HTTP / construcción del árbol
+    # HTTP / construcción del grafo
     # ------------------------------------------------------------------ #
     async def _ejecutar_wiql(self, consulta: str) -> List[int]:
         url = self._ruta_proyecto(
@@ -176,44 +194,268 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
                     result[id_] = item
         return result
 
-    @staticmethod
-    def _construir_arbol(por_id: Dict[int, Dict], raiz_id: int) -> Dict:
-        """Construye el árbol dict restringido a los tipos permitidos."""
+    async def _cargar_grafo(
+        self,
+        raiz: Dict,
+        *,
+        incluir_bugs: bool,
+    ) -> _GrafoCargado:
+        """Carga jerarquía y asociaciones Related sin seguir ciclos."""
+        grafo = _GrafoCargado(
+            por_id={int(raiz["id"]): raiz},
+            stats={
+                "items": 1,
+                "batches": 0,
+                "hierarchy_edges": 0,
+                "related_edges": 0,
+            },
+        )
+        pendientes: deque[int] = deque([int(raiz["id"])])
+        procesados: Set[int] = set()
+        hijos_por_padre: Dict[int, List[int]] = {}
 
-        def construir(tid: int) -> Dict:
-            item = por_id[tid]
-            tipo_actual = queries.tipo(item)
-            nodo = {
-                "azure_id": tid,
+        while pendientes:
+            nivel = list(pendientes)
+            pendientes.clear()
+            nuevos: List[int] = []
+            for actual in nivel:
+                if actual in procesados or actual not in grafo.por_id:
+                    continue
+                procesados.add(actual)
+                hijos = queries.ids_relaciones_hijas(grafo.por_id[actual])
+                hijos_por_padre[actual] = hijos
+                grafo.stats["hierarchy_edges"] += len(hijos)
+                for hijo in hijos:
+                    if hijo not in grafo.por_id and hijo not in nuevos:
+                        nuevos.append(hijo)
+            if not nuevos:
+                continue
+            grafo.stats["batches"] += self._numero_lotes(nuevos)
+            recibidos = await self._detallar_lote(
+                nuevos,
+                incluir_relaciones=True,
+                campos=queries.CAMPOS_ARBOL,
+            )
+            grafo.por_id.update(recibidos)
+            grafo.stats["items"] = len(grafo.por_id)
+
+            for padre, hijos in hijos_por_padre.items():
+                permitidos = queries.hijos_permitidos(
+                    queries.tipo(grafo.por_id[padre]), incluir_bugs
+                )
+                for hijo in hijos:
+                    item = grafo.por_id.get(hijo)
+                    if item is None or hijo in procesados:
+                        continue
+                    if queries.tipo(item) in permitidos:
+                        pendientes.append(hijo)
+
+        if incluir_bugs:
+            await self._cargar_relacionados(grafo)
+
+        grafo.stats["bugs"] = sum(
+            1 for item in grafo.por_id.values() if queries.tipo(item) == "Bug"
+        )
+        return grafo
+
+    async def _cargar_relacionados(self, grafo: _GrafoCargado) -> None:
+        pares: List[tuple[int, int]] = []
+        destinos: Set[int] = set()
+        for origen, item in grafo.por_id.items():
+            for destino in queries.ids_relaciones_asociadas(item):
+                pares.append((origen, destino))
+                destinos.add(destino)
+
+        grafo.stats["related_edges"] = len(pares)
+        faltantes = sorted(destinos - set(grafo.por_id))
+        if faltantes:
+            grafo.stats["batches"] += self._numero_lotes(faltantes)
+            grafo.por_id.update(
+                await self._detallar_lote(
+                    faltantes,
+                    incluir_relaciones=False,
+                    campos=queries.CAMPOS_LISTADO,
+                )
+            )
+            grafo.stats["items"] = len(grafo.por_id)
+
+        for origen, destino in pares:
+            origen_item = grafo.por_id.get(origen)
+            destino_item = grafo.por_id.get(destino)
+            if origen_item is None or destino_item is None:
+                continue
+            origen_tipo = queries.tipo(origen_item)
+            destino_tipo = queries.tipo(destino_item)
+            if destino_tipo in queries.TIPOS_ASOCIADOS:
+                grafo.relacionados.setdefault(origen, set()).add(destino)
+            elif origen_tipo in queries.TIPOS_ASOCIADOS:
+                # Related es bidireccional: si solo aparece en el Bug, se
+                # proyecta al HU/tarea que lo referencia.
+                grafo.relacionados.setdefault(destino, set()).add(origen)
+
+    @staticmethod
+    def _numero_lotes(ids: list[int]) -> int:
+        return (len(ids) + queries.TAMANO_LOTE_API - 1) // queries.TAMANO_LOTE_API
+
+    def _construir_arbol(
+        self,
+        por_id: Dict[int, Dict],
+        raiz_id: int,
+        *,
+        relacionados: Dict[int, Set[int]],
+        incluir_bugs: bool,
+    ) -> Dict:
+        """Construye el grafo restringido a la política de descendencia."""
+
+        def nodo_base(item: Dict, tipo_actual: str, relacion: str = "hierarchy") -> Dict:
+            return {
+                "tipo": tipo_actual,
+                "azure_id": int(item.get("id", 0)),
                 "titulo": queries.campo(item, queries.CAMPO_TITULO),
                 "estado": queries.campo(item, queries.CAMPO_ESTADO),
                 "descripcion": queries.campo(item, queries.CAMPO_DESCRIPCION),
+                "relacion": relacion,
             }
-            permitidos = queries.TIPOS_HIJOS.get(tipo_actual, ())
+
+        def bug_relacionado(bug_id: int) -> Dict:
+            item = por_id[bug_id]
+            nodo = nodo_base(item, "Bug", relacion="related")
+            nodo.update(
+                {
+                    "prioridad": queries.campo(item, queries.CAMPO_PRIORIDAD),
+                    "severidad": queries.campo(item, queries.CAMPO_SEVERIDAD),
+                    "asignado_a": queries.campo(item, queries.CAMPO_ASIGNADO),
+                    "tareas": [],
+                }
+            )
+            return nodo
+
+        def construir(item_id: int, ancestors: Set[int]) -> Optional[Dict]:
+            if item_id in ancestors:
+                return None
+            item = por_id.get(item_id)
+            if item is None:
+                return None
+            tipo_actual = queries.tipo(item)
+            nodo = nodo_base(item, tipo_actual)
+            if tipo_actual == "Bug":
+                nodo.update(
+                    {
+                        "prioridad": queries.campo(item, queries.CAMPO_PRIORIDAD),
+                        "severidad": queries.campo(item, queries.CAMPO_SEVERIDAD),
+                        "asignado_a": queries.campo(item, queries.CAMPO_ASIGNADO),
+                    }
+                )
+
+            permitidos = queries.hijos_permitidos(tipo_actual, incluir_bugs)
             hijos = [
-                h for h in queries.ids_relaciones_hijas(item) if h in por_id
+                hijo
+                for hijo in queries.ids_relaciones_hijas(item)
+                if hijo in por_id
+                and queries.tipo(por_id[hijo]) in permitidos
+                and hijo not in ancestors
             ]
+            siguiente = set(ancestors)
+            siguiente.add(item_id)
+
             if "Feature" in permitidos:
                 nodo["features"] = [
-                    construir(h)
-                    for h in hijos
-                    if queries.tipo(por_id[h]) == "Feature"
+                    hijo_nodo
+                    for hijo in hijos
+                    if queries.tipo(por_id[hijo]) == "Feature"
+                    if (hijo_nodo := construir(hijo, siguiente)) is not None
                 ]
             if "User Story" in permitidos:
                 nodo["hus"] = [
-                    construir(h)
-                    for h in hijos
-                    if queries.tipo(por_id[h]) == "User Story"
+                    hijo_nodo
+                    for hijo in hijos
+                    if queries.tipo(por_id[hijo]) == "User Story"
+                    if (hijo_nodo := construir(hijo, siguiente)) is not None
                 ]
             if "Task" in permitidos:
                 nodo["tareas"] = [
-                    construir(h)
-                    for h in hijos
-                    if queries.tipo(por_id[h]) == "Task"
+                    hijo_nodo
+                    for hijo in hijos
+                    if queries.tipo(por_id[hijo]) == "Task"
+                    if (hijo_nodo := construir(hijo, siguiente)) is not None
                 ]
+            if incluir_bugs and tipo_actual in {"User Story", "Task"}:
+                jerarquicos = [
+                    hijo
+                    for hijo in hijos
+                    if queries.tipo(por_id[hijo]) == "Bug"
+                ]
+                bugs = [
+                    hijo_nodo
+                    for hijo in jerarquicos
+                    if (hijo_nodo := construir(hijo, siguiente)) is not None
+                ]
+                ya_incluidos = set(jerarquicos)
+                bugs.extend(
+                    bug_relacionado(hijo)
+                    for hijo in sorted(relacionados.get(item_id, set()))
+                    if hijo in por_id
+                    and queries.tipo(por_id[hijo]) == "Bug"
+                    and hijo not in ya_incluidos
+                )
+                nodo["bugs"] = bugs
             return nodo
 
-        return construir(raiz_id)
+        raiz = construir(raiz_id, set())
+        if raiz is None:
+            raise AzureError(f"El work item {raiz_id} no es una épica.")
+        return raiz
+
+    def _a_modelo(self, nodo: Dict[str, Any]):
+        """Convierte el dict del grafo a los modelos Pydantic del dominio."""
+        comun = {
+            "azure_id": int(nodo["azure_id"]),
+            "titulo": nodo.get("titulo", ""),
+            "estado": nodo.get("estado", ""),
+            "descripcion": nodo.get("descripcion", ""),
+            "url": self._url_workitem(int(nodo["azure_id"])),
+        }
+        tipo_actual = nodo.get("tipo", "")
+        if tipo_actual == "Epic":
+            return Epic(
+                **comun,
+                features=[self._a_modelo(item) for item in nodo.get("features", [])],
+                hus=[self._a_modelo(item) for item in nodo.get("hus", [])],
+            )
+        if tipo_actual == "Feature":
+            return Feature(
+                **comun,
+                hus=[self._a_modelo(item) for item in nodo.get("hus", [])],
+            )
+        if tipo_actual == "User Story":
+            return UserStory(
+                **comun,
+                tareas=[self._a_modelo(item) for item in nodo.get("tareas", [])],
+                bugs=(
+                    [self._a_modelo(item) for item in nodo["bugs"]]
+                    if nodo.get("bugs") is not None
+                    else None
+                ),
+            )
+        if tipo_actual == "Task":
+            return Task(
+                **comun,
+                bugs=(
+                    [self._a_modelo(item) for item in nodo["bugs"]]
+                    if nodo.get("bugs") is not None
+                    else None
+                ),
+            )
+        if tipo_actual == "Bug":
+            return Bug(
+                **comun,
+                prioridad=nodo.get("prioridad", ""),
+                severidad=nodo.get("severidad", ""),
+                asignado_a=nodo.get("asignado_a", ""),
+                relacion=nodo.get("relacion", "hierarchy"),
+                tareas=[self._a_modelo(item) for item in nodo.get("tareas", [])],
+            )
+        raise AzureError(f"Tipo de work item no soportado: {tipo_actual or 'desconocido'}.")
 
     def _a_epica_resumen(self, item: Dict) -> Epic:
         id_ = int(item.get("id", 0))
@@ -223,63 +465,4 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
             estado=queries.campo(item, queries.CAMPO_ESTADO),
             descripcion=queries.campo(item, queries.CAMPO_DESCRIPCION),
             url=self._url_workitem(id_),
-        )
-
-    def _a_epica(self, item: Dict, arbol: Dict) -> Epic:
-        return Epic(
-            azure_id=int(item.get("id", 0)),
-            titulo=queries.campo(item, queries.CAMPO_TITULO),
-            estado=queries.campo(item, queries.CAMPO_ESTADO),
-            descripcion=queries.campo(item, queries.CAMPO_DESCRIPCION),
-            url=self._url_workitem(int(item.get("id", 0))),
-            features=[
-                Feature(
-                    azure_id=ft["azure_id"],
-                    titulo=ft["titulo"],
-                    estado=ft["estado"],
-                    descripcion=ft["descripcion"],
-                    url=self._url_workitem(ft["azure_id"]),
-                    hus=[
-                        UserStory(
-                            azure_id=hu["azure_id"],
-                            titulo=hu["titulo"],
-                            estado=hu["estado"],
-                            descripcion=hu["descripcion"],
-                            url=self._url_workitem(hu["azure_id"]),
-                            tareas=[
-                                Task(
-                                    azure_id=tarea["azure_id"],
-                                    titulo=tarea["titulo"],
-                                    estado=tarea["estado"],
-                                    descripcion=tarea["descripcion"],
-                                    url=self._url_workitem(tarea["azure_id"]),
-                                )
-                                for tarea in hu.get("tareas", [])
-                            ],
-                        )
-                        for hu in ft.get("hus", [])
-                    ],
-                )
-                for ft in arbol.get("features", [])
-            ],
-            hus=[
-                UserStory(
-                    azure_id=hu["azure_id"],
-                    titulo=hu["titulo"],
-                    estado=hu["estado"],
-                    descripcion=hu["descripcion"],
-                    url=self._url_workitem(hu["azure_id"]),
-                    tareas=[
-                        Task(
-                            azure_id=tarea["azure_id"],
-                            titulo=tarea["titulo"],
-                            estado=tarea["estado"],
-                            descripcion=tarea["descripcion"],
-                            url=self._url_workitem(tarea["azure_id"]),
-                        )
-                        for tarea in hu.get("tareas", [])
-                    ],
-                )
-                for hu in arbol.get("hus", [])
-            ],
         )

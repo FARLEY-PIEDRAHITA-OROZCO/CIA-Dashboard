@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.application.services import ServicioBacklog
 from app.config import Settings
 from app.core.container import Contenedor
-from app.domain.models import Epic, Feature, UserStory
+from app.domain.models import Bug, Epic, Feature, Task, UserStory
 from app.main import crear_app
 
 
@@ -20,6 +20,7 @@ def item_azure(
     estado: str = "New",
     descripcion: str = "desc",
     hijos: Optional[List[int]] = None,
+    relacionados: Optional[List[int]] = None,
 ) -> Dict:
     """Work item de Azure DevOps en formato JSON (fields + relations)."""
     campos = {
@@ -33,6 +34,10 @@ def item_azure(
         {"rel": "System.LinkTypes.Hierarchy-Forward", "url": f"https://dev.azure.com/o/p/_apis/wit/workitems/{h}"}
         for h in (hijos or [])
     ]
+    relaciones.extend(
+        {"rel": "System.LinkTypes.Related", "url": f"https://dev.azure.com/o/p/_apis/wit/workitems/{r}"}
+        for r in (relacionados or [])
+    )
     return {"id": id_, "fields": campos, "relations": relaciones}
 
 
@@ -87,6 +92,62 @@ def epica_canonica() -> Epic:
     )
 
 
+def epica_con_bugs() -> Epic:
+    """Épica con bug jerárquico, bug relacionado y una tarea con bug."""
+    return Epic(
+        azure_id=100,
+        titulo="Épica con bugs",
+        estado="Active",
+        url="https://dev.azure.com/organizacion-ejemplo/Proyecto de ejemplo/_workitems/edit/100",
+        hus=[
+            UserStory(
+                azure_id=201,
+                titulo="HU con bugs",
+                estado="Active",
+                bugs=[
+                    Bug(
+                        azure_id=300,
+                        titulo="Bug jerárquico",
+                        estado="Active",
+                        prioridad="1",
+                        severidad="Critical",
+                        relacion="hierarchy",
+                        tareas=[Task(azure_id=301, titulo="Tarea del bug")],
+                    ),
+                    Bug(
+                        azure_id=302,
+                        titulo="Bug resuelto",
+                        estado="Closed",
+                        relacion="related",
+                    ),
+                ],
+                tareas=[Task(azure_id=400, titulo="Tarea directa")],
+            )
+        ],
+    )
+
+
+def epica_con_bug_en_feature() -> Epic:
+    """Épica con un bug bajo una HU que vive dentro de una Feature."""
+    return Epic(
+        azure_id=100,
+        titulo="Épica con feature",
+        features=[
+            Feature(
+                azure_id=101,
+                titulo="Feature",
+                hus=[
+                    UserStory(
+                        azure_id=201,
+                        titulo="HU",
+                        bugs=[Bug(azure_id=300, titulo="Bug", estado="Active")],
+                    )
+                ],
+            )
+        ],
+    )
+
+
 class FakeRepositorio:
     """Implementación del puerto `RepositorioBacklogPort` en memoria."""
 
@@ -105,7 +166,7 @@ class FakeRepositorio:
             raise self.sintoma
         return list(self.epicas)
 
-    async def obtener_epica(self, epic_id: int):
+    async def obtener_epica(self, epic_id: int, *, incluir_bugs: bool = False):
         if self.sintoma:
             raise self.sintoma
         if self.arbol and self.arbol.azure_id == epic_id:

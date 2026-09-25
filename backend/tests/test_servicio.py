@@ -6,7 +6,12 @@ from app.application.services import ServicioBacklog
 from app.domain.models import EstadoIntegracion, Epic
 from app.infrastructure.cache import CacheMemoria
 
-from .conftest import FakeRepositorio, epica_canonica
+from .conftest import (
+    FakeRepositorio,
+    epica_canonica,
+    epica_con_bug_en_feature,
+    epica_con_bugs,
+)
 
 
 class ContadorRepositorio(FakeRepositorio):
@@ -19,9 +24,9 @@ class ContadorRepositorio(FakeRepositorio):
         self.llamadas_listado += 1
         return await super().listar_epicas()
 
-    async def obtener_epica(self, epic_id: int):
+    async def obtener_epica(self, epic_id: int, *, incluir_bugs: bool = False):
         self.llamadas_arbol += 1
-        return await super().obtener_epica(epic_id)
+        return await super().obtener_epica(epic_id, incluir_bugs=incluir_bugs)
 
 
 def servicio_con(repo, ttl=3600, configurado=True) -> ServicioBacklog:
@@ -101,6 +106,42 @@ def _epica_cerrada() -> Epic:
         estado="Closed",
         url="https://dev.azure.com/s/_workitems/edit/900",
     )
+
+
+@pytest.mark.asyncio
+async def test_bugs_epica_calcula_metricas_y_filtra_cerrados():
+    servicio = servicio_con(FakeRepositorio(arbol=epica_con_bugs()))
+
+    detalle = await servicio.bugs_epica(100)
+
+    assert detalle is not None
+    assert [bug.azure_id for bug in detalle.bugs] == [300]
+    assert detalle.metricas.total == 2
+    assert detalle.metricas.abiertos == 1
+    assert detalle.metricas.cerrados == 1
+    assert detalle.metricas.por_relacion == {"hierarchy": 1, "related": 1}
+
+
+@pytest.mark.asyncio
+async def test_bugs_de_hu_dentro_de_feature_se_incluyen_en_métricas():
+    servicio = servicio_con(FakeRepositorio(arbol=epica_con_bug_en_feature()))
+
+    detalle = await servicio.bugs_epica(100)
+
+    assert detalle is not None
+    assert [bug.azure_id for bug in detalle.bugs] == [300]
+    assert detalle.metricas.total == 1
+
+
+@pytest.mark.asyncio
+async def test_bugs_epica_incluye_cerrados_opcionalmente():
+    servicio = servicio_con(FakeRepositorio(arbol=epica_con_bugs()))
+
+    detalle = await servicio.bugs_epica(100, incluir_cerradas=True)
+
+    assert detalle is not None
+    assert [bug.azure_id for bug in detalle.bugs] == [300, 302]
+    assert detalle.metricas.cerrados == 1
 
 
 @pytest.mark.asyncio

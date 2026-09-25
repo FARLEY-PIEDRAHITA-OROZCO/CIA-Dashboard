@@ -122,6 +122,63 @@ async def test_arbol_completo_filtra_tipos_no_permitidos():
 
 
 @pytest.mark.asyncio
+async def test_arbol_incluye_bugs_jerarquicos_y_relacionados():
+    items = [
+        item_azure(100, "Epic", titulo="Épica", hijos=[201]),
+        item_azure(201, "User Story", titulo="HU", hijos=[300, 400], relacionados=[500]),
+        item_azure(300, "Bug", titulo="Bug jerárquico", hijos=[301]),
+        item_azure(301, "Task", titulo="Tarea del bug"),
+        item_azure(400, "Task", titulo="Tarea directa", relacionados=[501]),
+        item_azure(500, "Bug", titulo="Bug relacionado con HU"),
+        item_azure(501, "Bug", titulo="Bug relacionado con tarea"),
+    ]
+    repo, _ = fabricar_repo([100], items)
+
+    epica = await repo.obtener_epica(100, incluir_bugs=True)
+
+    assert epica is not None
+    hu = epica.hus[0]
+    assert [bug.azure_id for bug in hu.bugs or []] == [300, 500]
+    assert [tarea.azure_id for tarea in (hu.bugs or [])[0].tareas] == [301]
+    assert [bug.azure_id for bug in hu.tareas[0].bugs or []] == [501]
+
+
+@pytest.mark.asyncio
+async def test_related_desde_bug_se_proyecta_a_la_tarea():
+    items = [
+        item_azure(100, "Epic", hijos=[201]),
+        item_azure(201, "User Story", hijos=[400, 500]),
+        item_azure(400, "Task", titulo="Tarea"),
+        item_azure(500, "Bug", titulo="Bug relacionado", relacionados=[400]),
+    ]
+    repo, _ = fabricar_repo([100], items)
+
+    epica = await repo.obtener_epica(100, incluir_bugs=True)
+
+    assert epica is not None
+    assert [bug.azure_id for bug in epica.hus[0].tareas[0].bugs or []] == [500]
+
+
+@pytest.mark.asyncio
+async def test_arbol_sin_bugs_conserva_contrato_anterior():
+    items = [
+        item_azure(100, "Epic", titulo="Épica", hijos=[201]),
+        item_azure(201, "User Story", titulo="HU", hijos=[300, 400]),
+        item_azure(300, "Bug", titulo="Bug jerárquico", hijos=[301]),
+        item_azure(301, "Task", titulo="Tarea del bug"),
+        item_azure(400, "Task", titulo="Tarea directa"),
+    ]
+    repo, _ = fabricar_repo([100], items)
+
+    epica = await repo.obtener_epica(100)
+
+    assert epica is not None
+    hu = epica.hus[0]
+    assert hu.bugs is None
+    assert [tarea.azure_id for tarea in hu.tareas] == [400]
+
+
+@pytest.mark.asyncio
 async def test_arbol_carga_perezosa_no_descarga_huertas_de_otras_epicas():
     items = [
         item_azure(100, "Epic", hijos=[101]),

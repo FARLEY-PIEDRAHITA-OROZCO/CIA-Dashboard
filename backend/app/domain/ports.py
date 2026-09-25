@@ -28,7 +28,9 @@ class RepositorioBacklogPort(Protocol):
 
     async def listar_epicas(self) -> List[Epic]: ...
 
-    async def obtener_epica(self, epic_id: int) -> Optional[Epic]: ...
+    async def obtener_epica(
+        self, epic_id: int, *, incluir_bugs: bool = False
+    ) -> Optional[Epic]: ...
 
 
 class CachePort(Protocol):

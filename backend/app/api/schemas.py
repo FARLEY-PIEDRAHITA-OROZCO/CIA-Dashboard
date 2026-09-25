@@ -8,7 +8,7 @@ from typing import List
 
 from pydantic import BaseModel
 
-from ..domain.models import Epic, EstadoIntegracion
+from ..domain.models import Bug, Epic, EstadoIntegracion, MetricasBug
 
 
 class EpicaResumen(BaseModel):
@@ -38,6 +38,11 @@ class EstadoAzure(BaseModel):
     area_path: str
     verificado: bool
     error: str = ""
+
+
+class DetalleBugs(BaseModel):
+    bugs: List[Bug]
+    metricas: MetricasBug
 
 
 class Mensaje(BaseModel):

@@ -5,29 +5,85 @@ Orquesta el repositorio y la caché sin conocer los detalles de transporte
 """
 
 import logging
-from typing import List, Optional
+from collections import Counter
+from typing import Dict, List, Optional
 
-from ..domain.models import Epic, EstadoIntegracion
+from ..domain.models import Bug, DetalleBugs, Epic, EstadoIntegracion, MetricasBug
 from ..domain.ports import CachePort, RepositorioBacklogPort
 
 logger = logging.getLogger("devops")
 
 CLAVE_EPICAS = "epicas"
 CLAVE_ARBOL = "epica:{0}"
+CLAVE_ARBOL_BUGS = "epica:{0}:bugs"
 
 # Estado cerrado en Azure (Scrum/Basic suelen usar "Closed"; se compara
 # normalizado). Las épicas cerradas se ocultan por defecto para replicar la
 # vista del backlog del equipo (el conteo del portal), pero se pueden incluir
 # de forma configurable vía `incluir_cerradas=True`.
 ESTADO_CERRADO = "closed"
+ESTADOS_CERRADOS_BUG = {
+    "closed",
+    "resolved",
+    "done",
+    "removed",
+    "canceled",
+    "cancelled",
+}
 
 
 def _es_cerrada(epica: Epic) -> bool:
     return (epica.estado or "").strip().lower() == ESTADO_CERRADO
 
 
+def _es_bug_cerrado(bug: Bug) -> bool:
+    return (bug.estado or "").strip().lower() in ESTADOS_CERRADOS_BUG
+
+
+def _bugs_de_epica(epica: Epic) -> List[Bug]:
+    """Recorre el árbol y deduplica bugs por ID, sin duplicar asociaciones."""
+    encontrados: Dict[int, Bug] = {}
+
+    def visitar(nodo: object) -> None:
+        for bug in getattr(nodo, "bugs", None) or []:
+            encontrados.setdefault(bug.azure_id, bug)
+            visitar(bug)
+        for tarea in getattr(nodo, "tareas", None) or []:
+            visitar(tarea)
+
+    visitar(epica)
+    for feature in epica.features:
+        visitar(feature)
+        for historia in feature.hus:
+            visitar(historia)
+    for historia in epica.hus:
+        visitar(historia)
+    return sorted(encontrados.values(), key=lambda bug: bug.azure_id)
+
+
+def _metricas_bugs(bugs: List[Bug]) -> MetricasBug:
+    por_estado = Counter((bug.estado or "sin estado").strip() or "sin estado" for bug in bugs)
+    por_prioridad = Counter(
+        (bug.prioridad or "sin prioridad").strip() or "sin prioridad" for bug in bugs
+    )
+    por_severidad = Counter(
+        (bug.severidad or "sin severidad").strip() or "sin severidad" for bug in bugs
+    )
+    por_relacion = Counter(bug.relacion or "hierarchy" for bug in bugs)
+    cerrados = sum(1 for bug in bugs if _es_bug_cerrado(bug))
+    return MetricasBug(
+        total=len(bugs),
+        abiertos=len(bugs) - cerrados,
+        cerrados=cerrados,
+        por_estado=dict(sorted(por_estado.items())),
+        por_prioridad=dict(sorted(por_prioridad.items())),
+        por_severidad=dict(sorted(por_severidad.items())),
+        por_relacion=dict(sorted(por_relacion.items())),
+    )
+
+
 class ServicioBacklog:
-    """Servicio de aplicación: listado de épicas y árbol con caché TTL."""
+    """Servicio de aplicación: listado de épicas, árbol, bugs y caché TTL."""
 
     def __init__(
         self,
@@ -97,16 +153,36 @@ class ServicioBacklog:
             return cached
         return [e for e in cached if not _es_cerrada(e)]
 
-    async def arbol_epica(self, epic_id: int) -> Optional[Epic]:
-        """Árbol completo de una épica, con caché por épica."""
-        clave = CLAVE_ARBOL.format(epic_id)
+    async def arbol_epica(
+        self,
+        epic_id: int,
+        *,
+        incluir_bugs: bool = False,
+    ) -> Optional[Epic]:
+        """Árbol de una épica; la variante con bugs usa otra clave de caché."""
+        clave = (CLAVE_ARBOL_BUGS if incluir_bugs else CLAVE_ARBOL).format(epic_id)
         cached = self._cache.obtener(clave)
         if cached is not None:
             return cached
-        epica = await self._repo.obtener_epica(epic_id)
+        epica = await self._repo.obtener_epica(epic_id, incluir_bugs=incluir_bugs)
         if epica is not None:
             self._cache.guardar(clave, epica, self._ttl_seg)
         return epica
+
+    async def bugs_epica(
+        self,
+        epic_id: int,
+        *,
+        incluir_cerradas: bool = False,
+    ) -> Optional[DetalleBugs]:
+        """Proyección de bugs y métricas, reutilizando el árbol cacheado."""
+        epica = await self.arbol_epica(epic_id, incluir_bugs=True)
+        if epica is None:
+            return None
+        todos = _bugs_de_epica(epica)
+        metricas = _metricas_bugs(todos)
+        bugs = todos if incluir_cerradas else [bug for bug in todos if not _es_bug_cerrado(bug)]
+        return DetalleBugs(bugs=bugs, metricas=metricas)
 
     def refrescar(self) -> None:
         """Invalida la caché para forzar una lectura fresca de Azure."""
