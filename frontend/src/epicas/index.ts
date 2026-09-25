@@ -8,6 +8,7 @@ export { EdicionInline, TAGS_QA } from "./EdicionInline";
 export type { PropsEdicion } from "./EdicionInline";
 export { TableroBugs } from "./TableroBugs";
 export { TarjetaBugEditable } from "./TarjetaBugEditable";
+export { useEdicionQA } from "./useEdicionQA";
 export { TableroHistorias, aplanarHistorias, agruparPorEstado } from "./TableroHistorias";
 export type { HistoriaConContexto } from "./TableroHistorias";
 export { TableroTareas, aplanarTareas, agruparTareasPorEstado } from "./TableroTareas";

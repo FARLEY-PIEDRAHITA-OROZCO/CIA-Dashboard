@@ -68,6 +68,11 @@ function opcionalTexto(valor: unknown, nombre: string): string | undefined {
   return texto(valor, nombre);
 }
 
+function tagsOpcionales(valor: unknown, nombre: string): { tags?: string } {
+  if (valor === undefined || valor === null) return {};
+  return { tags: texto(valor, nombre) };
+}
+
 function urlOpcional(valor: unknown, nombre: string): { url?: string } {
   const url = opcionalTexto(valor, nombre);
   return url === undefined ? {} : { url };
@@ -92,6 +97,7 @@ function validarTarea(valor: unknown): Tarea {
     estado: texto(item.estado, "tarea.estado"),
     descripcion: texto(item.descripcion, "tarea.descripcion"),
     ...urlOpcional(item.url, "tarea.url"),
+    ...tagsOpcionales(item.tags, "tarea.tags"),
     ...(bugs !== undefined ? { bugs } : {}),
   };
 }
@@ -104,6 +110,7 @@ function validarBug(valor: unknown): Bug {
     estado: texto(item.estado, "bug.estado"),
     descripcion: texto(item.descripcion, "bug.descripcion"),
     ...urlOpcional(item.url, "bug.url"),
+    ...tagsOpcionales(item.tags, "bug.tags"),
     prioridad: texto(item.prioridad ?? "", "bug.prioridad"),
     severidad: texto(item.severidad ?? "", "bug.severidad"),
     asignado_a: texto(item.asignado_a ?? "", "bug.asignado_a"),
@@ -124,6 +131,7 @@ function validarHistoria(valor: unknown): UserStory {
     estado: texto(item.estado, "historia.estado"),
     descripcion: texto(item.descripcion, "historia.descripcion"),
     ...urlOpcional(item.url, "historia.url"),
+    ...tagsOpcionales(item.tags, "historia.tags"),
     tareas: lista(item.tareas ?? [], "historia.tareas", validarTarea),
     ...(bugs !== undefined ? { bugs } : {}),
   };

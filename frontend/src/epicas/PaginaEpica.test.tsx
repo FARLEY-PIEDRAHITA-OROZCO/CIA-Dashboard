@@ -33,7 +33,22 @@ const ARBOL: Epic = {
   ],
 };
 
+const ESTADO_AZURE = {
+  configurada: true,
+  organizacion: "organizacion-ejemplo",
+  proyecto: "Proyecto de ejemplo",
+  area_path: "Proyecto de ejemplo",
+  verificado: true,
+  error: "",
+};
+
 const encabezados = { "Content-Type": "application/json" };
+
+/** La página consulta el árbol y el estado de Azure para la edición QA. */
+function responder(url: string) {
+  if (url.includes("/azure/estado")) return ESTADO_AZURE;
+  return ARBOL;
+}
 
 function renderPagina() {
   const queryClient = new QueryClient({
@@ -49,8 +64,8 @@ function renderPagina() {
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      new Response(JSON.stringify(ARBOL), {
+    vi.fn(async (url: string) =>
+      new Response(JSON.stringify(responder(String(url))), {
         status: 200,
         headers: encabezados,
       }),
@@ -73,8 +88,6 @@ describe("PaginaEpica", () => {
     expect(screen.getByText("HU Registro")).toBeInTheDocument();
     expect(screen.getByText("HU Validación")).toBeInTheDocument();
     expect(screen.getByText("Directa")).toBeInTheDocument();
-
-    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("ofrece volver al backlog y abrir la épica en Azure", async () => {

@@ -1,17 +1,17 @@
 import { useState } from "react";
 
+import type { Bug } from "../api/tipos";
 import { ContenidoRico } from "../componentes/ContenidoRico";
 import { EstadoTrabajo, tonoEstado } from "../componentes/EstadoTrabajo";
-import type { ActualizacionQA, Bug } from "../api/tipos";
 import { EdicionInline } from "./EdicionInline";
-import { useActualizarWorkItem } from "./hooks";
+import { useEdicionQA } from "./useEdicionQA";
 
 /**
  * Tarjeta de bug con edición QA opcional.
  *
  * Es data-connected a propósito: el botón de editar solo aparece cuando hay un
- * work item real, y el guardado usa `useActualizarWorkItem`, que ya invalida la
- * caché de React Query. El presentacional puro es `EdicionInline`.
+ * work item real. Toda la lógica de la mutación vive en `useEdicionQA`; aquí
+ * solo se presenta. El presentacional puro es `EdicionInline`.
  */
 export function TarjetaBugEditable({
   bug,
@@ -22,35 +22,7 @@ export function TarjetaBugEditable({
 }) {
   const [abierta, setAbierta] = useState(false);
   const [editando, setEditando] = useState(false);
-  const [aviso, setAviso] = useState("");
-  const mutacion = useActualizarWorkItem();
-
-  const error = mutacion.isError
-    ? mutacion.error instanceof Error
-      ? mutacion.error.message
-      : String(mutacion.error)
-    : "";
-
-  const guardar = (cambios: ActualizacionQA) => {
-    setAviso("");
-    mutacion.mutate(
-      { workItemId: bug.azure_id, cambios },
-      {
-        onSuccess: (resultado) => {
-          setEditando(false);
-          setAviso(resultado.detalle);
-        },
-      },
-    );
-  };
-
-  const validar = (cambios: ActualizacionQA) => {
-    setAviso("");
-    mutacion.mutate(
-      { workItemId: bug.azure_id, cambios, opciones: { validar: true } },
-      { onSuccess: (resultado) => setAviso(resultado.detalle) },
-    );
-  };
+  const edicion = useEdicionQA(bug.azure_id);
 
   return (
     <article className="hu-card" data-tono={tonoEstado(bug.estado)}>
@@ -105,20 +77,17 @@ export function TarjetaBugEditable({
           estadoActual={bug.estado}
           prioridadActual={bug.prioridad}
           severidadActual={bug.severidad}
+          tagsActuales={bug.tags}
           habilitado={habilitado}
-          guardando={mutacion.isPending}
-          error={error}
-          onGuardar={guardar}
-          onValidar={validar}
+          guardando={edicion.guardando}
+          error={edicion.error}
+          onGuardar={(cambios) => edicion.guardar(cambios, () => setEditando(false))}
+          onValidar={edicion.validar}
           onCerrar={() => setEditando(false)}
         />
       )}
 
-      {aviso && !error && (
-        <p className="texto-suave small" role="status">
-          {aviso}
-        </p>
-      )}
+      {edicion.nodoAviso()}
     </article>
   );
 }

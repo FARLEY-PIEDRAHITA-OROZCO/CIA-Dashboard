@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import type { Feature, Tarea, UserStory } from "../api/tipos";
 import { ContenidoRico } from "../componentes/ContenidoRico";
 import { EstadoTrabajo, tonoEstado, type TonoEstado } from "../componentes/EstadoTrabajo";
+import { EdicionInline } from "./EdicionInline";
+import { useEdicionQA } from "./useEdicionQA";
 
 /** Tarea del árbol de Azure con el contexto (HU y Feature) del que proviene. */
 export interface TareaConContexto {
@@ -156,16 +158,62 @@ export function usarTareasFiltradas(
   }, [tareas, termino, featureId, huAzureId]);
 }
 
+/** Transiciones de estado ofrecidas a historias y tareas.
+ *
+ * Azure valida contra las reglas del proyecto; esta lista cubre los estados
+ * habituales de Scrum/Basic. Si el proyecto define otros, se añaden aquí.
+ * Para bugs la lista se deja abierta (texto libre) porque los estados de bug
+ * suelen ser propios de cada proceso. */
+const ESTADOS_DISPONIBLES = [
+  "New",
+  "Active",
+  "Committed",
+  "In Progress",
+  "Done",
+  "Removed",
+  "Closed",
+] as const;
+
+/** Formulario QA embebido en la tarjeta de tarea, con su aviso de éxito.
+ *
+ * Las tareas no tienen `Priority` ni `Severity` en Azure, así que esos
+ * selectores se ocultan en lugar de ofrecer un control que Azure rechazaría. */
+function EdicionTarea({ tarea, habilitado }: { tarea: Tarea; habilitado: boolean }) {
+  const edicion = useEdicionQA(tarea.azure_id);
+  return (
+    <>
+      <EdicionInline
+        workItemId={tarea.azure_id}
+        titulo={tarea.titulo || `tarea ${tarea.azure_id}`}
+        estadoActual={tarea.estado}
+        estadosDisponibles={ESTADOS_DISPONIBLES}
+        tagsActuales={tarea.tags}
+        habilitado={habilitado}
+        mostrarPrioridad={false}
+        mostrarSeveridad={false}
+        guardando={edicion.guardando}
+        error={edicion.error}
+        onGuardar={(cambios) => edicion.guardar(cambios)}
+        onValidar={edicion.validar}
+      />
+      {edicion.nodoAviso()}
+    </>
+  );
+}
+
 /** Tarjeta de tarea del tablero (mismo lenguaje visual que las de historias). */
 function TarjetaTarea({
   t,
   abierta,
   onAlternar,
+  edicionHabilitada = true,
 }: {
   t: TareaConContexto;
   abierta: boolean;
   onAlternar: () => void;
+  edicionHabilitada?: boolean;
 }) {
+  const [editando, setEditando] = useState(false);
   const conDescripcion = Boolean(t.tarea.descripcion?.trim());
   const tieneDetalle = conDescripcion || Boolean(t.tarea.url);
 
@@ -186,6 +234,15 @@ function TarjetaTarea({
               {abierta ? "−" : "+"}
             </button>
           )}
+          <button
+            type="button"
+            className="btn-icono"
+            aria-expanded={editando}
+            aria-label={`${editando ? "Cerrar" : "Editar"} tarea #${t.tarea.azure_id} (QA)`}
+            onClick={() => setEditando((v) => !v)}
+          >
+            ✎
+          </button>
         </div>
       </header>
 
@@ -212,13 +269,22 @@ function TarjetaTarea({
           Abrir en Azure ↗
         </a>
       )}
+
+      {editando && <EdicionTarea tarea={t.tarea} habilitado={edicionHabilitada} />}
     </article>
   );
 }
 
 /** Tablero de tareas de una épica: tres filtros combinables (Feature ▸ HU ▸
  * buscador), columnas por estado colapsables y tarjetas expandibles. */
-export function TableroTareas({ tareas }: { tareas: TareaConContexto[] }) {
+export function TableroTareas({
+  tareas,
+  edicionHabilitada = true,
+}: {
+  tareas: TareaConContexto[];
+  /** Muestra el botón de edición QA en cada tarjeta. */
+  edicionHabilitada?: boolean;
+}) {
   const [termino, setTermino] = useState("");
   const [featureId, setFeatureId] = useState<number | null>(null);
   const [huAzureId, setHuAzureId] = useState<number | null>(null);
@@ -359,6 +425,7 @@ export function TableroTareas({ tareas }: { tareas: TareaConContexto[] }) {
                         t={t}
                         abierta={abiertas.has(t.tarea.azure_id)}
                         onAlternar={() => alternarTarea(t.tarea.azure_id)}
+                        edicionHabilitada={edicionHabilitada}
                       />
                     ))}
                   </div>

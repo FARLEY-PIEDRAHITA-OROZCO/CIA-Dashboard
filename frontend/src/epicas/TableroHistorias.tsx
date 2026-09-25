@@ -3,6 +3,8 @@ import { useState } from "react";
 import type { Feature, UserStory } from "../api/tipos";
 import { ContenidoRico } from "../componentes/ContenidoRico";
 import { EstadoTrabajo, tonoEstado, type TonoEstado } from "../componentes/EstadoTrabajo";
+import { EdicionInline } from "./EdicionInline";
+import { useEdicionQA } from "./useEdicionQA";
 
 /** Historia acompañada del contexto (Feature o épica) del que proviene. */
 export interface HistoriaConContexto {
@@ -64,10 +66,60 @@ interface TarjetaProps {
   densidad: Densidad;
   abierta: boolean;
   onAlternar: () => void;
+  edicionHabilitada?: boolean;
 }
 
-function TarjetaHistoria({ historia, densidad, abierta, onAlternar }: TarjetaProps) {
+/** Transiciones de estado ofrecidas a historias y tareas.
+ *
+ * Azure valida contra las reglas del proyecto; esta lista cubre los estados
+ * habituales de Scrum/Basic. Para bugs se deja texto libre porque sus estados
+ * suelen ser propios de cada proceso. */
+const ESTADOS_DISPONIBLES = [
+  "New",
+  "Active",
+  "Committed",
+  "Approved",
+  "Removed",
+  "Done",
+  "Closed",
+] as const;
+
+/** Formulario QA embebido en la tarjeta de historia, con su aviso de éxito.
+ *
+ * Las historias no tienen `Priority` ni `Severity` en Azure, así que esos
+ * selectores se ocultan en lugar de ofrecer un control que Azure rechazaría. */
+function EdicionHistoria({ hu, habilitado }: { hu: UserStory; habilitado: boolean }) {
+  const edicion = useEdicionQA(hu.azure_id);
+  return (
+    <>
+      <EdicionInline
+        workItemId={hu.azure_id}
+        titulo={hu.titulo || `historia ${hu.azure_id}`}
+        estadoActual={hu.estado}
+        estadosDisponibles={ESTADOS_DISPONIBLES}
+        tagsActuales={hu.tags}
+        habilitado={habilitado}
+        mostrarPrioridad={false}
+        mostrarSeveridad={false}
+        guardando={edicion.guardando}
+        error={edicion.error}
+        onGuardar={(cambios) => edicion.guardar(cambios)}
+        onValidar={edicion.validar}
+      />
+      {edicion.nodoAviso()}
+    </>
+  );
+}
+
+function TarjetaHistoria({
+  historia,
+  densidad,
+  abierta,
+  onAlternar,
+  edicionHabilitada = true,
+}: TarjetaProps) {
   const { hu, contexto } = historia;
+  const [editando, setEditando] = useState(false);
   const conDescripcion = Boolean(hu.descripcion?.trim());
   const tieneDetalle = conDescripcion || Boolean(hu.url);
 
@@ -88,6 +140,15 @@ function TarjetaHistoria({ historia, densidad, abierta, onAlternar }: TarjetaPro
               {abierta ? "−" : "+"}
             </button>
           )}
+          <button
+            type="button"
+            className="btn-icono"
+            aria-expanded={editando}
+            aria-label={`${editando ? "Cerrar" : "Editar"} historia #${hu.azure_id} (QA)`}
+            onClick={() => setEditando((v) => !v)}
+          >
+            ✎
+          </button>
         </div>
       </header>
 
@@ -112,6 +173,8 @@ function TarjetaHistoria({ historia, densidad, abierta, onAlternar }: TarjetaPro
           Abrir en Azure ↗
         </a>
       )}
+
+      {editando && <EdicionHistoria hu={hu} habilitado={edicionHabilitada} />}
     </article>
   );
 }
@@ -125,9 +188,12 @@ function limpiarTermino(termino: string): string {
 export function TableroHistorias({
   historias,
   features,
+  edicionHabilitada = true,
 }: {
   historias: HistoriaConContexto[];
   features: Feature[];
+  /** Muestra el botón de edición QA en cada tarjeta. */
+  edicionHabilitada?: boolean;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [featureSeleccionadas, setFeatureSeleccionadas] = useState<ReadonlySet<string>>(
@@ -339,6 +405,7 @@ export function TableroHistorias({
                         densidad={densidad}
                         abierta={abiertas.has(h.hu.azure_id)}
                         onAlternar={() => alternarTarjeta(h.hu.azure_id)}
+                        edicionHabilitada={edicionHabilitada}
                       />
                     ))}
                   </div>

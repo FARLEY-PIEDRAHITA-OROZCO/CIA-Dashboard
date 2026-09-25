@@ -13,6 +13,7 @@ export interface Tarea {
   estado: string;
   descripcion: string;
   url?: string;
+  tags?: string;
   bugs?: Bug[];
 }
 
@@ -22,6 +23,7 @@ export interface Bug {
   estado: string;
   descripcion: string;
   url?: string;
+  tags?: string;
   prioridad: string;
   severidad: string;
   asignado_a: string;
@@ -35,6 +37,7 @@ export interface UserStory {
   estado: string;
   descripcion: string;
   url?: string;
+  tags?: string;
   tareas?: Tarea[];
   bugs?: Bug[];
 }

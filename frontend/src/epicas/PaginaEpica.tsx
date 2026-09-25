@@ -3,7 +3,7 @@ import { ContenidoRico } from "../componentes/ContenidoRico";
 import { EstadoTrabajo } from "../componentes/EstadoTrabajo";
 import { CajaVacia, Cargando, ErrorAlerta } from "../componentes/retroalimentacion";
 import { enlaceA } from "../navegacion";
-import { useArbolEpica } from "./hooks";
+import { useArbolEpica, useEstadoAzure } from "./hooks";
 import { aplanarHistorias, TableroHistorias } from "./TableroHistorias";
 import { aplanarTareas } from "./TableroTareas";
 
@@ -56,6 +56,10 @@ function CabeceraEpica({ epica }: { epica: Epic }) {
 /** Página dedicada a las historias de una épica (ruta `#/epicas/{id}`). */
 export function PaginaEpica({ azureId }: { azureId: number }) {
   const arbol = useArbolEpica(azureId);
+  // La escritura QA depende de la configuración del backend; si Azure no está
+  // configurado no puede haber escritura y las tarjetas lo explican.
+  const estadoAzure = useEstadoAzure();
+  const edicionHabilitada = Boolean(estadoAzure.data?.configurada);
 
   return (
     <div className="pagina">
@@ -81,7 +85,11 @@ export function PaginaEpica({ azureId }: { azureId: number }) {
             <>
               <CabeceraEpica epica={epica} />
               {historias.length > 0 ? (
-                <TableroHistorias historias={historias} features={epica.features} />
+                <TableroHistorias
+        historias={historias}
+        features={epica.features}
+        edicionHabilitada={edicionHabilitada}
+      />
               ) : (
                 <CajaVacia mensaje="Esta épica no tiene historias de usuario todavía." />
               )}

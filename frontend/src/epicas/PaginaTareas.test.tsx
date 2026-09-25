@@ -39,11 +39,26 @@ const ARBOL: Epic = {
   hus: [],
 };
 
+/** La página consulta el árbol y el estado de Azure para la edición QA. */
+function responder(url: string) {
+  if (url.includes("/azure/estado")) {
+    return {
+      configurada: true,
+      organizacion: "organizacion-ejemplo",
+      proyecto: "Proyecto de ejemplo",
+      area_path: "Proyecto de ejemplo",
+      verificado: true,
+      error: "",
+    };
+  }
+  return ARBOL;
+}
+
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      new Response(JSON.stringify(ARBOL), {
+    vi.fn(async (url: string) =>
+      new Response(JSON.stringify(responder(String(url))), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),

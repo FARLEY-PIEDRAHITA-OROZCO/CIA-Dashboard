@@ -3,7 +3,7 @@ import { ContenidoRico } from "../componentes/ContenidoRico";
 import { EstadoTrabajo } from "../componentes/EstadoTrabajo";
 import { CajaVacia, Cargando, ErrorAlerta } from "../componentes/retroalimentacion";
 import { enlaceA } from "../navegacion";
-import { useArbolEpica } from "./hooks";
+import { useArbolEpica, useEstadoAzure } from "./hooks";
 import { aplanarTareas, TableroTareas } from "./TableroTareas";
 
 function CabeceraEpicaTareas({ epica }: { epica: Epic }) {
@@ -40,6 +40,8 @@ function CabeceraEpicaTareas({ epica }: { epica: Epic }) {
 /** Página dedicada a las tareas de una épica (ruta `#/epicas/{id}/tareas`). */
 export function PaginaTareas({ azureId }: { azureId: number }) {
   const arbol = useArbolEpica(azureId, true);
+  const estadoAzure = useEstadoAzure();
+  const edicionHabilitada = Boolean(estadoAzure.data?.configurada);
 
   return (
     <div className="pagina">
@@ -65,7 +67,7 @@ export function PaginaTareas({ azureId }: { azureId: number }) {
             <>
               <CabeceraEpicaTareas epica={epica} />
               {tareas.length > 0 ? (
-                <TableroTareas tareas={tareas} />
+                <TableroTareas tareas={tareas} edicionHabilitada={edicionHabilitada} />
               ) : (
                 <CajaVacia mensaje="Esta épica no tiene tareas todavía." />
               )}

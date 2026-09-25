@@ -24,6 +24,14 @@ export interface PropsEdicion {
   prioridadActual?: string;
   severidadActual?: string;
   tagsActuales?: string;
+  /**
+   * Campos a mostrar. `Microsoft.VSTS.Common.Priority` y `Severity` **no
+   * existen** en historias ni tareas: escribirlos en Azure produce error, así
+   * que esos tipos los desactivan en lugar de ofrecer un control que va a fallar.
+   */
+  mostrarPrioridad?: boolean;
+  mostrarSeveridad?: boolean;
+  mostrarTags?: boolean;
   /** `false` deshabilita la escritura (aviso visible, sin botón de guardar). */
   habilitado?: boolean;
   /** Texto legible del elemento, para el `aria-label` del formulario. */
@@ -52,6 +60,9 @@ export function EdicionInline({
   prioridadActual = "",
   severidadActual = "",
   tagsActuales = "",
+  mostrarPrioridad = true,
+  mostrarSeveridad = true,
+  mostrarTags = true,
   habilitado = true,
   titulo,
   onGuardar,
@@ -70,9 +81,13 @@ export function EdicionInline({
   const cambios = (): ActualizacionQA => {
     const salida: ActualizacionQA = {};
     if (estado.trim() && estado.trim() !== estadoActual.trim()) salida.estado = estado.trim();
-    if (prioridad && prioridad !== prioridadActual) salida.prioridad = prioridad;
-    if (severidad && severidad !== severidadActual) salida.severidad = severidad;
-    if (tags.trim() !== tagsActuales.trim()) salida.tags = tags.trim();
+    if (mostrarPrioridad && prioridad && prioridad !== prioridadActual) {
+      salida.prioridad = prioridad;
+    }
+    if (mostrarSeveridad && severidad && severidad !== severidadActual) {
+      salida.severidad = severidad;
+    }
+    if (mostrarTags && tags.trim() !== tagsActuales.trim()) salida.tags = tags.trim();
     if (notas.trim()) salida.notas_qa = notas.trim();
     return salida;
   };
@@ -147,58 +162,68 @@ export function EdicionInline({
         </label>
       )}
 
-      <div className="edicion-par">
-        <label className="campo">
-          <span>Prioridad</span>
-          <select value={prioridad} onChange={(e) => setPrioridad(e.target.value)}>
-            <option value="">— sin cambios —</option>
-            {PRIORIDADES.map((valor) => (
-              <option key={valor} value={valor}>
-                {valor}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="campo">
-          <span>Severidad</span>
-          <select value={severidad} onChange={(e) => setSeveridad(e.target.value)}>
-            <option value="">— sin cambios —</option>
-            {SEVERIDADES.map((valor) => (
-              <option key={valor} value={valor}>
-                {valor}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      {(mostrarPrioridad || mostrarSeveridad) && (
+        <div className="edicion-par">
+          {mostrarPrioridad && (
+            <label className="campo">
+              <span>Prioridad</span>
+              <select value={prioridad} onChange={(e) => setPrioridad(e.target.value)}>
+                <option value="">— sin cambios —</option>
+                {PRIORIDADES.map((valor) => (
+                  <option key={valor} value={valor}>
+                    {valor}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {mostrarSeveridad && (
+            <label className="campo">
+              <span>Severidad</span>
+              <select value={severidad} onChange={(e) => setSeveridad(e.target.value)}>
+                <option value="">— sin cambios —</option>
+                {SEVERIDADES.map((valor) => (
+                  <option key={valor} value={valor}>
+                    {valor}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
 
-      <label className="campo">
-        <span>Tags</span>
-        <input
-          type="text"
-          value={tags}
-          placeholder="verificado-qa, reproducible"
-          onChange={(e) => setTags(e.target.value)}
-        />
-      </label>
-      <div className="edicion-tags" role="group" aria-label="Tags QA sugeridos">
-        {TAGS_QA.map((tag) => {
-          const activo = tags
-            .split(",")
-            .some((t) => t.trim().toLowerCase() === tag.toLowerCase());
-          return (
-            <button
-              key={tag}
-              type="button"
-              className="chip"
-              aria-pressed={activo}
-              onClick={() => alternarTag(tag)}
-            >
-              {tag}
-            </button>
-          );
-        })}
-      </div>
+      {mostrarTags && (
+        <>
+          <label className="campo">
+            <span>Tags</span>
+            <input
+              type="text"
+              value={tags}
+              placeholder="verificado-qa, reproducible"
+              onChange={(e) => setTags(e.target.value)}
+            />
+          </label>
+          <div className="edicion-tags" role="group" aria-label="Tags QA sugeridos">
+            {TAGS_QA.map((tag) => {
+              const activo = tags
+                .split(",")
+                .some((t) => t.trim().toLowerCase() === tag.toLowerCase());
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  className="chip"
+                  aria-pressed={activo}
+                  onClick={() => alternarTag(tag)}
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <label className="campo">
         <span>Notas QA (se agregan al final; no reemplazan la descripción)</span>
