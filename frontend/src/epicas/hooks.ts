@@ -12,7 +12,72 @@ export const CLAVES_QUERY = {
     ["epicas", "arbol", azureId, incluirBugs] as const,
   bugs: (azureId: number, incluirCerradas = false) =>
     ["epicas", "bugs", azureId, incluirCerradas] as const,
+  sprints: ["sprints"] as const,
+  personas: ["personas"] as const,
+  items: (filtros: FiltrosItems) => ["items", filtros] as const,
+  analitica: (señal: string) => ["analitica", señal] as const,
 };
+
+/** Filtros del índice local. Vacíos o `undefined` se ignoran (AND). */
+export interface FiltrosItems {
+  sprint?: string;
+  persona?: string;
+  tipo?: string;
+  etiqueta?: string;
+  soloAbiertos?: boolean;
+}
+
+export function useSprints() {
+  return useQuery({
+    queryKey: CLAVES_QUERY.sprints,
+    queryFn: ({ signal }) => api.sprints(signal),
+    staleTime: 300_000,
+  });
+}
+
+export function usePersonas() {
+  return useQuery({
+    queryKey: CLAVES_QUERY.personas,
+    queryFn: ({ signal }) => api.personas(signal),
+    staleTime: 300_000,
+  });
+}
+
+export function useItems(filtros: FiltrosItems) {
+  return useQuery({
+    queryKey: CLAVES_QUERY.items(filtros),
+    queryFn: ({ signal }) => api.items(filtros, signal),
+    staleTime: 300_000,
+  });
+}
+
+/** Señales de analítica QA. Una query por señal para que una falla no tumbe las demás. */
+export function useBrechaVerificacion(activo = true) {
+  return useQuery({
+    queryKey: CLAVES_QUERY.analitica("verificacion"),
+    queryFn: ({ signal }) => api.brechaVerificacion(signal),
+    enabled: activo,
+    staleTime: 300_000,
+  });
+}
+
+export function useTrabajoEstancado(activo = true) {
+  return useQuery({
+    queryKey: CLAVES_QUERY.analitica("aging"),
+    queryFn: ({ signal }) => api.trabajoEstancado(signal),
+    enabled: activo,
+    staleTime: 300_000,
+  });
+}
+
+export function useRezagoSprints(activo = true) {
+  return useQuery({
+    queryKey: CLAVES_QUERY.analitica("rezago"),
+    queryFn: ({ signal }) => api.rezagoSprints(signal),
+    enabled: activo,
+    staleTime: 300_000,
+  });
+}
 
 export function useEstadoAzure() {
   return useQuery({
@@ -90,6 +155,11 @@ export function useActualizarWorkItem() {
     onSuccess: (resultado) => {
       if (!resultado.validado) {
         void queryClient.invalidateQueries({ queryKey: ["epicas"] });
+        // El índice local también quedó obsoleto tras escribir.
+        void queryClient.invalidateQueries({ queryKey: ["items"] });
+        void queryClient.invalidateQueries({ queryKey: ["sprints"] });
+        void queryClient.invalidateQueries({ queryKey: ["personas"] });
+        void queryClient.invalidateQueries({ queryKey: ["analitica"] });
       }
     },
   });

@@ -981,6 +981,40 @@ code {
   letter-spacing: 0.02em;
 }
 
+/* Par etiqueta+control dentro de una banda de filtros. Se diferencia de
+   `.campo` porque aquel es un bloque vertical del formulario de edición; aquí
+   los controles van en línea y se alinean por su base. */
+.filtro-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.filtro-campo select,
+.filtro-campo input {
+  font: inherit;
+  font-size: 13px;
+  color: var(--texto);
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 5px 8px;
+  max-width: 220px;
+}
+
+.filtro-campo select:focus-visible,
+.filtro-campo input:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
+/* La fila de sprint activa se resalta en la tabla del catálogo. */
+.tabla tbody tr[data-activo="true"] td,
+.tabla tbody tr[data-activo="true"] th {
+  background: #eef2ff;
+}
+
 .chip {
   border: 1px solid var(--borde);
   background: var(--fondo);

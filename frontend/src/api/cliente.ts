@@ -2,18 +2,28 @@
 
 import type {
   ActualizacionQA,
+  BrechaVerificacion,
   Bug,
   DetalleBugs,
   Epic,
   EpicResumen,
   EstadoAzure,
   Feature,
+  ItemIndice,
   ListaEpicas,
+  ListaItems,
+  ListaPersonas,
+  ListaSprints,
   MetricasBug,
+  MuestraItem,
   Persona,
+  PersonaCarga,
+  RezagoEntreSprints,
   RespuestaAccion,
   ResultadoEscritura,
+  Sprint,
   Tarea,
+  TrabajoEstancado,
   UserStory,
 } from "./tipos";
 
@@ -238,6 +248,169 @@ function validarDetalleBugs(valor: unknown): DetalleBugs {
   };
 }
 
+function validarSprint(valor: unknown): Sprint {
+  const item = objeto(valor, "sprint");
+  return {
+    nombre: texto(item.nombre, "sprint.nombre"),
+    ruta: texto(item.ruta ?? "", "sprint.ruta"),
+    total: numero(item.total, "sprint.total"),
+    abiertos: numero(item.abiertos, "sprint.abiertos"),
+    cerrados: numero(item.cerrados, "sprint.cerrados"),
+    personas: numero(item.personas, "sprint.personas"),
+    ultimo_cambio: texto(item.ultimo_cambio ?? "", "sprint.ultimo_cambio"),
+  };
+}
+
+function validarListaSprints(valor: unknown): ListaSprints {
+  const item = objeto(valor, "lista de sprints");
+  return {
+    sprints: lista(item.sprints, "sprints", validarSprint),
+    total: numero(item.total, "sprints.total"),
+    sprint_actual: texto(item.sprint_actual ?? "", "sprints.sprint_actual"),
+  };
+}
+
+function validarPersonaCarga(valor: unknown): PersonaCarga {
+  const item = objeto(valor, "persona");
+  return {
+    guid: texto(item.guid, "persona.guid"),
+    nombre: texto(item.nombre, "persona.nombre"),
+    total: numero(item.total, "persona.total"),
+    abiertos: numero(item.abiertos, "persona.abiertos"),
+    bugs: numero(item.bugs, "persona.bugs"),
+    bugs_abiertos: numero(item.bugs_abiertos, "persona.bugs_abiertos"),
+    verificados: numero(item.verificados, "persona.verificados"),
+  };
+}
+
+function validarListaPersonas(valor: unknown): ListaPersonas {
+  const item = objeto(valor, "lista de personas");
+  return {
+    personas: lista(item.personas, "personas", validarPersonaCarga),
+    total: numero(item.total, "personas.total"),
+  };
+}
+
+function validarItemIndice(valor: unknown): ItemIndice {
+  const item = objeto(valor, "item del índice");
+  const cerrado = item.cerrado === undefined ? false : booleano(item.cerrado, "item.cerrado");
+  return {
+    azure_id: numero(item.azure_id, "item.azure_id"),
+    tipo: texto(item.tipo ?? "", "item.tipo"),
+    titulo: texto(item.titulo ?? "", "item.titulo"),
+    estado: texto(item.estado ?? "", "item.estado"),
+    tags: texto(item.tags ?? "", "item.tags"),
+    sprint: texto(item.sprint ?? "", "item.sprint"),
+    persona: personaOpcional(item.persona, "item.persona"),
+    creado: item.creado === undefined || item.creado === null ? null : texto(item.creado, "item.creado"),
+    modificado:
+      item.modificado === undefined || item.modificado === null
+        ? null
+        : texto(item.modificado, "item.modificado"),
+    cerrado,
+  };
+}
+
+function validarListaItems(valor: unknown): ListaItems {
+  const item = objeto(valor, "lista de items");
+  return {
+    items: lista(item.items, "items", validarItemIndice),
+    total: numero(item.total, "items.total"),
+    sprint_actual: texto(item.sprint_actual ?? "", "items.sprint_actual"),
+  };
+}
+
+function validarMuestraItem(valor: unknown): MuestraItem {
+  const item = objeto(valor, "muestra");
+  return {
+    azure_id: numero(item.azure_id, "muestra.azure_id"),
+    tipo: texto(item.tipo ?? "", "muestra.tipo"),
+    titulo: texto(item.titulo ?? "", "muestra.titulo"),
+    estado: texto(item.estado ?? "", "muestra.estado"),
+    sprint: texto(item.sprint ?? "", "muestra.sprint"),
+    persona: texto(item.persona ?? "", "muestra.persona"),
+    modificado: texto(item.modificado ?? "", "muestra.modificado"),
+  };
+}
+
+function validarBrechaVerificacion(valor: unknown): BrechaVerificacion {
+  const item = objeto(valor, "brecha de verificación");
+  const resumen = objeto(item.resumen, "brecha.resumen");
+  return {
+    resumen: {
+      bugs: numero(resumen.bugs, "brecha.bugs"),
+      bugs_cerrados_sin_verificar: numero(
+        resumen.bugs_cerrados_sin_verificar,
+        "brecha.bugs_cerrados_sin_verificar",
+      ),
+      bugs_verificados_sin_cerrar: numero(
+        resumen.bugs_verificados_sin_cerrar,
+        "brecha.bugs_verificados_sin_cerrar",
+      ),
+      historias: numero(resumen.historias, "brecha.historias"),
+      historias_sin_evidencia: numero(
+        resumen.historias_sin_evidencia,
+        "brecha.historias_sin_evidencia",
+      ),
+      verificados: numero(resumen.verificados, "brecha.verificados"),
+      generado: texto(resumen.generado ?? "", "brecha.generado"),
+    },
+    cerrados_sin_verificar: lista(
+      item.cerrados_sin_verificar,
+      "brecha.cerrados_sin_verificar",
+      validarMuestraItem,
+    ),
+    verificados_sin_cerrar: lista(
+      item.verificados_sin_cerrar,
+      "brecha.verificados_sin_cerrar",
+      validarMuestraItem,
+    ),
+    historias_sin_evidencia: lista(
+      item.historias_sin_evidencia,
+      "brecha.historias_sin_evidencia",
+      validarMuestraItem,
+    ),
+  };
+}
+
+function validarTrabajoEstancado(valor: unknown): TrabajoEstancado {
+  const item = objeto(valor, "trabajo estancado");
+  const resumen = objeto(item.resumen, "aging.resumen");
+  return {
+    resumen: {
+      inactivos: numero(resumen.inactivos, "aging.inactivos"),
+      en_curso: numero(resumen.en_curso, "aging.en_curso"),
+      dias_inactivo: numero(resumen.dias_inactivo, "aging.dias_inactivo"),
+      dias_en_curso: numero(resumen.dias_en_curso, "aging.dias_en_curso"),
+      generado: texto(resumen.generado ?? "", "aging.generado"),
+    },
+    inactivos: lista(item.inactivos, "aging.inactivos", validarMuestraItem),
+    en_curso: lista(item.en_curso, "aging.en_curso", validarMuestraItem),
+  };
+}
+
+function validarRezagoEntreSprints(valor: unknown): RezagoEntreSprints {
+  const item = objeto(valor, "rezago entre sprints");
+  const resumen = objeto(item.resumen, "rezago.resumen");
+  return {
+    resumen: {
+      sprints: numero(resumen.sprints, "rezago.sprints"),
+      sprint_referencia: texto(resumen.sprint_referencia ?? "", "rezago.sprint_referencia"),
+      sprints_con_rezago: numero(resumen.sprints_con_rezago, "rezago.sprints_con_rezago"),
+      rezagados: numero(resumen.rezagados, "rezago.rezagados"),
+      generado: texto(resumen.generado ?? "", "rezago.generado"),
+    },
+    sprints: lista(item.sprints, "rezago.sprints", (v) => {
+      const fila = objeto(v, "rezago.sprint");
+      return {
+        sprint: texto(fila.sprint, "rezago.sprint.nombre"),
+        abiertos: numero(fila.abiertos, "rezago.sprint.abiertos"),
+        items: lista(fila.items ?? [], "rezago.sprint.items", validarMuestraItem),
+      };
+    }),
+  };
+}
+
 function validarResultadoEscritura(valor: unknown): ResultadoEscritura {
   const item = objeto(valor, "resultado de escritura");
   return {
@@ -324,6 +497,49 @@ export const api = {
     ),
   refrescar: async () =>
     validarAccion(await peticion<unknown>("/epics/refresh", { method: "POST" })),
+
+  /** Catálogo de sprints con conteos y cuál se considera actual. */
+  sprints: async (signal?: AbortSignal) =>
+    validarListaSprints(await peticion<unknown>("/sprints", { signal })),
+
+  /** Personas con su carga actual, ordenadas por volumen. */
+  personas: async (signal?: AbortSignal) =>
+    validarListaPersonas(await peticion<unknown>("/personas", { signal })),
+
+  /** Ítems del índice local, filtrados en el servidor (que no llama a Azure). */
+  items: async (
+    filtros: {
+      sprint?: string;
+      persona?: string;
+      tipo?: string;
+      etiqueta?: string;
+      soloAbiertos?: boolean;
+    } = {},
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams();
+    if (filtros.sprint) query.set("sprint", filtros.sprint);
+    if (filtros.persona) query.set("persona", filtros.persona);
+    if (filtros.tipo) query.set("tipo", filtros.tipo);
+    if (filtros.etiqueta) query.set("etiqueta", filtros.etiqueta);
+    if (filtros.soloAbiertos) query.set("solo_abiertos", "true");
+    const sufijo = query.toString() ? `?${query.toString()}` : "";
+    return validarListaItems(await peticion<unknown>(`/items${sufijo}`, { signal }));
+  },
+
+  /** Señal ①: brechas de verificación QA. */
+  brechaVerificacion: async (signal?: AbortSignal) =>
+    validarBrechaVerificacion(
+      await peticion<unknown>("/analitica/verificacion", { signal }),
+    ),
+
+  /** Señal ②: trabajo estancado. */
+  trabajoEstancado: async (signal?: AbortSignal) =>
+    validarTrabajoEstancado(await peticion<unknown>("/analitica/aging", { signal })),
+
+  /** Señal ③: rezago entre sprints. */
+  rezagoSprints: async (signal?: AbortSignal) =>
+    validarRezagoEntreSprints(await peticion<unknown>("/analitica/rezago", { signal })),
 
   /**
    * Aplica (o valida en seco) una actualización de QA sobre un work item.

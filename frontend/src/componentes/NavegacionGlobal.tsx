@@ -42,6 +42,16 @@ export function NavegacionGlobal({
       destino: { pagina: "dashboard" },
       activo: vista.pagina === "dashboard",
     },
+    {
+      etiqueta: "Sprints",
+      destino: { pagina: "sprints", filtros: {} },
+      activo: vista.pagina === "sprints",
+    },
+    {
+      etiqueta: "Analítica QA",
+      destino: { pagina: "analitica" },
+      activo: vista.pagina === "analitica",
+    },
   ];
 
   if (azureId !== null) {

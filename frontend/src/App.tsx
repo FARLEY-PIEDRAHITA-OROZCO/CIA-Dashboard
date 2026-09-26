@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { PaginaAnalitica } from "./analitica/PaginaAnalitica";
 import { NavegacionGlobal } from "./componentes/NavegacionGlobal";
 import { PaginaBugs } from "./epicas/PaginaBugs";
 import { PaginaEpica } from "./epicas/PaginaEpica";
@@ -7,6 +8,7 @@ import { PaginaTareas } from "./epicas/PaginaTareas";
 import { useEstadoAzure, useRefrescar } from "./epicas/hooks";
 import { useVista } from "./navegacion";
 import Dashboard from "./pages/Dashboard";
+import { PaginaSprints } from "./sprints/PaginaSprints";
 
 export default function App() {
   const vista = useVista();
@@ -43,6 +45,10 @@ export default function App() {
           <PaginaTareas key={vista.azureId} azureId={vista.azureId} />
         ) : vista.pagina === "epicaBugs" ? (
           <PaginaBugs key={vista.azureId} azureId={vista.azureId} />
+        ) : vista.pagina === "sprints" ? (
+          <PaginaSprints filtros={vista.filtros} />
+        ) : vista.pagina === "analitica" ? (
+          <PaginaAnalitica />
         ) : (
           <Dashboard />
         )}

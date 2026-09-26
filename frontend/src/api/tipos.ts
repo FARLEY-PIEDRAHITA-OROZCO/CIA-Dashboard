@@ -108,6 +108,125 @@ export interface ListaEpicas {
   epicas: EpicResumen[];
 }
 
+// ------------------------------------------------------------------ //
+// Sprints, personas e índice (contrato de /api/sprints, /api/personas,
+// /api/items)
+// ------------------------------------------------------------------ //
+export interface Sprint {
+  /** Hoja de la ruta de iteración: «Sprint 45». */
+  nombre: string;
+  /** Ruta completa: «Proyecto\Sprint 45». Es lo que acepta el filtro. */
+  ruta: string;
+  total: number;
+  abiertos: number;
+  cerrados: number;
+  personas: number;
+  ultimo_cambio: string;
+}
+
+export interface ListaSprints {
+  sprints: Sprint[];
+  total: number;
+  /** Sprint con el cambio más reciente (heurística D9). */
+  sprint_actual: string;
+}
+
+export interface PersonaCarga {
+  guid: string;
+  nombre: string;
+  total: number;
+  abiertos: number;
+  bugs: number;
+  bugs_abiertos: number;
+  verificados: number;
+}
+
+export interface ListaPersonas {
+  personas: PersonaCarga[];
+  total: number;
+}
+
+export interface ItemIndice {
+  azure_id: number;
+  tipo: string;
+  titulo: string;
+  estado: string;
+  tags: string;
+  sprint: string;
+  persona: Persona | null;
+  creado: string | null;
+  modificado: string | null;
+  cerrado: boolean;
+}
+
+export interface ListaItems {
+  items: ItemIndice[];
+  /** Total **antes** de aplicar el tope de 200. */
+  total: number;
+  sprint_actual: string;
+}
+
+// ------------------------------------------------------------------ //
+// Señales de analítica QA
+// ------------------------------------------------------------------ //
+export interface MuestraItem {
+  azure_id: number;
+  tipo: string;
+  titulo: string;
+  estado: string;
+  sprint: string;
+  persona: string;
+  modificado: string;
+}
+
+export interface ResumenVerificacion {
+  bugs: number;
+  bugs_cerrados_sin_verificar: number;
+  bugs_verificados_sin_cerrar: number;
+  historias: number;
+  historias_sin_evidencia: number;
+  verificados: number;
+  generado: string;
+}
+
+export interface BrechaVerificacion {
+  resumen: ResumenVerificacion;
+  cerrados_sin_verificar: MuestraItem[];
+  verificados_sin_cerrar: MuestraItem[];
+  historias_sin_evidencia: MuestraItem[];
+}
+
+export interface ResumenAging {
+  inactivos: number;
+  en_curso: number;
+  dias_inactivo: number;
+  dias_en_curso: number;
+  generado: string;
+}
+
+export interface TrabajoEstancado {
+  resumen: ResumenAging;
+  inactivos: MuestraItem[];
+  en_curso: MuestraItem[];
+}
+
+export interface RezagoDeSprint {
+  sprint: string;
+  abiertos: number;
+  items: MuestraItem[];
+}
+
+export interface RezagoEntreSprints {
+  resumen: {
+    sprints: number;
+    sprint_referencia: string;
+    sprints_con_rezago: number;
+    rezagados: number;
+    generado: string;
+  };
+  sprints: RezagoDeSprint[];
+}
+
 export interface RespuestaAccion {
   ok: boolean;
   detalle?: string;
