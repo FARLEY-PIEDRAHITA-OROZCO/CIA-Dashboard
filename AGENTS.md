@@ -4,7 +4,7 @@
 
 - `backend/` and `frontend/` are separate toolchains in one Git repository; there is no root manifest or task runner. Run commands from the corresponding directory.
 - Entrypoints: `backend/run.py` → `app.main:app`; frontend `frontend/src/main.tsx`.
-- The SPA has no router: valid hashes are `#/dashboard`, `#/epicas/{id}`, `#/epicas/{id}/tareas` and `#/epicas/{id}/bugs`; malformed/extra-segment hashes fall back to the dashboard.
+- The SPA has no router: valid hashes are `#/dashboard`, `#/epicas/{id}`, `#/epicas/{id}/tareas`, `#/epicas/{id}/bugs`, `#/sprints`, `#/sprints?<filtros>` and `#/analitica`; malformed/extra-segment hashes fall back to the dashboard. Sprint filters live in the hash **query** so a filtered URL is shareable; `parsearHash` normalizes them so the React Query cache key is identical for equivalent filters.
 - FastAPI serves `frontend/dist` only if it exists when the app is created. Rebuilding or removing `dist` requires restarting the backend. In development run Vite separately.
 - Vite proxies `/api`, `/docs` and `/openapi.json` to the hard-coded `http://127.0.0.1:8000`.
 
@@ -45,6 +45,7 @@ npm.cmd audit --audit-level=high
 - `frontend/src/api/cliente.ts` is the only runtime network seam. Query/mutation logic belongs in `frontend/src/epicas/hooks.ts`; presentational descendants receive props and emit events, while data-connected pages/rows may use hooks. `componentes/NavegacionGlobal.tsx` is presentational: `App` supplies `vista`, `configurado`, `refrescando` and `onRefrescar`.
 - QA writing is a **separate, opt-in capability** (ADR-11). `EscrituraBacklogPort` / `infrastructure/azure/escritura.py` are the only write path; `RepositorioBacklogPort` and `repository.py` stay read-only. Any change to the editable field set must update `ActualizacionQA`, the JSON Patch builder, `api/schemas.py`, `frontend/src/api/tipos.ts`, the `EdicionInline` form and tests together.
 - Editable types are **Bug, User Story and Task**; Epics and Features are deliberately excluded. `Priority`/`Severity` only exist on Bugs, so the story/task forms must keep `mostrarPrioridad`/`mostrarSeveridad` in `false`. All three cards share `useEdicionQA`; do not duplicate the mutation.
+- Sprint/people/analytics views are **read-only and served by the local index** (`application/indice.py` + `ItemIndice`). They are the reason the index exists: WIQL returns no field values, iteration paths cannot be enumerated with a query (the iterations API answers 401 on a read PAT) and tags cannot be filtered server-side. `IndiceWorkItems` must stay `async` (`asyncio.Lock`, not `threading`) and must never know an Azure field name — the repository owns that translation. `filtrar()` must not call the repository after the first load; tests assert the call count.
 
 ## Operational and security gotchas
 
@@ -53,9 +54,12 @@ npm.cmd audit --audit-level=high
 - `/api/epics` and `/api/epics/{id}/arbol` return 409 when organization, project or PAT is missing. `/api/health` is process-only; `/api/azure/estado` reports configuration and a safe verification result; `/api/epics/{id}/bugs` returns the bug projection and metrics; refresh remains available. `PATCH /api/workitems/{id}` returns 409 when writing is disabled or Azure rejects the transition, and 422 for local validation (empty body, bad tags, `rev` conflict).
 - Azure descriptions are raw HTML. Render them only through `ContenidoRico`/DOMPurify; preserve its active/resource tag denylist and `FORBID_ATTR: ["style", "srcset", "formaction"]`.
 - Azure states are open text. Keep the unknown/empty-state fallback to `neutro` in `tonoEstado`.
+- The iteration-path **root** is not a sprint: epics and features point at `<proyecto>`. Detect it as the path that is a *prefix* of others, never as the shortest path (that discards `Sprint 1` because `Sprint 10` is longer). Sprint ordering is numeric-tolerant via `clave_orden_sprint`; the project also has a legacy `Sprint_001-HUB`. There are no sprint dates available, so `sprint_actual` is the heuristic "most recently touched", not a calendar.
+- `historias_sin_evidencia` in the analytics means **without the `verificado-qa` tag**, not "without notes": QA notes live in the description, which the index does not load. Do not claim note detection until descriptions are indexed.
 - The Core project check must use `{org}/_apis/projects/{project}`; prefixing the project there duplicates the segment and Azure returns 401. Work Item endpoints use the project-scoped helper.
 - `run.py` uses `reload=False`; `LOG_NIVEL` applies to Uvicorn and the application logger. `PERMITIR_EXTERNO=true` only disables the loopback guard; it does not add authentication, TLS or rate limiting.
 - The backend has a process-local TTL cache; React Query has a second frontend cache. The refresh button invalidates both, but an external `POST /api/epics/refresh` does not invalidate data already cached in the SPA.
+- The local index is a **third** cache layer with its own TTL (`INDEX_TTL_SEG`, 300 s vs 120 s for the tree). Its cold load is ~10 s (28 batches of 200) and every later query is tens of milliseconds, so the first `/api/sprints` after a restart or refresh will feel slow; that is expected, not a hang. Both `POST /api/epics/refresh` and `PATCH /api/workitems/{id}` must invalidate it, otherwise counts keep showing pre-edit numbers.
 
 ## Testing and Git
 

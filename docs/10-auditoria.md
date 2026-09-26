@@ -1,8 +1,70 @@
 # 10 · Auditoría técnica y operativa
 
-> **Fecha:** 2026-09-24; **actualizado:** 2026-09-25
+> **Fecha:** 2026-09-24; **actualizado:** 2026-09-26
 > **Alcance:** backend FastAPI, integración Azure DevOps, SPA React/Vite, pruebas, dependencias, seguridad, despliegue y documentación.
 > **Regla de evidencia:** el código ejecutable, los manifiestos y los comandos de verificación prevalecen sobre la documentación existente.
+
+## Actualización 2026-09-26 — Sprints, personas y analítica QA
+
+Se añadió una segunda superficie de producto, toda de **solo lectura**, servida
+por un índice local de work items. Plan completo y trazabilidad en
+`~/.opencode/plan/sprints-personas-analitica-qa.md`.
+
+- Se expuso `System.IterationPath`, `System.AssignedTo`, `System.CreatedDate` y
+  `System.ChangedDate` en el árbol, el listado y el índice. `WorkItemBase` lleva
+  ahora `sprint`, `asignado_a` (`Persona` por GUID, no por nombre), `creado` y
+  `modificado`. **Cambio de contrato:** `Bug.asignado_a` pasa de `string` a
+  `Persona | null`, y `tipos.ts`, los validadores y los componentes se
+  actualizaron en el mismo commit.
+- `RepositorioBacklogPort.listar_work_items(tipos)` hace la lectura en dos pasos
+  (WIQL para los ids, lotes de 200 con `$fields`) y devuelve modelos de dominio.
+  `IndiceWorkItems` cachea la proyección con `asyncio.Lock` y filtra en memoria.
+- Endpoints nuevos: `GET /api/sprints`, `/api/personas`, `/api/items`,
+  `/api/analitica/verificacion`, `/api/analitica/aging`,
+  `/api/analitica/rezago`. `POST /api/epics/refresh` y
+  `PATCH /api/workitems/{id}` invalidan también el índice.
+- Vistas nuevas: `#/sprints` (catálogo + filtros combinables) y `#/analitica`
+  (las tres señales). Los filtros viajan en la query del hash, así que la URL
+  filtrada es compartible sin usar las queries guardadas de Azure DevOps.
+- **Restricciones de la API verificadas, no supuestas:** la API de iteraciones
+  responde **401** con un PAT de lectura (no hay fechas de sprint);
+  `[System.IterationPath] <> ''` devuelve 0 e `IS NOT EMPTY` da error 400 (no se
+  pueden enumerar sprints); `[System.Tags] CONTAINS 'x'` devuelve 0 (los tags no
+  se filtran en el servidor); WIQL no devuelve valores de campo, solo ids. De ahí
+  que el índice local no sea una optimización sino la única arquitectura posible.
+- **Medido sobre el proyecto real:** 5.651 ítems indexados, carga en frío 7,4–10 s,
+  consultas posteriores 11–31 ms, 37 sprints, 35 personas. ① 136 de 143 bugs
+  cerrados sin verificación QA, 410 historias cerradas sin evidencia, ② 84
+  inactivos y 578 en curso, ③ 594 ítems rezagados de 32 de 37 sprints.
+
+Riesgos nuevos que quedan abiertos:
+
+- **La carga en frío son ~10 s.** Aceptable en local con TTL de 300 s, pero un
+  reinicio del backend hace que la primera pantalla de sprints tarde. Si molesta,
+  la salida es precargar el índice en el lifespan, no subir el TTL.
+- **`sprint_actual` es una heurística** (el último sprint tocado), no el
+  calendario: no hay fechas disponibles. Si algún día las hay, hay que reemplazar
+  el criterio, no acumular otro.
+- **Las señales ①③ dependen de la adopción.** Con `verificado-qa` en cero
+  ítems, «cerrados sin verificar» es hoy el 95 % de los bugs: es la línea base,
+  no un defecto del cálculo.
+- **Índice en memoria sin cota de tamaño.** Medido en 5.651 ítems. El riesgo 6 del
+  plan (escala ×10) sigue sin medir; el log `Índice: items=… duration_ms=…` es la
+  señal a vigilar.
+- **Los tres endpoints nuevos comparten el índice**: si Azure falla al
+  construirlo, los tres devuelven 502 a la vez. No es un fallo parcial Acceptable
+  por diseño, pero conviene saberlo al diagnosticar.
+
+Bugs reales encontrados y corregidos durante la ejecución (detalle en el plan):
+
+| # | Bug | Corrección |
+| - | --- | --------- |
+| 1 | `clave_orden_sprint` solo leía dígitos al inicio, así que ningún sprint era numérico (`Sprint 10` empieza por `S`) | Extraer el primer grupo de dígitos en toda la cadena |
+| 2 | La raíz de iteración se detectaba como «la ruta más corta» → descartaba `Sprint 1` (más corta que `Sprint 10`) | La raíz es la ruta que es **prefijo** de otras |
+| 3 | El índice se escribió síncrono con `threading.Lock` en una app 100 % async | `async` + `asyncio.Lock` |
+| 4 | El catálogo no exponía la ruta completa, que es lo que necesita el filtro | Añadir `ruta` al catálogo y a `SprintOut` |
+| 5 | Un helper de prueba usó `{ name }` sin binding local, que resolvía a `window.name` (vacío en jsdom): la búsqueda no fallaba, no encontraba nada | `{ name: nombre }` explícito |
+| 6 | `parsearHash` devolvía `soloAbiertos: false` junto a claves `undefined`, generando claves de caché distintas para el mismo filtro | Normalizar: solo claves activas |
 
 ## Actualización 2026-09-25
 
@@ -98,23 +160,29 @@ run.py → app.main:app
 - `app/infrastructure/azure/repository.py` hace WIQL, lotes de hasta 200 work items, BFS de relaciones y mapeo a Pydantic.
 - El árbol efectivo es `Epic → Feature/User Story → Task`; las HUs directas de la épica también se soportan.
 - Hay una única caché de aplicación (`CachePort`, TTL configurable); el
-  repositorio no mantiene una segunda copia.
+  repositorio no mantiene una segunda copia. El índice local de sprints y
+  personas es una **tercera** capa, con TTL propio (`INDEX_TTL_SEG`, 300 s).
 
 ### Frontend
 
 - `src/main.tsx` crea el `QueryClient` y monta `App`.
 - La navegación es por hash, sin `react-router`.
 - `src/api/cliente.ts` es la única costura de red y usa rutas relativas `/api`.
-- `epicas/hooks.ts` contiene las queries de estado, lista, árbol y refresh.
-- Las vistas actuales son `Dashboard`, `PaginaEpica` y `PaginaTareas`.
+- `epicas/hooks.ts` contiene las queries de estado, lista, árbol, refresh, sprints,
+  personas, ítems y señales de analítica.
+- Las vistas actuales son `Dashboard`, `PaginaEpica`, `PaginaTareas`,
+  `PaginaBugs`, `PaginaSprints` y `PaginaAnalitica`.
 - `ContenidoRico` es la única frontera permitida para descriptions HTML.
+- `sprints/fechas.ts` es lógica pura (fechas relativas, porcentajes, resumen de
+  filtros, orden) y se prueba sin React ni red; el mismo patrón que
+  `epicas/busquedaEpicas.tsx`.
 
 ## 4. Verificación reproducible
 
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
-| Backend pytest | **102 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
-| Frontend Vitest | **104 passed / 17 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs y sanitización. |
+| Backend pytest | **165 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
+| Frontend Vitest | **140 passed / 18 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs, sprints, analítica y sanitización. |
 | Frontend build | **PASS** | `tsc -b` y `vite build`; bundle generado correctamente. |
 | `pip check` | **PASS** | No hay requisitos Python rotos en el entorno auditado. |
 | `pip-audit --local` | **PASS** | Sin vulnerabilidades conocidas en el lockfile instalado. |
@@ -280,7 +348,7 @@ ofrece una proyección con métricas.
 - CI instala el lock, ejecuta `pip check`, `pip-audit`, pytest, `npm ci`, tests,
   build y `npm audit`; no hay pre-commit, Dockerfile, migraciones ni
   configuración de despliegue.
-- Las cachés son locales a cada proceso; con múltiples workers no hay invalidación compartida.
+- Las cachés son locales a cada proceso; con múltiples workers no hay invalidación compartida. Esto afecta también al índice: cada worker construiría el suyo y multiplicaría los lotes contra Azure por el número de workers.
 - El healthcheck es de proceso, no de conectividad Azure; no usarlo como readiness de Azure.
 - El repositorio es público; la documentación, `.env.example` y las fixtures
   usan datos de ejemplo. No se versionaron PATs ni otros secretos.
@@ -313,6 +381,12 @@ ofrece una proyección con métricas.
 1. Ejecutar auditoría axe/browser y validar el foco al cambiar de hash.
 2. Probar SPA estático y readiness; CORS ya tiene regresión de origen permitido/rechazado.
 3. Resolver los warnings de deprecación de Starlette/httpx.
+4. Precargar el índice en el lifespan si la carga en frío de ~10 s resulta
+   molesta; hoy se carga bajo demanda.
+5. Indexar `System.Description` si se quiere una señal de «notas de QA» real en
+   lugar del proxy por etiqueta. Antes hay que medir el coste en memoria.
+6. Vigilar `Índice: items=… duration_ms=…` y medir el comportamiento al escalar
+   el proyecto; el índice no tiene cota de tamaño.
 
 ## 8. Criterios de cierre recomendados
 

@@ -19,11 +19,29 @@ Todos los endpoints devuelven **JSON** (`application/json`).
 | GET | `/api/epics` | Listado de épicas (resumen, sin hijos). Por defecto excluye las `Closed`; `?incluir_cerradas=true` las incluye | estable |
 | GET | `/api/epics/{epic_id}/arbol` | Árbol completo. `?incluir_bugs=true` añade bugs jerárquicos/relacionados y tareas de bugs | estable |
 | GET | `/api/epics/{epic_id}/bugs` | Bugs de la épica + métricas; `?incluir_cerradas=true` incluye cerrados | estable |
-| POST | `/api/epics/refresh` | Invalida la caché de aplicación; la siguiente consulta vuelve a Azure | estable |
+| GET | `/api/sprints` | Catálogo de sprints detectados, con conteos y cuál es el actual | estable |
+| GET | `/api/personas` | Personas con su carga, ordenadas por volumen | estable |
+| GET | `/api/items` | Ítems del índice local, filtrados en memoria (sin llamar a Azure) | estable |
+| GET | `/api/analitica/verificacion` | Señal ① brechas de verificación QA | experimental |
+| GET | `/api/analitica/aging` | Señal ② trabajo estancado | experimental |
+| GET | `/api/analitica/rezago` | Señal ③ rezago entre sprints | experimental |
+| PATCH | `/api/workitems/{id}` | Escritura QA (opt-in, ADR-11) | experimental |
+| GET | `/api/workitems/{id}/rev` | Revisión actual, para control de concurrencia | experimental |
+| POST | `/api/epics/refresh` | Invalida la caché **y el índice local** | estable |
 
 > No requiere autenticación propia (aplicación local; el secreto vive en el
 > backend). Para exponerla, ver [08-despliegue](08-despliegue.md) y
 > [06-seguridad](06-seguridad.md).
+
+### Índice local
+
+`/api/sprints`, `/api/personas`, `/api/items` y `/api/analitica/*` no ejecutan una
+consulta por petición: se apoyan en un **índice en memoria** de los work items de
+trabajo (`User Story`, `Task`, `Bug`, `Issue`) que se construye una vez por TTL
+(`INDEX_TTL_SEG`, 300 s por defecto) y se filtra en memoria. Es la única
+arquitectura viable: WIQL no devuelve los valores de los campos, la API de
+iteraciones responde 401 con un PAT de lectura y los tags **no** se pueden
+filtrar en el servidor. Ver [05-integracion-azure](05-integracion-azure.md).
 
 ---
 
@@ -207,7 +225,7 @@ ya carga el backend; no duplica la lectura de Azure.
       "url": "https://dev.azure.com/…/_workitems/edit/10",
       "prioridad": "1",
       "severidad": "Critical",
-      "asignado_a": "Persona",
+      "asignado_a": { "guid": "a1b2…", "nombre": "Persona", "url": "https://…" },
       "relacion": "hierarchy",
       "tareas": []
     }
@@ -227,6 +245,8 @@ ya carga el backend; no duplica la lectura de Azure.
 - `relacion` es `hierarchy` o `related`.
 - Las métricas se calculan en backend y son la fuente para la vista de bugs.
 - Un bug puede aparecer en más de un contexto; el servicio lo deduplica por ID.
+- `asignado_a` es un **objeto** `{"guid", "nombre", "url"}` o `null` si el ítem no
+  tiene responsable. El `guid` es estable; el nombre puede cambiar.
 
 ---
 
@@ -288,8 +308,8 @@ También responde `409` si la escritura está deshabilitada.
 
 ## 8. `POST /api/epics/refresh`
 
-Invalida la caché de aplicación. La **próxima** consulta a `/api/epics` o
-`/api/epics/{id}/arbol` vuelve a leer de Azure.
+Invalida la caché de aplicación **y el índice local**. La **próxima** consulta a
+`/api/epics`, `/api/epics/{id}/arbol` o `/api/sprints` vuelve a leer de Azure.
 
 **200 OK**
 ```json
@@ -301,10 +321,187 @@ Invalida la caché de aplicación. La **próxima** consulta a `/api/epics` o
 
 > La invalidación es global por diseño. Un GET individual de una épica ya
 > cacheada no se invalida con query params.
+> `PATCH /api/workitems/{id}` también invalida el índice, para que los recuentos
+> no muestren el valor anterior al cambio.
 
 ---
 
-## 9. Modelo de errores
+## 9. Sprints, personas e ítems
+
+Los tres endpoints leen del **índice local** (§1). No generan peticiones a Azure
+salvo en la carga del índice, y esa se cachea por TTL.
+
+### `GET /api/sprints`
+
+Detecta los sprints recorriendo el índice: **no** consulta la API de iteraciones
+(responde 401 con un PAT de lectura) ni usa WIQL (no permite enumerar rutas de
+iteración).
+
+**200 OK**
+```json
+{
+  "sprints": [
+    {
+      "nombre": "Sprint 45",
+      "ruta": "<proyecto>\\Sprint 45",
+      "total": 83, "abiertos": 67, "cerrados": 16,
+      "personas": 16,
+      "ultimo_cambio": "2026-09-26T15:30:00+00:00"
+    }
+  ],
+  "total": 37,
+  "sprint_actual": "Sprint 45"
+}
+```
+
+| Campo | Descripción |
+| ----- | ----------- |
+| `nombre` | hoja de la ruta de iteración; es el nombre real del sprint |
+| `ruta` | ruta completa, que es lo que acepta `?sprint=` de `/api/items` |
+| `personas` | personas distintas con ítems en el sprint |
+| `ultimo_cambio` | `System.ChangedDate` más reciente del sprint; `""` si no hay fechas |
+| `sprint_actual` | sprint con el cambio más reciente |
+
+- El orden es **numérico y tolerante**: `Sprint 9` antes que `Sprint 10`, y el
+  legado `Sprint_001-HUB` conserva su posición. Los nombres sin número van al
+  final, alfabéticamente.
+- Se **excluye la raíz** de la jerarquía de iteración. En este proyecto las
+  épicas y features apuntan a `<proyecto>`, que no es un sprint; aparecería como
+  un «sprint» más.
+- `sprint_actual` es una **heurística**, no el calendario de Azure: sin fechas de
+  sprint no hay forma de saberlo. Se toma el último sprint *tocado*. Si no hay
+  ninguna fecha, cae al último del catálogo.
+
+### `GET /api/personas`
+
+**200 OK**
+```json
+{
+  "personas": [
+    { "guid": "a1b2…", "nombre": "Kelly Johana Rincón Céspedes",
+      "total": 514, "abiertos": 67, "bugs": 115,
+      "bugs_abiertos": 12, "verificados": 0 }
+  ],
+  "total": 35
+}
+```
+
+Ordenado por volumen y luego por nombre. `verificados` cuenta los ítems con la
+etiqueta `verificado-qa`.
+
+### `GET /api/items`
+
+Proyección plana filtrada. Todos los parámetros son opcionales y se combinan
+con AND.
+
+| Parámetro | Tipo | Descripción |
+| --------- | ---- | ----------- |
+| `sprint` | string | **ruta completa** de iteración, tal cual la devuelve `/api/sprints` |
+| `persona` | string | `guid` (exacto) o fragmento del nombre (sin distinguir mayúsculas) |
+| `tipo` | string | `Task`, `User Story`, `Bug`, `Issue` |
+| `etiqueta` | string | etiqueta exacta, sin distinguir mayúsculas |
+| `solo_abiertos` | bool | excluye los estados terminales |
+
+**200 OK**
+```json
+{
+  "items": [
+    { "azure_id": 501, "tipo": "Bug", "titulo": "Error de cálculo",
+      "estado": "Active", "tags": "verificado-qa;qa",
+      "sprint": "<proyecto>\\Sprint 45",
+      "persona": { "guid": "a1b2…", "nombre": "Ana Pérez", "url": "https://…" },
+      "creado": "2026-09-01T10:00:00+00:00",
+      "modificado": "2026-09-20T10:00:00+00:00",
+      "cerrado": false }
+  ],
+  "total": 67,
+  "sprint_actual": "Sprint 45"
+}
+```
+
+- Se devuelven como máximo **200** ítems, ordenados por `modificado` descendente
+  y por `azure_id` para desempatar. `total` es el **total real antes del tope**,
+  para que la UI pueda decir «mostrando 200 de 594».
+- `cerrado` viene calculado con la lista de estados terminales de
+  Scrum/Agile/Basic; `System.State` es texto libre en Azure.
+
+---
+
+## 10. Analítica QA
+
+Las tres señales que el sistema calcula y Azure DevOps no expone. Todas son de
+solo lectura y salen del índice local.
+
+> `historias_sin_evidencia` significa **sin la etiqueta `verificado-qa`**, no «sin
+> notas». Las notas de QA se agregan a la descripción, que el índice no carga por
+> peso; indexar descripciones es una mejora futura, no un atajo.
+
+### `GET /api/analitica/verificacion` — señal ①
+
+Cruza el estado con la etiqueta `verificado-qa`.
+
+**200 OK**
+```json
+{
+  "resumen": {
+    "bugs": 143,
+    "bugs_cerrados_sin_verificar": 136,
+    "bugs_verificados_sin_cerrar": 0,
+    "historias": 601,
+    "historias_sin_evidencia": 410,
+    "verificados": 0,
+    "generado": "2026-09-26T12:00:00+00:00"
+  },
+  "cerrados_sin_verificar": [ { "azure_id": 700, "tipo": "Bug", "…": "…" } ],
+  "verificados_sin_cerrar": [],
+  "historias_sin_evidencia": [ { "azure_id": 800, "…": "…" } ]
+}
+```
+
+Cada lista trae como máximo 50 ítems (`azure_id`, `tipo`, `titulo`, `estado`,
+`sprint`, `persona`, `modificado`); los conteos del `resumen` sí son completos.
+
+### `GET /api/analitica/aging` — señal ②
+
+| Parámetro | Default | Rango |
+| --------- | ------- | ----- |
+| `dias_inactivo` | `14` | 1–365 |
+| `dias_en_curso` | `30` | 1–365 |
+
+Separa lo inactivo de lo que lleva demasiado tiempo *en curso*, y **excluye los
+ítems cerrados**: terminado no es estancado. Se apoya en `System.ChangedDate`, con
+`System.CreatedDate` como respaldo.
+
+```json
+{ "resumen": { "inactivos": 84, "en_curso": 578,
+               "dias_inactivo": 14, "dias_en_curso": 30, "generado": "…" },
+  "inactivos": [ … ], "en_curso": [ … ] }
+```
+
+### `GET /api/analitica/rezago` — señal ③
+
+Deuda que arrastra cada sprint anterior. Azure guarda un único sprint por work
+item, así que este trabajo no aparece en su tablero de sprint.
+
+```json
+{ "resumen": { "sprints": 37, "sprint_referencia": "Sprint 45",
+               "sprints_con_rezago": 32, "rezagados": 594, "generado": "…" },
+  "sprints": [ { "sprint": "Sprint 2", "abiertos": 41, "items": [ … ] } ] }
+```
+
+Ordenado por cantidad de deuda descendente. `sprint_referencia` es el último del
+catálogo; los anteriores son los históricos.
+
+### Errores comunes
+
+| Código | Caso |
+| ------ | ---- |
+| `409` | Falta organización, proyecto o PAT (igual que el resto de `/api/epics*`) |
+| `502` | Azure falló al **construir el índice**; las consultas ya cacheadas no fallan |
+
+---
+
+## 11. Modelo de errores
 
 Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 `detail` (string, o array de detalles de validación).
@@ -324,18 +521,25 @@ Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 | `502` | Error upstream de Azure; 203/204/3xx o JSON inválido | transporte + rutas |
 | `500` | Error inesperado (bug) | FastAPI |
 
+> Los endpoints del índice y de la analítica devuelven **listas vacías** en vez
+> de error cuando no hay datos (`sprints: []`, `items: []`, `sprints: []` en
+> rezago). Un proyecto sin sprints no es un fallo.
+
 > Los errores Azure exponen estado y mensajes seguros; no se devuelve el
 > cuerpo upstream. Nunca serializar `Settings` completo.
 
 ---
 
-## 10. Ejemplos de uso
+## 12. Ejemplos de uso
 
 ### PowerShell
 ```powershell
 Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/api/epics
 Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/api/epics/5586/arbol
 Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/epics/5586/bugs?incluir_cerradas=true"
+Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/api/sprints
+Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/api/personas
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/analitica/verificacion"
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/epics/refresh
 ```
 
@@ -344,6 +548,11 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/epics/refresh
 curl http://127.0.0.1:8000/api/health
 curl http://127.0.0.1:8000/api/azure/estado
 curl http://127.0.0.1:8000/api/epics/5586/arbol
+# Filtros combinables; la ruta del sprint debe ir codificada
+curl -G http://127.0.0.1:8000/api/items \
+  --data-urlencode 'sprint=<proyecto>\Sprint 45' \
+  --data-urlencode 'persona=Ana' \
+  --data-urlencode 'solo_abiertos=true'
 ```
 
 ### Swagger / OpenAPI
