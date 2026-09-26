@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
+from ..application.indice import IndiceWorkItems
 from ..application.services import ServicioBacklog
 from ..config import Settings, obtener_settings
 from ..domain.ports import (
@@ -34,6 +35,7 @@ class Contenedor:
     repositorio: RepositorioBacklogPort
     cache: CachePort
     servicio: ServicioBacklog
+    indice: IndiceWorkItems
     escritura: Optional[EscrituraBacklogPort] = None
     transporte_escritura: Optional[TransportePort] = None
 
@@ -50,6 +52,12 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
         transporte=transporte,
     )
     cache: CachePort = CacheMemoria()
+
+    # --- Índice local de sprints y personas (Fase 1) ------------------ #
+    # Proyección plana cacheada de los work items. Solo lectura: el índice no
+    # escribe en Azure, y las búsquedas del usuario no generan peticiones
+    # remotas (ver `test_filtrar_no_llama_a_azure`).
+    indice = IndiceWorkItems(repositorio, cache, ttl_seg=cfg.index_ttl_seg)
 
     # --- Escritura (opt-in, ADR-11) ------------------------------------- #
     # Solo se construye si está habilitada y hay PAT dedicado. El adaptador
@@ -91,6 +99,7 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
         repositorio=repositorio,
         cache=cache,
         servicio=servicio,
+        indice=indice,
         escritura=escritura,
         transporte_escritura=transporte_escritura,
     )

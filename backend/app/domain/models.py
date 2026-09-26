@@ -14,6 +14,22 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
+#: Estados terminales habituales en plantillas Scrum/Agile/Basic. Azure trata
+#: el estado como texto abierto, así que la lista es un conjunto de trabajo y
+#: no un enum cerrado.
+ESTADOS_CERRADOS = frozenset(
+    {
+        "closed",
+        "done",
+        "resolved",
+        "removed",
+        "canceled",
+        "cancelled",
+        "descartado",
+    }
+)
+
+
 class Persona(BaseModel):
     """Persona asignada a un work item (``IdentityRef`` de Azure).
 
@@ -96,6 +112,46 @@ class MetricasBug(BaseModel):
     por_prioridad: Dict[str, int] = Field(default_factory=dict)
     por_severidad: Dict[str, int] = Field(default_factory=dict)
     por_relacion: Dict[str, int] = Field(default_factory=dict)
+
+
+class ItemIndice(BaseModel):
+    """Proyección plana de un work item para el índice de sprints y personas.
+
+    Es deliberadamente **plana** (sin `tareas` ni `bugs` anidados): el índice
+    alimenta listados y métricas, no la vista de árbol. El repositorio es el
+    único que traduce los nombres de campo de Azure; el índice razona en
+    términos de dominio.
+    """
+
+    azure_id: int
+    tipo: str = ""
+    titulo: str = ""
+    estado: str = ""
+    tags: str = ""
+    sprint: str = ""
+    persona: Optional[Persona] = None
+    creado: Optional[datetime] = None
+    modificado: Optional[datetime] = None
+
+    @property
+    def cerrado(self) -> bool:
+        """True si el estado es terminal en Scrum/Agile/Basic."""
+        return (self.estado or "").strip().lower() in ESTADOS_CERRADOS
+
+    @property
+    def etiquetas(self) -> List[str]:
+        """Tags normalizados como lista.
+
+        Azure los separa con ``;``; el formulario de escritura QA los envía con
+        ``,``. Se aceptan ambos para no depender del formato.
+        """
+        if not self.tags:
+            return []
+        return [
+            t.strip()
+            for t in self.tags.replace(";", ",").split(",")
+            if t.strip()
+        ]
 
 
 class DetalleBugs(BaseModel):

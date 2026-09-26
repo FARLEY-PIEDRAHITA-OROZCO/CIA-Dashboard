@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 import pytest
 from fastapi.testclient import TestClient
 
+from app.application.indice import IndiceWorkItems
 from app.application.services import ServicioBacklog
 from app.config import Settings
 from app.core.container import Contenedor
@@ -264,6 +265,7 @@ def contenedor_con(
         repositorio=repo,
         cache=cache,
         servicio=servicio,
+        indice=IndiceWorkItems(repo, cache),
         escritura=escritura,
     )
 

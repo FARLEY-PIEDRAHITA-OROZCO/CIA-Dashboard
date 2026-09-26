@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # --- Comportamiento -------------------------------------------------- #
     cache_ttl_seg: int = 120
     timeout_seg: float = 30.0
+    # TTL del índice local de sprints/personas. Mayor que `cache_ttl_seg`
+    # porque construirlo implica varios lotes contra Azure; filtrar, en cambio,
+    # es local y no consume red.
+    index_ttl_seg: float = 300.0
 
     @field_validator("azure_org_url")
     @classmethod

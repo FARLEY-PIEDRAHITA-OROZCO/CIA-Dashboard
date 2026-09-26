@@ -8,7 +8,7 @@ sin tocar la capa de negocio.
 
 from typing import Any, Dict, List, Optional, Protocol
 
-from .models import ActualizacionQA, Epic, ResultadoActualizacion
+from .models import ActualizacionQA, Epic, ItemIndice, ResultadoActualizacion
 
 
 class TransportePort(Protocol):
@@ -35,6 +35,16 @@ class RepositorioBacklogPort(Protocol):
     async def verificar_proyecto(self) -> Dict[str, str]: ...
 
     async def listar_epicas(self) -> List[Epic]: ...
+
+    async def listar_work_items(
+        self, tipos: Optional[tuple[str, ...]] = None
+    ) -> List[ItemIndice]:
+        """Proyección plana de los work items del proyecto (para el índice local).
+
+        Se mantiene separada de `listar_epicas` porque responde a un uso
+        distinto: el índice de sprints y personas, no el listado del dashboard.
+        """
+        ...
 
     async def obtener_epica(
         self, epic_id: int, *, incluir_bugs: bool = False

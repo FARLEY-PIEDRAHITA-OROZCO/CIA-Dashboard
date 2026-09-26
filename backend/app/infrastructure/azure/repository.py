@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 from urllib.parse import quote
 
-from ...domain.models import Bug, Epic, Feature, Persona, Task, UserStory
+from ...domain.models import Bug, Epic, Feature, ItemIndice, Persona, Task, UserStory
 from ...domain.ports import RepositorioBacklogPort, TransportePort
 from . import queries
 from .transport import AzureError
@@ -87,6 +87,68 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
             for id_ in ids
             if (item := items.get(id_)) is not None
         ]
+
+    async def listar_work_items(
+        self,
+        tipos: Optional[tuple[str, ...]] = None,
+    ) -> List[ItemIndice]:
+        """Proyección plana de los work items del proyecto, para el índice local.
+
+        Trae solo los campos de `CAMPOS_LISTADO`: es lo que necesitan las vistas
+        de sprint y persona. Se hace en **dos pasos** porque WIQL no devuelve los
+        valores de los campos, solo los ids (§3 del plan):
+
+        1. Un POST a WIQL para obtener los ids.
+        2. Lotes de `workitems?ids=…&$fields=…` para traer los valores.
+
+        Sin relaciones ni descripción larga, así que es mucho más barata que
+        construir un árbol por épica. Devuelve modelos de dominio: quien llama
+        no necesita saber cómo se llaman los campos en Azure.
+        """
+        inicio = time.perf_counter()
+        condiciones = ["[System.TeamProject] = @project"]
+        if tipos:
+            lista = ", ".join(f"'{str(t).replace(chr(39), chr(39) * 2)}'" for t in tipos)
+            condiciones.append(f"[System.WorkItemType] IN ({lista})")
+        consulta = (
+            f"SELECT [{queries.CAMPO_ID}] FROM WorkItems "
+            f"WHERE {' AND '.join(condiciones)} ORDER BY [{queries.CAMPO_ID}]"
+        )
+        ids = await self._ejecutar_wiql(consulta)
+        if not ids:
+            logger.info("Índice: el proyecto no devolvió work items")
+            return []
+
+        items = await self._detallar_lote(
+            ids, incluir_relaciones=False, campos=queries.CAMPOS_LISTADO
+        )
+        # Se ordena por id para que el índice sea determinista entre cargas.
+        resultado = [self._a_item_indice(items[id_]) for id_ in ids if id_ in items]
+        logger.info(
+            "Índice: items=%d lotes=%d duration_ms=%d",
+            len(resultado),
+            self._numero_lotes(ids),
+            int((time.perf_counter() - inicio) * 1000),
+        )
+        return resultado
+
+    def _a_item_indice(self, item: Dict) -> ItemIndice:
+        """Traduce el JSON de Azure al modelo plano del índice."""
+        try:
+            id_ = int(item.get("id", 0))
+        except (TypeError, ValueError):
+            id_ = 0
+        return ItemIndice(
+            azure_id=id_,
+            tipo=queries.tipo(item),
+            titulo=queries.campo(item, queries.CAMPO_TITULO),
+            estado=queries.campo(item, queries.CAMPO_ESTADO),
+            tags=queries.campo(item, queries.CAMPO_TAGS),
+            sprint=queries.campo(item, queries.CAMPO_ITERACION),
+            persona=self._a_persona(queries.identidad(item, queries.CAMPO_ASIGNADO)),
+            creado=queries.fecha(item, queries.CAMPO_CREADO),
+            modificado=queries.fecha(item, queries.CAMPO_MODIFICADO),
+        )
 
     async def obtener_epica(
         self,
