@@ -8,15 +8,21 @@ from fastapi import APIRouter, HTTPException, Path
 from ..application.services import ServicioBacklog
 from ..domain.models import Epic
 from ..infrastructure.azure.transport import AzureError
-from .deps import ServicioDep
+from .deps import IndiceDep, ServicioDep
 from .schemas import (
     DetalleBugs,
     EpicaResumen,
     EstadoAzure,
     Health,
+    ItemIndiceOut,
     ListaEpicas,
+    ListaItems,
+    ListaPersonas,
+    ListaSprints,
     Mensaje,
+    PersonaOut,
     ResultadoEscritura,
+    SprintOut,
     a_resumen,
 )
 from ..domain.models import ActualizacionQA
@@ -25,6 +31,10 @@ from ..infrastructure.azure.escritura import ErrorValidacionEscritura
 
 logger = logging.getLogger("devops")
 router = APIRouter()
+
+#: Tope de resultados por página. El índice tiene miles de ítems; sin tope, una
+#: consulta sin filtro descargaría el proyecto entero en el navegador.
+MAXIMO_ITEMS = 200
 
 
 def _error_azure(exc: AzureError, *, not_found: bool = False) -> HTTPException:
@@ -112,10 +122,78 @@ async def api_bugs_epica(
     return detalle
 
 
+# ---------------------------------------------------------------------- #
+# Sprints, personas e índice (Fases 2-3)
+# ---------------------------------------------------------------------- #
+@router.get("/api/sprints", response_model=ListaSprints, tags=["Sprints"])
+async def api_sprints(servicio: ServicioDep, indice: IndiceDep) -> ListaSprints:
+    """Catálogo de sprints detectados en los datos, con conteos.
+
+    Los sprints no se consultan a Azure: se derivan del índice local, porque la
+    API de iteraciones exige permisos que un PAT de lectura no tiene (401) y
+    WIQL no permite enumerar rutas de iteración.
+    """
+    _requiere_configuracion(servicio)
+    sprints = await indice.sprints()
+    actual = await indice.sprint_actual() or ""
+    return ListaSprints(
+        sprints=[SprintOut(**s) for s in sprints],
+        total=len(sprints),
+        sprint_actual=actual,
+    )
+
+
+@router.get("/api/personas", response_model=ListaPersonas, tags=["Personas"])
+async def api_personas(servicio: ServicioDep, indice: IndiceDep) -> ListaPersonas:
+    """Personas con su carga actual, ordenadas por volumen."""
+    _requiere_configuracion(servicio)
+    personas = await indice.personas()
+    return ListaPersonas(
+        personas=[PersonaOut(**p) for p in personas], total=len(personas)
+    )
+
+
+@router.get("/api/items", response_model=ListaItems, tags=["Sprints"])
+async def api_items(
+    servicio: ServicioDep,
+    indice: IndiceDep,
+    sprint: str = "",
+    persona: str = "",
+    tipo: str = "",
+    etiqueta: str = "",
+    solo_abiertos: bool = False,
+) -> ListaItems:
+    """Ítems filtrados del índice local. No genera peticiones a Azure."""
+    _requiere_configuracion(servicio)
+    encontrados = await indice.filtrar(
+        sprint=sprint,
+        persona=persona,
+        tipo=tipo,
+        etiqueta=etiqueta,
+        solo_abiertos=solo_abiertos,
+    )
+    # Orden estable: primero los más recientes, luego por id para desempatar.
+    ordenados = sorted(
+        encontrados,
+        key=lambda i: (i.modificado is not None, i.modificado or i.creado, i.azure_id),
+        reverse=True,
+    )
+    return ListaItems(
+        items=[ItemIndiceOut(**i.model_dump()) for i in ordenados[:MAXIMO_ITEMS]],
+        total=len(ordenados),
+        sprint_actual=await indice.sprint_actual() or "",
+    )
+
+
 @router.post("/api/epics/refresh", response_model=Mensaje, tags=["Epicas"])
-async def api_refrescar(servicio: ServicioDep) -> Mensaje:
-    """Invalida la caché para leer datos frescos de Azure en la próxima llamada."""
+async def api_refrescar(servicio: ServicioDep, indice: IndiceDep) -> Mensaje:
+    """Invalida la caché para leer datos frescos de Azure en la próxima llamada.
+
+    También invalida el **índice** local: sin esto, los recuentos de sprints y
+    personas seguirían mostrando los números anteriores al refresco.
+    """
     servicio.refrescar()
+    indice.invalidar()
     return Mensaje(
         ok=True,
         detalle="Caché invalidada. La próxima consulta leerá de Azure.",
@@ -132,6 +210,7 @@ async def api_refrescar(servicio: ServicioDep) -> Mensaje:
 )
 async def api_actualizar_work_item(
     servicio: ServicioDep,
+    indice: IndiceDep,
     work_item_id: Annotated[int, Path(gt=0)],
     cambios: ActualizacionQA,
     validar: bool = False,
@@ -160,6 +239,9 @@ async def api_actualizar_work_item(
         logger.warning("Error al escribir el work item %s: %s", work_item_id, exc)
         detalle = exc.detalle or "Azure rechazó el cambio."
         raise HTTPException(status_code=409, detail=detalle)
+    if not validar:
+        # El índice local mostraría el valor anterior del ítem recién escrito.
+        indice.invalidar()
     return ResultadoEscritura(**resultado.model_dump())
 
 
