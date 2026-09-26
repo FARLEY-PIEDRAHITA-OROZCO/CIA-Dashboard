@@ -57,7 +57,9 @@ export function TarjetaBugEditable({
         {bug.prioridad && ` · Prioridad ${bug.prioridad}`}
         {bug.severidad && ` · ${bug.severidad}`}
       </p>
-      {bug.asignado_a && <p className="texto-suave small">Asignado a: {bug.asignado_a}</p>}
+      {bug.asignado_a && (
+        <p className="texto-suave small">Asignado a: {bug.asignado_a.nombre}</p>
+      )}
 
       {abierta && bug.descripcion && (
         <div className="hu-card-descripcion">

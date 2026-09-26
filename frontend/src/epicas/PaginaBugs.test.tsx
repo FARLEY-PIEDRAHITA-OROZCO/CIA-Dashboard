@@ -13,7 +13,7 @@ const DETALLE = {
       descripcion: "",
       prioridad: "1",
       severidad: "Critical",
-      asignado_a: "Persona",
+      asignado_a: { guid: "p-1", nombre: "Persona" },
       relacion: "hierarchy",
       tareas: [],
     },

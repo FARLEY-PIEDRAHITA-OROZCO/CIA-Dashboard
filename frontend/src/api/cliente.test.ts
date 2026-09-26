@@ -33,7 +33,7 @@ describe("cliente API", () => {
               descripcion: "",
               prioridad: "1",
               severidad: "Critical",
-              asignado_a: "",
+              asignado_a: null,
               relacion: "hierarchy",
               tareas: [],
             },

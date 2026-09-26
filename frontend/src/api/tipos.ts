@@ -1,64 +1,66 @@
 /** Tipos de dominio compartidos con el backend (contrato de la API REST). */
 
+/**
+ * Persona asignada a un work item (`IdentityRef` de Azure).
+ *
+ * `guid` es el identificador estable: el nombre puede cambiar si alguien se
+ * renombra o cambia de cuenta. Se filtra por GUID y se muestra el nombre.
+ */
+export interface Persona {
+  guid: string;
+  nombre: string;
+  url?: string;
+}
+
+/** Campos comunes a todo work item del backlog. */
+export interface WorkItemBase {
+  azure_id: number;
+  titulo: string;
+  estado: string;
+  descripcion: string;
+  url?: string;
+  tags?: string;
+  /** Ruta completa de iteración, p. ej. `Proyecto\\Sprint 35`. */
+  sprint?: string;
+  asignado_a?: Persona | null;
+  creado?: string | null;
+  modificado?: string | null;
+}
+
 export interface EpicResumen {
   azure_id: number;
   titulo: string;
   estado: string;
   url: string;
+  sprint?: string;
+  asignado_a?: Persona | null;
+  creado?: string | null;
+  modificado?: string | null;
 }
 
-export interface Tarea {
-  azure_id: number;
-  titulo: string;
-  estado: string;
-  descripcion: string;
-  url?: string;
-  tags?: string;
+export interface Tarea extends WorkItemBase {
   bugs?: Bug[];
 }
 
-export interface Bug {
-  azure_id: number;
-  titulo: string;
-  estado: string;
-  descripcion: string;
-  url?: string;
-  tags?: string;
+export interface Bug extends WorkItemBase {
   prioridad: string;
   severidad: string;
-  asignado_a: string;
   relacion: string;
   tareas?: Tarea[];
 }
 
-export interface UserStory {
-  azure_id: number;
-  titulo: string;
-  estado: string;
-  descripcion: string;
-  url?: string;
-  tags?: string;
+export interface UserStory extends WorkItemBase {
   tareas?: Tarea[];
   bugs?: Bug[];
 }
 
-export interface Feature {
-  azure_id: number;
-  titulo: string;
-  estado: string;
-  descripcion: string;
-  url?: string;
+export interface Feature extends WorkItemBase {
   hus: UserStory[];
 }
 
-export interface Epic {
-  azure_id: number;
-  titulo: string;
-  estado: string;
-  descripcion: string;
+export interface Epic extends WorkItemBase {
   features: Feature[];
   hus: UserStory[];
-  url: string;
 }
 
 export interface MetricasBug {

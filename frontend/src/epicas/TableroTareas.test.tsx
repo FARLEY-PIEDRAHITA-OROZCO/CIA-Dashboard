@@ -62,7 +62,7 @@ describe("aplanarTareas", () => {
       descripcion: "",
       prioridad: "1",
       severidad: "Critical",
-      asignado_a: "",
+      asignado_a: { guid: "p-1", nombre: "Persona" },
       relacion: "hierarchy",
       tareas: [tarea(330, "Corregir cálculo", "New")],
     };

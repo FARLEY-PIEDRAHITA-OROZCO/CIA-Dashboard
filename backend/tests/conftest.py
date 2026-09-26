@@ -1,6 +1,6 @@
 """Fixtures y dobles compartidos por las pruebas del backend."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,18 +20,32 @@ def item_azure(
     estado: str = "New",
     descripcion: str = "desc",
     tags: str = "",
+    sprint: str = "",
+    asignado: Optional[Tuple[str, str]] = None,
+    creado: str = "2026-09-01T10:00:00Z",
+    modificado: str = "2026-09-20T15:30:00Z",
     hijos: Optional[List[int]] = None,
     relacionados: Optional[List[int]] = None,
 ) -> Dict:
     """Work item de Azure DevOps en formato JSON (fields + relations)."""
-    campos = {
+    campos: Dict = {
         "System.Id": id_,
         "System.WorkItemType": tipo,
         "System.Title": titulo or f"{tipo} {id_}",
         "System.State": estado,
         "System.Description": descripcion,
         "System.Tags": tags,
+        "System.IterationPath": sprint,
+        "System.CreatedDate": creado,
+        "System.ChangedDate": modificado,
     }
+    if asignado is not None:
+        guid, nombre = asignado
+        campos["System.AssignedTo"] = {
+            "id": guid,
+            "displayName": nombre,
+            "url": f"https://vssps.dev.azure.com/_apis/GraphProfile/Members/{guid}",
+        }
     relaciones = [
         {"rel": "System.LinkTypes.Hierarchy-Forward", "url": f"https://dev.azure.com/o/p/_apis/wit/workitems/{h}"}
         for h in (hijos or [])

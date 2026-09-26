@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 from urllib.parse import quote
 
-from ...domain.models import Bug, Epic, Feature, Task, UserStory
+from ...domain.models import Bug, Epic, Feature, Persona, Task, UserStory
 from ...domain.ports import RepositorioBacklogPort, TransportePort
 from . import queries
 from .transport import AzureError
@@ -315,6 +315,10 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
                 "estado": queries.campo(item, queries.CAMPO_ESTADO),
                 "descripcion": queries.campo(item, queries.CAMPO_DESCRIPCION),
                 "tags": queries.campo(item, queries.CAMPO_TAGS),
+                "sprint": queries.campo(item, queries.CAMPO_ITERACION),
+                "asignado_a": queries.identidad(item, queries.CAMPO_ASIGNADO),
+                "creado": queries.fecha(item, queries.CAMPO_CREADO),
+                "modificado": queries.fecha(item, queries.CAMPO_MODIFICADO),
                 "relacion": relacion,
             }
 
@@ -325,7 +329,6 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
                 {
                     "prioridad": queries.campo(item, queries.CAMPO_PRIORIDAD),
                     "severidad": queries.campo(item, queries.CAMPO_SEVERIDAD),
-                    "asignado_a": queries.campo(item, queries.CAMPO_ASIGNADO),
                     "tareas": [],
                 }
             )
@@ -416,6 +419,10 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
             "descripcion": nodo.get("descripcion", ""),
             "url": self._url_workitem(int(nodo["azure_id"])),
             "tags": nodo.get("tags", ""),
+            "sprint": nodo.get("sprint", ""),
+            "asignado_a": self._a_persona(nodo.get("asignado_a")),
+            "creado": nodo.get("creado"),
+            "modificado": nodo.get("modificado"),
         }
         tipo_actual = nodo.get("tipo", "")
         if tipo_actual == "Epic":
@@ -453,11 +460,25 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
                 **comun,
                 prioridad=nodo.get("prioridad", ""),
                 severidad=nodo.get("severidad", ""),
-                asignado_a=nodo.get("asignado_a", ""),
                 relacion=nodo.get("relacion", "hierarchy"),
                 tareas=[self._a_modelo(item) for item in nodo.get("tareas", [])],
             )
         raise AzureError(f"Tipo de work item no soportado: {tipo_actual or 'desconocido'}.")
+
+    @staticmethod
+    def _a_persona(bruto: Optional[Dict[str, str]]) -> Optional[Persona]:
+        """Convierte la ``IdentityRef`` cruda al modelo de dominio.
+
+        Se ignora si no trae GUID ni nombre: una identidad vacía no aporta nada
+        y ensuciaría los listados de personas.
+        """
+        if not isinstance(bruto, dict):
+            return None
+        guid = str(bruto.get("guid") or "").strip()
+        nombre = str(bruto.get("nombre") or "").strip()
+        if not guid and not nombre:
+            return None
+        return Persona(guid=guid, nombre=nombre, url=str(bruto.get("url") or ""))
 
     def _a_epica_resumen(self, item: Dict) -> Epic:
         id_ = int(item.get("id", 0))
@@ -467,4 +488,8 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
             estado=queries.campo(item, queries.CAMPO_ESTADO),
             descripcion=queries.campo(item, queries.CAMPO_DESCRIPCION),
             url=self._url_workitem(id_),
+            sprint=queries.campo(item, queries.CAMPO_ITERACION),
+            asignado_a=self._a_persona(queries.identidad(item, queries.CAMPO_ASIGNADO)),
+            creado=queries.fecha(item, queries.CAMPO_CREADO),
+            modificado=queries.fecha(item, queries.CAMPO_MODIFICADO),
         )

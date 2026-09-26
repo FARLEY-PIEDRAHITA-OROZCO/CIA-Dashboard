@@ -10,6 +10,7 @@ import type {
   Feature,
   ListaEpicas,
   MetricasBug,
+  Persona,
   RespuestaAccion,
   ResultadoEscritura,
   Tarea,
@@ -73,6 +74,37 @@ function tagsOpcionales(valor: unknown, nombre: string): { tags?: string } {
   return { tags: texto(valor, nombre) };
 }
 
+/** Valida una `Persona` (IdentityRef). `null`/`undefined` → sin responsable. */
+function personaOpcional(valor: unknown, nombre: string): Persona | null {
+  if (valor === undefined || valor === null) return null;
+  const item = objeto(valor, nombre);
+  return {
+    guid: texto(item.guid, `${nombre}.guid`),
+    nombre: texto(item.nombre ?? "", `${nombre}.nombre`),
+    ...urlOpcional(item.url, `${nombre}.url`),
+  };
+}
+
+/** Campos comunes (sprint, persona y fechas) presentes en todo work item. */
+function comunesWorkItem(item: Record<string, unknown>, prefijo: string) {
+  return {
+    ...tagsOpcionales(item.tags, `${prefijo}.tags`),
+    ...(item.sprint === undefined
+      ? {}
+      : { sprint: texto(item.sprint, `${prefijo}.sprint`) }),
+    asignado_a: personaOpcional(item.asignado_a, `${prefijo}.asignado_a`),
+    ...(item.creado === undefined
+      ? {}
+      : { creado: item.creado === null ? null : texto(item.creado, `${prefijo}.creado`) }),
+    ...(item.modificado === undefined
+      ? {}
+      : {
+          modificado:
+            item.modificado === null ? null : texto(item.modificado, `${prefijo}.modificado`),
+        }),
+  };
+}
+
 function urlOpcional(valor: unknown, nombre: string): { url?: string } {
   const url = opcionalTexto(valor, nombre);
   return url === undefined ? {} : { url };
@@ -97,7 +129,7 @@ function validarTarea(valor: unknown): Tarea {
     estado: texto(item.estado, "tarea.estado"),
     descripcion: texto(item.descripcion, "tarea.descripcion"),
     ...urlOpcional(item.url, "tarea.url"),
-    ...tagsOpcionales(item.tags, "tarea.tags"),
+    ...comunesWorkItem(item, "tarea"),
     ...(bugs !== undefined ? { bugs } : {}),
   };
 }
@@ -110,10 +142,9 @@ function validarBug(valor: unknown): Bug {
     estado: texto(item.estado, "bug.estado"),
     descripcion: texto(item.descripcion, "bug.descripcion"),
     ...urlOpcional(item.url, "bug.url"),
-    ...tagsOpcionales(item.tags, "bug.tags"),
+    ...comunesWorkItem(item, "bug"),
     prioridad: texto(item.prioridad ?? "", "bug.prioridad"),
     severidad: texto(item.severidad ?? "", "bug.severidad"),
-    asignado_a: texto(item.asignado_a ?? "", "bug.asignado_a"),
     relacion: texto(item.relacion ?? "hierarchy", "bug.relacion"),
     tareas: lista(item.tareas ?? [], "bug.tareas", validarTarea),
   };
@@ -131,7 +162,7 @@ function validarHistoria(valor: unknown): UserStory {
     estado: texto(item.estado, "historia.estado"),
     descripcion: texto(item.descripcion, "historia.descripcion"),
     ...urlOpcional(item.url, "historia.url"),
-    ...tagsOpcionales(item.tags, "historia.tags"),
+    ...comunesWorkItem(item, "historia"),
     tareas: lista(item.tareas ?? [], "historia.tareas", validarTarea),
     ...(bugs !== undefined ? { bugs } : {}),
   };
@@ -145,6 +176,7 @@ function validarFeature(valor: unknown): Feature {
     estado: texto(item.estado, "feature.estado"),
     descripcion: texto(item.descripcion, "feature.descripcion"),
     url: texto(item.url ?? "", "feature.url"),
+    ...comunesWorkItem(item, "feature"),
     hus: lista(item.hus, "feature.hus", validarHistoria),
   };
 }
@@ -169,6 +201,7 @@ function validarResumen(valor: unknown): EpicResumen {
     titulo: texto(item.titulo, "epica.titulo"),
     estado: texto(item.estado, "epica.estado"),
     url: texto(item.url ?? "", "epica.url"),
+    ...comunesWorkItem(item, "epica"),
   };
 }
 

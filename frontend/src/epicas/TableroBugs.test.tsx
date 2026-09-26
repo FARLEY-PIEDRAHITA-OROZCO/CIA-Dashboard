@@ -14,7 +14,7 @@ function bug(overrides: Partial<Bug> = {}): Bug {
     descripcion: "",
     prioridad: "1",
     severidad: "Critical",
-    asignado_a: "Persona",
+    asignado_a: { guid: "p-1", nombre: "Persona" },
     relacion: "hierarchy",
     ...overrides,
   };

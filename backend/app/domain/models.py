@@ -8,9 +8,23 @@ cambiar el modelo (abierto a extensión).
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
+
+
+class Persona(BaseModel):
+    """Persona asignada a un work item (``IdentityRef`` de Azure).
+
+    ``guid`` es el identificador estable: los ``nombre`` cambian cuando alguien
+    se renombra o cambia de cuenta, el GUID no. Se filtra por GUID y se muestra
+    el nombre.
+    """
+
+    guid: str
+    nombre: str = ""
+    url: str = ""
 
 
 class WorkItemBase(BaseModel):
@@ -19,6 +33,10 @@ class WorkItemBase(BaseModel):
     ``tags`` es el texto crudo de ``System.Tags`` (Azure lo separa por ``;``).
     El backend lo expone para que la UI muestre el valor actual al editar; la
     normalización ocurre en el adaptador de escritura.
+
+    ``sprint`` guarda la ruta completa de iteración
+    (``Proyecto\\Sprint 35``) porque es lo que acepta el filtro WIQL de Azure.
+    ``asignado_a`` es ``None`` cuando el ítem no tiene responsable.
     """
 
     azure_id: int
@@ -27,6 +45,10 @@ class WorkItemBase(BaseModel):
     descripcion: str = ""
     url: str = ""
     tags: str = ""
+    sprint: str = ""
+    asignado_a: Optional[Persona] = None
+    creado: Optional[datetime] = None
+    modificado: Optional[datetime] = None
 
 
 class Task(WorkItemBase):
@@ -40,7 +62,6 @@ class Bug(WorkItemBase):
 
     prioridad: str = ""
     severidad: str = ""
-    asignado_a: str = ""
     relacion: str = "hierarchy"
     tareas: List[Task] = Field(default_factory=list)
 
