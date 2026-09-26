@@ -3,7 +3,7 @@
 > Estrategia y referencia de las suites del proyecto. Meta: **verificar
 > comportamiento sin depender de la red**, con la menor fricción posible.
 
-Estado actual: **Backend 102 pruebas ✓ · Frontend 82 pruebas ✓**
+Estado actual: **Backend 102 pruebas ✓ · Frontend 104 pruebas ✓**
 
 ---
 
@@ -90,14 +90,15 @@ Config en `vite.config.ts` (sección `test`): entorno `jsdom`, setup
 | `epicas/TableroTareas.test.tsx` | 9 | Aplanado, agrupación, filtros, tarjetas, tareas bajo bugs, enlaces sin descripción, colapso restaurable y estados vacíos |
 | `navegacion.test.tsx` | 4 | `parsearHash` estricto (incluidas `epicaTareas` y `epicaBugs`), `enlaceA` y `useVista` |
 | `componentes/ContenidoRico.test.tsx` | 8 | Sanitización de scripts, handlers, estilos, protocolos peligrosos, etiquetas activas/recursos y render seguro |
-| `pages/Dashboard.test.tsx` | 2 | KPIs normalizados y estado de carga del listado |
+| `pages/Dashboard.test.tsx` | 8 | KPIs normalizados, estado de carga del listado y **buscador**: filtrado local sin peticiones extra, búsqueda por ID, resaltado, aviso sin coincidencias, contador «N de M», botón de limpieza y tecla `Escape` |
+| `epicas/busquedaEpicas.test.tsx` | 16 | Lógica pura del buscador: normalización sin acentos ni mayúsculas, coincidencia por título/ID/estado, AND de términos, lista vacía, no mutación del original y `resaltar` con metacaracteres de expresiones regulares |
 | `api/cliente.test.ts` | 3 | Validación runtime del contrato, bugs/métricas y propagación de `AbortSignal` |
 | `epicas/TableroBugs.test.tsx` | 5 | Filtros de severidad, tarjetas sanitizadas, apertura del formulario QA, alternancia de tags, aviso de solo lectura y envío del PATCH con los campos tocados |
 | `epicas/PaginaBugs.test.tsx` | 1 | Carga de métricas y tablero de bugs |
 | `epicas/EdicionInline.test.tsx` | 11 | Solo emite campos modificados, no guarda sin cambios, alterna tags QA, valida sin guardar, notas QA separadas, error de mutación, estado guardando, aviso de solo lectura y selector de estados |
 | `epicas/edicionHistoriasTareas.test.tsx` | 10 | **Fase 5**: edición QA en historias y tareas, ocultación de prioridad/severidad donde Azure no las soporta, tags precargados, desplegable de estados, PATCH con solo campos modificados, dry-run y avisos de solo lectura |
 
-**Total: 82 en el frontend (15 archivos) y 102 en el backend.**
+**Total: 104 en el frontend (17 archivos) y 102 en el backend.**
 
 ---
 

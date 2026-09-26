@@ -16,6 +16,10 @@
 - Se incorporó el grafo de bugs: `Bug` puede ser hijo de una HU y padre de
   tareas; también se cargan asociaciones `Related` de un salto. La API ofrece
   `incluir_bugs` y un endpoint de métricas.
+- Se añadió **buscador de épicas** al dashboard: filtrado local por título, ID
+  y estado, tolerante a acentos y mayúsculas, con resaltado `<mark>`, contador
+  de resultados, atajo `/` y limpieza con `Escape`. No genera peticiones a
+  Azure: opera sobre la lista ya cargada.
 - Se sustituyeron los enlaces sueltos por una **barra de navegación global**
   (`NavegacionGlobal`) presente en todas las páginas: acceso a épica,
   historias, tareas y bugs con `aria-current`, refresco global, salud y API.
@@ -110,7 +114,7 @@ run.py → app.main:app
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
 | Backend pytest | **102 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
-| Frontend Vitest | **82 passed / 15 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs y sanitización. |
+| Frontend Vitest | **104 passed / 17 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs y sanitización. |
 | Frontend build | **PASS** | `tsc -b` y `vite build`; bundle generado correctamente. |
 | `pip check` | **PASS** | No hay requisitos Python rotos en el entorno auditado. |
 | `pip-audit --local` | **PASS** | Sin vulnerabilidades conocidas en el lockfile instalado. |
@@ -151,7 +155,7 @@ La auditoría original de `npm audit` reportó:
   dependencia vulnerable de `esbuild`.
 
 El riesgo principal estaba en el servidor de desarrollo y el tooling de
-pruebas. La actualización se validó con las 102 y 82 pruebas y el build actuales;
+pruebas. La actualización se validó con las 102 y 104 pruebas y el build actuales;
 el servidor de Vite debe seguir enlazado a loopback.
 
 #### AUD-02 — BFS falla si Azure omite una relación hija

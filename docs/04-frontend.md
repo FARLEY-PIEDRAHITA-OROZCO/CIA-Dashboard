@@ -50,6 +50,8 @@ frontend/src/
 │   ├── hooks.ts              # React Query hooks (estado, lista, árbol, refresh)
 │   ├── TablaEpicas.tsx       # tabla de épicas
 │   ├── FilaEpica.tsx         # fila expandible que carga el árbol
+│   ├── BuscadorEpicas.tsx    # campo de búsqueda del dashboard (presentacional)
+│   ├── busquedaEpicas.tsx    # lógica pura de coincidencia y resaltado
 │   ├── DetalleEpica.tsx      # resumen expandido: descripción + features + acceso a historias/tareas
 │   ├── TableroHistorias.tsx  # tablero de historias (cinturón, filtros, densidad)
 │   ├── PaginaEpica.tsx       # página dedicada `#/epicas/{id}` con el tablero completo
@@ -486,6 +488,52 @@ cierre automático del formulario al guardar.
 `TableroHistorias`, `TableroTareas` y `TableroBugs` aceptan
 `edicionHabilitada`, que `PaginaEpica` y `PaginaTareas` derivan de
 `useEstadoAzure().data.configurada`.
+
+---
+
+## 11.2 Buscador de épicas (`epicas/BuscadorEpicas.tsx` + `busquedaEpicas.tsx`)
+
+El dashboard filtra la tabla de épicas **localmente**: la lista ya está en
+memoria, así que buscar no genera peticiones a Azure (verificado en las
+pruebas: el número de llamadas a `fetch` no cambia al filtrar).
+
+| Archivo | Rol |
+| ------- | --- |
+| `busquedaEpicas.tsx` | Lógica pura: `normalizar`, `coincideEpica`, `filtrarEpicas`, `resaltar` |
+| `BuscadorEpicas.tsx` | Campo presentacional: input, botón «×», contador y atajo `/` |
+
+### Coincidencia
+
+- **Campos**: título, ID de Azure y estado.
+- **Sin sensibilidad a mayúsculas ni acentos**: `migracion` encuentra
+  «Migración».
+- **Por términos (AND)**: `canal digital` encuentra «Canal digital» pero no
+  «Canal móvil». Varios términos acortan la búsqueda en lugar de ampliarla.
+- **Espacios colapsados**: `normalizar` reduce cualquier secuencia de espacios a
+  una, así que el usuario puede escribir con comas dobles sin penalizar.
+
+### Resaltado
+
+`resaltar(texto, consulta, clave)` divide el texto con una expresión regular
+escapada y envuelve la coincidencia en `<mark>`, evitando construir HTML a mano
+o usar `dangerouslySetInnerHTML`.
+
+El resaltado es **literal** (sin acentos) mientras que el filtrado sí los tolera.
+Es deliberado: resaltar sobre el texto normalizado desplazaría los índices al
+cambiar la longitud de la cadena. Un usuario que escribe con tildes encuentra la
+épica en la lista aunque el resaltado no aparezca.
+
+### Uso
+
+- `Escape` limpia el campo; `/` lo enfoca desde cualquier punto de la página.
+- `aria-controls` apunta al contenedor de resultados y un `<output
+  aria-live="polite">` anuncia «N de M» al filtrar.
+- El botón «×» solo aparece con texto y devuelve el foco al campo.
+- Sin coincidencias se muestra un aviso distinto del de «Azure no devolvió
+  épicas», para no confundir un filtro con un fallo de datos.
+
+Los KPIs siguen calculándose sobre **todas** las épicas, no sobre el resultado
+filtrado: describen el backlog completo, no la búsqueda actual.
 
 ---
 

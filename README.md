@@ -1,8 +1,10 @@
 # CIA — Dashboard de Épicas (Azure DevOps)
 
-Dashboard de **solo lectura** que extrae del backlog de **Azure DevOps** las
+Dashboard de **solo lectura** (con escritura QA opt-in) que extrae del backlog
+de **Azure DevOps** las
 épicas del proyecto configurado y las presenta
-con cuatro vistas: **tabla de épicas** (KPIs, filtro de cerradas y drill-down
+con cuatro vistas: **tabla de épicas** (KPIs, buscador tolerante a acentos,
+filtro de cerradas y drill-down
 que muestra sus **Features**), y **página dedicada por épica** con un
 **tablero de historias por estado** (cinturón de estados, buscador, filtros
 por feature y densidad ajustable). Cada épica ofrece además páginas dedicadas
@@ -41,7 +43,7 @@ integración Azure, seguridad, pruebas, despliegue y guías de extensión).
 | ---- | ---------- | --------- |
 | Backend | Python 3.14 · FastAPI · httpx · pydantic-settings | `backend/` |
 | Frontend | React 18 · TypeScript · Vite · TanStack Query · DOMPurify | `frontend/` |
-| Pruebas | pytest (102) · Vitest + Testing Library (58) | `backend/tests/` · `frontend/src/**/*.test.tsx` |
+| Pruebas | pytest (102) · Vitest + Testing Library (104) | `backend/tests/` · `frontend/src/**/*.test.tsx` |
 
 ## Puesta en marcha rápida
 
@@ -154,7 +156,7 @@ Ejemplos y contratos en [03-api.md](docs/03-api.md).
 cd backend
 .\.venv\Scripts\python.exe -m pytest
 
-# Frontend (82): badges, tablas, tableros, rutas, bugs, navegación global, API, Dashboard y sanitización
+# Frontend (104): badges, tablas, tableros, rutas, bugs, navegación global, API, Dashboard y sanitización
 cd ..\frontend
 npm.cmd test
 npm.cmd run build
