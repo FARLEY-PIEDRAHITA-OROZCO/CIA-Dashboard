@@ -19,16 +19,11 @@ AHORA = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
 
 
 class _RepoFalso(FakeRepositorio):
-    """Repositorio que cuenta las llamadas a `listar_work_items`."""
+    """Alias del doble compartido, que ya cuenta las llamadas al índice."""
 
-    def __init__(self, items) -> None:
-        super().__init__()
-        self._items = items
-        self.llamadas = 0
-
-    async def listar_work_items(self, tipos=None) -> list[ItemIndice]:
-        self.llamadas += 1
-        return list(self._items)
+    @property
+    def llamadas(self) -> int:
+        return self.llamadas_indice
 
 
 def item(
@@ -57,7 +52,7 @@ def item(
 
 
 def indice(items, ttl: float = 120.0):
-    repo = _RepoFalso(items)
+    repo = _RepoFalso(items_indice=items)
     cache = CacheMemoria()
     return IndiceWorkItems(repo, cache, ttl_seg=ttl), repo, cache
 

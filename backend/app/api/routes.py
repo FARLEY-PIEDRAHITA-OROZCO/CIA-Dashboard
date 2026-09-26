@@ -10,6 +10,7 @@ from ..domain.models import Epic
 from ..infrastructure.azure.transport import AzureError
 from .deps import IndiceDep, ServicioDep
 from .schemas import (
+    BrechaVerificacion,
     DetalleBugs,
     EpicaResumen,
     EstadoAzure,
@@ -21,8 +22,10 @@ from .schemas import (
     ListaSprints,
     Mensaje,
     PersonaOut,
+    RezagoEntreSprints,
     ResultadoEscritura,
     SprintOut,
+    TrabajoEstancado,
     a_resumen,
 )
 from ..domain.models import ActualizacionQA
@@ -183,6 +186,63 @@ async def api_items(
         total=len(ordenados),
         sprint_actual=await indice.sprint_actual() or "",
     )
+
+
+# ---------------------------------------------------------------------- #
+# Analítica QA: señales diferenciales frente a Azure (Fase 4)
+# ---------------------------------------------------------------------- #
+@router.get(
+    "/api/analitica/verificacion",
+    response_model=BrechaVerificacion,
+    tags=["Analitica"],
+)
+async def api_analitica_verificacion(
+    servicio: ServicioDep, indice: IndiceDep
+) -> BrechaVerificacion:
+    """Señal ①: qué se cerró sin evidencia de verificación QA.
+
+    Azure no tiene el concepto de «verificado por QA»: obtenerlo allí exige
+    cinco queries manuales. Aquí se cruza el estado con la etiqueta
+    `verificado-qa` que el propio sistema escribe.
+    """
+    _requiere_configuracion(servicio)
+    return BrechaVerificacion(**await indice.brecha_de_verificacion())
+
+
+@router.get(
+    "/api/analitica/aging", response_model=TrabajoEstancado, tags=["Analitica"]
+)
+async def api_analitica_aging(
+    servicio: ServicioDep,
+    indice: IndiceDep,
+    dias_inactivo: int = 14,
+    dias_en_curso: int = 30,
+) -> TrabajoEstancado:
+    """Señal ②: ítems abiertos que llevan demasiado tiempo sin moverse."""
+    _requiere_configuracion(servicio)
+    return TrabajoEstancado(
+        **await indice.trabajo_estancado(
+            dias_inactivo=max(1, min(dias_inactivo, 365)),
+            dias_en_curso=max(1, min(dias_en_curso, 365)),
+        )
+    )
+
+
+@router.get(
+    "/api/analitica/rezago",
+    response_model=RezagoEntreSprints,
+    tags=["Analitica"],
+)
+async def api_analitica_rezago(
+    servicio: ServicioDep, indice: IndiceDep
+) -> RezagoEntreSprints:
+    """Señal ③: deuda que cada sprint anterior dejó sin cerrar.
+
+    Azure guarda un único sprint por ítem, así que este trabajo no es visible
+    en su tablero de sprint.
+    """
+    _requiere_configuracion(servicio)
+    return RezagoEntreSprints(**await indice.rezago_entre_sprints())
 
 
 @router.post("/api/epics/refresh", response_model=Mensaje, tags=["Epicas"])

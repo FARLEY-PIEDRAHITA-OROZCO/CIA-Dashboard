@@ -9,7 +9,7 @@ from app.application.indice import IndiceWorkItems
 from app.application.services import ServicioBacklog
 from app.config import Settings
 from app.core.container import Contenedor
-from app.domain.models import Bug, Epic, Feature, Task, UserStory
+from app.domain.models import Bug, Epic, Feature, ItemIndice, Task, UserStory
 from app.main import crear_app
 
 
@@ -168,9 +168,16 @@ def epica_con_bug_en_feature() -> Epic:
 class FakeRepositorio:
     """Implementación del puerto `RepositorioBacklogPort` en memoria."""
 
-    def __init__(self, epicas: Optional[List[Epic]] = None, arbol: Optional[Epic] = None) -> None:
+    def __init__(
+        self,
+        epicas: Optional[List[Epic]] = None,
+        arbol: Optional[Epic] = None,
+        items_indice: Optional[List["ItemIndice"]] = None,
+    ) -> None:
         self.epicas = epicas or []
         self.arbol = arbol
+        self.items_indice = items_indice or []
+        self.llamadas_indice = 0
         self.sintoma = None  # excepción opcional para simular fallos
 
     async def verificar_proyecto(self) -> Dict[str, str]:
@@ -189,6 +196,13 @@ class FakeRepositorio:
         if self.arbol and self.arbol.azure_id == epic_id:
             return self.arbol
         return None
+
+    async def listar_work_items(self, tipos=None) -> List["ItemIndice"]:
+        """Proyección plana del índice; cuenta llamadas para probar la caché."""
+        if self.sintoma:
+            raise self.sintoma
+        self.llamadas_indice += 1
+        return list(self.items_indice)
 
 
 class FakeEscritura:

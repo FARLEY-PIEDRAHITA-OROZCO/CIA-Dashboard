@@ -20,7 +20,7 @@ de Azure ni HTTP. Traducir el JSON de Azure es tarea del repositorio.
 import asyncio
 import logging
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 from ..domain.models import ItemIndice
@@ -137,6 +137,7 @@ class IndiceWorkItems:
         cerrados: Counter[str] = Counter()
         personas: dict[str, set[str]] = {}
         ultima: dict[str, datetime] = {}
+        rutas: dict[str, str] = {}
 
         for item in items:
             ruta = item.sprint
@@ -146,6 +147,7 @@ class IndiceWorkItems:
             if not hoja:
                 continue
             conteo[hoja] += 1
+            rutas[hoja] = ruta
             if item.cerrado:
                 cerrados[hoja] += 1
             if item.persona:
@@ -157,6 +159,9 @@ class IndiceWorkItems:
         return [
             {
                 "nombre": hoja,
+                # Ruta completa: es lo que acepta el filtro de `filtrar()` y lo
+                # que la UI necesita para consultar `/api/items?sprint=…`.
+                "ruta": rutas[hoja],
                 "total": conteo[hoja],
                 "cerrados": cerrados[hoja],
                 "abiertos": conteo[hoja] - cerrados[hoja],
@@ -225,12 +230,157 @@ class IndiceWorkItems:
                 return fila
         return None
 
+    # ------------------------------------------------------------------ #
+    # Señales diferenciales (§6 del plan)
+    # ------------------------------------------------------------------ #
+    async def brecha_de_verificacion(self) -> Dict[str, Any]:
+        """Señal ①: qué se cerró o terminó **sin** evidencia de QA.
+
+        Azure no tiene el concepto de «verificado por QA»: Getting estos datos
+        exigiría cinco queries manuales que hay que construir y recordar. Aquí
+        se cruza el estado con la etiqueta que el propio sistema escribe al
+        verificar, sobre el índice local (los tags no se pueden filtrar en
+        Azure: `CONTAINS` devuelve 0).
+        """
+        ahora = datetime.now(timezone.utc)
+        cerrados_sin_verificar: list[ItemIndice] = []
+        verificados_sin_cerrar: list[ItemIndice] = []
+        terminados_sin_evidencia: list[ItemIndice] = []
+        bugs = historias = 0
+        verificados = 0
+
+        for item in await self._cargar():
+            marcado = _tiene(item, TAG_VERIFICADO)
+            if marcado:
+                verificados += 1
+            if item.tipo == "Bug":
+                bugs += 1
+                if item.cerrado and not marcado:
+                    cerrados_sin_verificar.append(item)
+                if marcado and not item.cerrado:
+                    verificados_sin_cerrar.append(item)
+            if item.tipo == "User Story":
+                historias += 1
+                # La evidencia es la etiqueta `verificado-qa`. Las notas de QA
+                # viven en la descripción, que el índice no carga por peso:
+                # se evita fingir que se pueden detectar aquí. Indexar
+                # descripciones es una mejora futura, no un atajo.
+                if item.cerrado and not marcado:
+                    terminados_sin_evidencia.append(item)
+
+        return {
+            "resumen": {
+                "bugs": bugs,
+                "bugs_cerrados_sin_verificar": len(cerrados_sin_verificar),
+                "bugs_verificados_sin_cerrar": len(verificados_sin_cerrar),
+                "historias": historias,
+                "historias_sin_evidencia": len(terminados_sin_evidencia),
+                "verificados": verificados,
+                "generado": ahora.isoformat(),
+            },
+            "cerrados_sin_verificar": _muestra(cerrados_sin_verificar),
+            "verificados_sin_cerrar": _muestra(verificados_sin_cerrar),
+            "historias_sin_evidencia": _muestra(terminados_sin_evidencia),
+        }
+
+    async def trabajo_estancado(
+        self, *, dias_inactivo: int = 14, dias_en_curso: int = 30
+    ) -> Dict[str, Any]:
+        """Señal ②: ítems que llevan demasiado tiempo sin moverse.
+
+        Se apoya en `System.ChangedDate`, que está poblado en el 100 % de
+        tareas, historias y bugs del proyecto (medido).
+        """
+        ahora = datetime.now(timezone.utc)
+        inactivo_desde = ahora - timedelta(days=dias_inactivo)
+        en_curso_desde = ahora - timedelta(days=dias_en_curso)
+        inactivos: list[ItemIndice] = []
+        en_curso: list[ItemIndice] = []
+        for item in await self._cargar():
+            if item.cerrado:
+                continue
+            referencia = item.modificado or item.creado
+            if referencia is None:
+                continue
+            if referencia < en_curso_desde:
+                en_curso.append(item)
+            elif referencia < inactivo_desde:
+                inactivos.append(item)
+        return {
+            "resumen": {
+                "inactivos": len(inactivos),
+                "en_curso": len(en_curso),
+                "dias_inactivo": dias_inactivo,
+                "dias_en_curso": dias_en_curso,
+                "generado": ahora.isoformat(),
+            },
+            "inactivos": _muestra(inactivos),
+            "en_curso": _muestra(en_curso),
+        }
+
+    async def rezago_entre_sprints(self) -> Dict[str, Any]:
+        """Señal ③: ítems de sprints antiguos que siguen abiertos.
+
+        Azure guarda un único sprint por ítem (el actual), así que el trabajo
+        que se quedó atrás queda oculto en el board. Ordenando los sprints por
+        número, aquí se expone qué deuda arrastra cada sprint.
+        """
+        catalogo = await self.sprints()
+        if not catalogo:
+            return {"resumen": {"sprints": 0, "rezagados": 0, "generado": ""}, "sprints": []}
+        # El sprint más avanzado es la referencia: lo anterior es histórico.
+        referencia = catalogo[-1]["nombre"]
+        rezagados_por_sprint: dict[str, list[ItemIndice]] = {}
+        for sprint in catalogo[:-1]:
+            pendientes = [
+                item
+                for item in await self.filtrar(sprint=sprint["ruta"], solo_abiertos=True)
+            ]
+            # `sprint` se indexa por la ruta completa, no por el nombre.
+            if pendientes:
+                rezagados_por_sprint[sprint["nombre"]] = pendientes
+        filas = [
+            {
+                "sprint": nombre,
+                "abiertos": len(pendientes),
+                "items": _muestra(pendientes),
+            }
+            for nombre, pendientes in rezagados_por_sprint.items()
+        ]
+        filas.sort(key=lambda f: f["abiertos"], reverse=True)
+        return {
+            "resumen": {
+                "sprints": len(catalogo),
+                "sprint_referencia": referencia,
+                "sprints_con_rezago": len(filas),
+                "rezagados": sum(f["abiertos"] for f in filas),
+                "generado": datetime.now(timezone.utc).isoformat(),
+            },
+            "sprints": filas,
+        }
+
 
 # --------------------------------------------------------------------- #
 # Utilidades puras
 # --------------------------------------------------------------------- #
 def _tiene(item: ItemIndice, etiqueta: str) -> bool:
     return etiqueta.lower() in [t.lower() for t in item.etiquetas]
+
+
+def _muestra(items: List[ItemIndice], limite: int = 50) -> List[Dict[str, Any]]:
+    """Proyección ligera para la UI: sin modelos pesados ni listas anidadas."""
+    return [
+        {
+            "azure_id": i.azure_id,
+            "tipo": i.tipo,
+            "titulo": i.titulo,
+            "estado": i.estado,
+            "sprint": nombre_sprint(i.sprint),
+            "persona": i.persona.nombre if i.persona else "",
+            "modificado": i.modificado.isoformat() if i.modificado else "",
+        }
+        for i in items[:limite]
+    ]
 
 
 def _coincide_persona(item: ItemIndice, objetivo: str) -> bool:
