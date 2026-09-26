@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { EstadoTrabajo, tonoEstado } from "../componentes/EstadoTrabajo";
 import { Kpi } from "../componentes/Kpi";
 import { CajaVacia, Cargando, ErrorAlerta } from "../componentes/retroalimentacion";
-import { TablaEpicas, useEpicas, useEstadoAzure } from "../epicas";
+import { BuscadorEpicas, filtrarEpicas, TablaEpicas, useEpicas, useEstadoAzure } from "../epicas";
 
 const ORDEN_ESTADOS = [
   "in progress",
@@ -36,10 +36,16 @@ export default function Dashboard() {
   const configurado = Boolean(estadoIntegracion.data?.configurada);
   const [incluirCerradas, setIncluirCerradas] = useState(false);
   const epicasQ = useEpicas(configurado, incluirCerradas);
+  const [consulta, setConsulta] = useState("");
 
   const [expandidas, setExpandidas] = useState<ReadonlySet<number>>(new Set());
 
   const epicas = epicasQ.data?.epicas ?? [];
+  // El filtrado es local: la lista ya está en memoria, así que buscar no
+  // genera peticiones a Azure.
+  const epicasFiltradas = useMemo(() => filtrarEpicas(epicas, consulta), [epicas, consulta]);
+  const hayConsulta = consulta.trim() !== "";
+  const sinCoincidencias = hayConsulta && epicasFiltradas.length === 0;
   const porEstado = useMemo(() => resumenPorEstado(epicas), [epicas]);
   const enProgreso = useMemo(
     () => epicas.filter((epica) => tonoEstado(epica.estado) === "progreso").length,
@@ -145,7 +151,28 @@ export default function Dashboard() {
               Pulsa «Explorar» en una épica para ver sus Features y User Stories.
             </span>
           </div>
-          <TablaEpicas epicas={epicas} expandidas={expandidas} onAlternar={alternar} />
+
+          <BuscadorEpicas
+            consulta={consulta}
+            onCambio={setConsulta}
+            resultados={epicasFiltradas.length}
+            total={epicas.length}
+          />
+
+          {sinCoincidencias ? (
+            <CajaVacia
+              mensaje={`Ninguna épica coincide con «${consulta.trim()}». Prueba con menos términos o revisa la ortografía.`}
+            />
+          ) : (
+            <div id="resultados-busqueda">
+              <TablaEpicas
+                epicas={epicasFiltradas}
+                expandidas={expandidas}
+                onAlternar={alternar}
+                consulta={consulta}
+              />
+            </div>
+          )}
         </div>
       ) : (
         configurado &&

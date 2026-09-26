@@ -403,6 +403,37 @@ code {
 }
 
 /* ------------------------------------------------------------------ */
+/* Buscador de épicas                                                  */
+/* ------------------------------------------------------------------ */
+.buscador-epicas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 8px 10px;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.buscador-epicas .buscador {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.buscador-epicas output {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabla mark {
+  background: #fef08a;
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+/* ------------------------------------------------------------------ */
 /* Edición QA (ADR-11)                                                 */
 /* ------------------------------------------------------------------ */
 .edicion {

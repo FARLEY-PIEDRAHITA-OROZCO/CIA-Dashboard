@@ -4,6 +4,8 @@ export { DetalleEpica } from "./DetalleEpica";
 export { PaginaBugs } from "./PaginaBugs";
 export { PaginaEpica } from "./PaginaEpica";
 export { PaginaTareas } from "./PaginaTareas";
+export { BuscadorEpicas } from "./BuscadorEpicas";
+export { coincideEpica, filtrarEpicas, normalizar, resaltar } from "./busquedaEpicas";
 export { EdicionInline, TAGS_QA } from "./EdicionInline";
 export type { PropsEdicion } from "./EdicionInline";
 export { TableroBugs } from "./TableroBugs";
