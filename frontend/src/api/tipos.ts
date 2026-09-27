@@ -129,6 +129,10 @@ export interface ListaSprints {
   total: number;
   /** Sprint con el cambio más reciente (heurística D9). */
   sprint_actual: string;
+  /** Ítems del índice local, incluidos los que no tienen sprint asignable. */
+  total_items: number;
+  /** Ítems que sí están en algún sprint. */
+  asignados_a_sprint: number;
 }
 
 export interface PersonaCarga {

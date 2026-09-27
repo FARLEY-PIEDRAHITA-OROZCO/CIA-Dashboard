@@ -129,8 +129,8 @@ class IndiceWorkItems:
         """Catálogo de sprints con conteos, ordenado de forma tolerante.
 
         Se excluye la raíz de la jerarquía de iteración (épicas y features
-        apuntan ahí, no a un sprint real) usando la ruta más corta presente en
-        los datos: no depende del ``AreaPath`` configurado.
+        apuntan ahí, no a un sprint real) usando la ruta que es prefijo de
+        otras.
         """
         items = await self._cargar()
         raiz = _raiz_iteracion(items)

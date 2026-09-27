@@ -1,17 +1,26 @@
-/** Vista de sprints (`#/sprints`): catálogo + filtros combinables.
+/** Vista de sprints (`#/sprints`): veredicto, cinta y filtros combinables.
+ *
+ * La estructura es de **tres niveles de revelado**, no una pantalla con todo
+ * desplegado a la vez:
+ *
+ * 1. Veredicto + cinta. Es lo que se ve al abrir: una frase y la secuencia de
+ *    sprints. Antes eran 4 tarjetas de KPIs que mostraban las mismas constantes
+ *    haya cual fuera el filtro, más una tabla de 37 filas y otra de 200.
+ * 2. Detalle: los ítems del sprint o la persona elegidos. Con filtros aparece
+ *    al instante; sin ellos, bajo demanda, porque el estado por defecto son
+ *    miles de filas y nadie las ha pedido.
+ * 3. Ficha del ítem: ya existe en la vista de épica.
  *
  * Los filtros y la hoja viven en el hash (ver `navegacion.ts`), no en estado
  * local: una URL filtrada se puede compartir sin recurrir a las queries
- * guardadas de Azure DevOps. Cada cambio reescribe el hash, así que el botón
- * atrás del navegador recorre filtros y páginas.
+ * guardadas de Azure DevOps.
  *
  * Todos los datos salen del índice local del backend: cambiar un filtro **no**
  * genera peticiones a Azure DevOps.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Kpi } from "../componentes/Kpi";
 import { CajaVacia, Cargando, ErrorAlerta } from "../componentes/retroalimentacion";
 import { useItems, usePersonas, useSprints } from "../epicas/hooks";
 import {
@@ -23,22 +32,42 @@ import {
   TIPOS_INDICE,
 } from "../navegacion";
 import type { FiltrosSprint } from "../navegacion";
+import { CintaSprints } from "./CintaSprints";
+import { construirCinta } from "./cinta";
+import { Embudo } from "./Embudo";
+import type { FiltroActivo } from "./Embudo";
+import { LineaVeredicto } from "./LineaVeredicto";
 import { Paginacion } from "./Paginacion";
 import { TablaItems } from "./TablaItems";
-import { TablaSprints } from "./TablaSprints";
-import { antiguedadLegible, resumenFiltros } from "./fechas";
+import { veredictoFiltrado, veredictoSprint } from "./veredicto";
+import { resumenFiltros } from "./fechas";
 
 /** Espera antes de escribir el texto de persona en la URL. */
 const ESPERA_ESCRITURA_MS = 300;
 
+/** Etiquetas legibles de cada filtro activo, para el embudo. */
+const ETIQUETAS: Record<keyof FiltrosSprint, (valor: string) => string> = {
+  sprint: (v) => `Sprint ${v.split("\\").pop() ?? v}`,
+  persona: (v) => `Persona: ${v}`,
+  tipo: (v) => `Tipo: ${v}`,
+  etiqueta: (v) => `Etiqueta: ${v}`,
+  soloAbiertos: () => "Solo abiertos",
+};
+
 export function PaginaSprints({
   filtros,
   hoja = 1,
+  desplegado = false,
   esperaMs = ESPERA_ESCRITURA_MS,
 }: {
   filtros: FiltrosSprint;
   /** Hoja 1-based leída del hash. */
   hoja?: number;
+  /**
+   * Muestra los ítems aunque no haya filtros. Viaja en el hash
+   * (`&desplegado=1`) para que la decisión sea compartible.
+   */
+  desplegado?: boolean;
   /**
    * Retardo de escritura del texto libre. Es inyectable porque es un parámetro
    * de temporización: las pruebas necesitan controlarlo para comprobar que no
@@ -49,7 +78,15 @@ export function PaginaSprints({
 }) {
   const sprints = useSprints();
   const personas = usePersonas();
-  const items = useItems({ ...filtros, offset: hojaAOffset(hoja), limite: ITEMS_POR_PAGINA });
+
+  const hayFiltros = contarFiltros(filtros) > 0;
+  // Sin filtros y sin pedido explícito no se descargan 200 filas que nadie ha
+  // pedido. `enabled` evita la petición; el total del veredicto sale de
+  // `/api/sprints`, que ya está cargado para dibujar la cinta.
+  const items = useItems(
+    { ...filtros, offset: hojaAOffset(hoja), limite: ITEMS_POR_PAGINA },
+    hayFiltros || desplegado,
+  );
 
   const [textoPersona, setTextoPersona] = useState(filtros.persona ?? "");
 
@@ -64,8 +101,9 @@ export function PaginaSprints({
         }
       }
       // Cambiar un filtro vuelve a la primera hoja: quedarse en la 7 con un
-      // filtro nuevo mostraría una lista vacía sin explicación.
-      irA({ pagina: "sprints", filtros: siguiente, hoja: 1 });
+      // filtro nuevo mostraría una lista vacía sin explicación. Y el revelado
+      // manual se pierde: con filtro, el detalle se muestra igual.
+      irA({ pagina: "sprints", filtros: siguiente, hoja: 1, desplegado: false });
     },
     [filtros],
   );
@@ -99,10 +137,26 @@ export function PaginaSprints({
   }
 
   const cat = sprints.data;
-  const activo = filtros.sprint
-    ? cat?.sprints.find((s) => s.ruta === filtros.sprint || s.nombre === filtros.sprint)
-    : undefined;
-  const nFiltros = contarFiltros(filtros);
+  const cinta = useMemo(
+    () => construirCinta(cat?.sprints ?? [], cat?.sprint_actual ?? ""),
+    [cat],
+  );
+  const activo = useMemo(
+    () =>
+      filtros.sprint
+        ? cat?.sprints.find((s) => s.ruta === filtros.sprint || s.nombre === filtros.sprint)
+        : undefined,
+    [cat, filtros.sprint],
+  );
+
+  const activos: FiltroActivo[] = [];
+  for (const clave of Object.keys(ETIQUETAS) as (keyof FiltrosSprint)[]) {
+    const valor = filtros[clave];
+    if (valor !== undefined && valor !== "" && valor !== false) {
+      activos.push({ clave, etiqueta: ETIQUETAS[clave](String(valor)) });
+    }
+  }
+
   const cargandoInicial = sprints.isPending && !cat;
   const errorSprints = sprints.error
     ? sprints.error instanceof Error
@@ -110,15 +164,30 @@ export function PaginaSprints({
       : String(sprints.error)
     : "";
 
+  // Total del proyecto: el que dice el backend, no la suma de la cinta. Son
+  // distintos porque hay ítems sin sprint asignable.
+  const veredicto = activo
+    ? veredictoSprint(
+        activo,
+        cinta.columnas.some((c) => c.actual && c.ruta === activo.ruta),
+      )
+    : veredictoFiltrado(
+        cat ?? { sprints: [], total: 0, sprint_actual: "", total_items: 0, asignados_a_sprint: 0 },
+        personas.data?.personas ?? [],
+        filtros,
+        hayFiltros ? (items.data?.total ?? 0) : (cat?.total_items ?? 0),
+        nombresPersona,
+      );
+
   return (
     <div className="pagina">
       <header className="cabecera-pagina">
         <div>
           <h1 tabIndex={-1}>Sprints y responsables</h1>
           <p className="texto-suave">
-            Catálogo derivado de los work items del proyecto. Los filtros se
-            aplican en el índice local del backend, sin volver a consultar Azure
-            DevOps.
+            Cada columna es un sprint: la altura es su volumen, el relleno su
+            cierre y la marca naranja lo que dejó sin cerrar. Pulsa una columna
+            para ver sus ítems.
           </p>
         </div>
       </header>
@@ -131,43 +200,32 @@ export function PaginaSprints({
         <CajaVacia mensaje="No se detectó ningún sprint en el proyecto." />
       ) : (
         <>
-          <section className="kpis" aria-label="Resumen de sprints">
-            <Kpi etiqueta="Sprints" valor={cat.total} tono="acento" />
-            <Kpi
-              etiqueta={activo ? `Ítems en ${activo.nombre}` : "Ítems indexados"}
-              valor={activo ? activo.total : (items.data?.total ?? 0)}
+          {/* ---------------- Nivel 1: veredicto ---------------- */}
+          <LineaVeredicto veredicto={veredicto} />
+
+          <section aria-label="Sprints en el tiempo">
+            <CintaSprints
+              columnas={cinta.columnas}
+              rutaActual={filtros.sprint ?? ""}
+              onElegir={(ruta) => cambiar({ sprint: ruta })}
             />
-            <Kpi
-              etiqueta={activo ? "Abiertos" : "Personas"}
-              valor={activo ? activo.abiertos : (personas.data?.total ?? 0)}
-              tono={activo && activo.abiertos > 0 ? "alerta" : "neutro"}
-            />
-            <Kpi
-              etiqueta="Sprint actual"
-              valor={<span style={{ fontSize: "1rem" }}>{cat.sprint_actual || "—"}</span>}
-              tono="ok"
-              titulo="Sprint con el cambio más reciente: sin fechas de calendario en Azure, es el último tocado"
-            />
+            <p className="texto-suave small">
+              {cinta.columnas.length} sprints ·{" "}
+              {cinta.columnas.find((c) => c.actual)?.nombre ?? "sin sprint actual"} es el
+              más reciente · {cinta.sprintsConRezago} con trabajo sin cerrar
+            </p>
           </section>
 
+          {/* ---------------- Filtros ---------------- */}
           <section className="panel" aria-label="Filtros">
+            <Embudo
+              filtros={activos}
+              onQuitar={(clave) => cambiar({ [clave]: undefined } as Partial<FiltrosSprint>)}
+              onLimpiarTodo={() =>
+                irA({ pagina: "sprints", filtros: {}, hoja: 1, desplegado: false })
+              }
+            />
             <div className="banda-filtros">
-              <label className="filtro-campo" htmlFor="f-sprint">
-                <span className="etiqueta-filtro">Sprint</span>
-                <select
-                  id="f-sprint"
-                  value={filtros.sprint ?? ""}
-                  onChange={(e) => cambiar({ sprint: e.target.value })}
-                >
-                  <option value="">Todos los sprints</option>
-                  {cat.sprints.map((s) => (
-                    <option key={s.ruta} value={s.ruta}>
-                      {s.nombre} ({s.total})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
               <label className="filtro-campo" htmlFor="f-persona">
                 <span className="etiqueta-filtro">Persona</span>
                 <select
@@ -234,35 +292,19 @@ export function PaginaSprints({
                 />
                 Solo abiertos
               </label>
-
-              {nFiltros > 0 && (
-                <button
-                  type="button"
-                  className="btn secundario small chip-limpiar"
-                  onClick={() => irA({ pagina: "sprints", filtros: {}, hoja: 1 })}
-                >
-                  Limpiar {nFiltros} filtro{nFiltros === 1 ? "" : "s"}
-                </button>
-              )}
             </div>
             <p className="texto-suave small mb-0">
               {resumenFiltros(filtros, cat.sprints, nombresPersona)}
-              {activo && ` · último cambio ${antiguedadLegible(activo.ultimo_cambio)}`}
             </p>
           </section>
 
-          <section aria-label="Catálogo de sprints">
-            <h2>Catálogo de sprints</h2>
-            <TablaSprints
-              sprints={cat.sprints}
-              rutaActual={filtros.sprint ?? ""}
-              onElegir={(ruta) => cambiar({ sprint: ruta })}
-            />
-          </section>
-
+          {/* ---------------- Nivel 2: detalle ---------------- */}
           <section aria-label="Ítems filtrados">
-            <h2>Ítems filtrados</h2>
-            {items.isPending ? (
+            {!hayFiltros && !desplegado ? (
+              <CajaVacia
+                mensaje="Elige un sprint en la cinta, una persona o un tipo para ver sus ítems. Sin filtros no se descargan miles de filas que nadie ha pedido."
+              />
+            ) : items.isPending ? (
               <Cargando texto="Aplicando filtros…" />
             ) : items.isError ? (
               <ErrorAlerta
@@ -291,8 +333,9 @@ export function PaginaSprints({
                   hoja={hoja}
                   total={items.data.total}
                   hayMas={items.data.hay_mas}
+                  // Al paginar el detalle ya está desplegado: se conserva.
                   onCambiar={(nueva) =>
-                    irA({ pagina: "sprints", filtros, hoja: nueva })
+                    irA({ pagina: "sprints", filtros, hoja: nueva, desplegado })
                   }
                 />
               </>

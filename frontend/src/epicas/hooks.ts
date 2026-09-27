@@ -46,10 +46,18 @@ export function usePersonas() {
   });
 }
 
-export function useItems(filtros: FiltrosItems) {
+/**
+ * Ítems del índice local, filtrados y paginados.
+ *
+ * `activo=false` no lanza la petición. Existe para el revelado progresivo de la
+ * vista de sprints: sin filtros son miles de filas y no se piden hasta que el
+ * usuario elige un sprint, una persona o un tipo.
+ */
+export function useItems(filtros: FiltrosItems, activo = true) {
   return useQuery({
     queryKey: CLAVES_QUERY.items(filtros),
     queryFn: ({ signal }) => api.items(filtros, signal),
+    enabled: activo,
     staleTime: 300_000,
   });
 }

@@ -91,6 +91,22 @@ def test_lista_sprints_con_conteos_y_actuales():
     assert cuerpo["sprint_actual"] == "Sprint 2"
 
 
+def test_distingue_el_total_del_indice_de_los_items_con_sprint():
+    """La suma de las columnas no es el total: hay ítems sin sprint.
+
+    Sin esto, la cinta parece cubrir el proyecto entero cuando en el proyecto
+    real 168 de 5.651 ítems no tienen sprint asignable.
+    """
+    cliente, _ = cliente_con()
+
+    cuerpo = cliente.get("/api/sprints").json()
+
+    # En la fixture: 6 ítems, 1 épica en la raíz (sin sprint real) y 5 con sprint.
+    assert cuerpo["total_items"] == 6
+    assert cuerpo["asignados_a_sprint"] == 5
+    assert cuerpo["total_items"] - cuerpo["asignados_a_sprint"] == 1
+
+
 def test_sprint_reporta_abiertos_cerrados_y_personas():
     cliente, _ = cliente_con()
 

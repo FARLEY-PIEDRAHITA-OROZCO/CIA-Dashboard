@@ -46,7 +46,11 @@ export default function App() {
         ) : vista.pagina === "epicaBugs" ? (
           <PaginaBugs key={vista.azureId} azureId={vista.azureId} />
         ) : vista.pagina === "sprints" ? (
-          <PaginaSprints filtros={vista.filtros} hoja={vista.hoja} />
+          <PaginaSprints
+            filtros={vista.filtros}
+            hoja={vista.hoja}
+            desplegado={vista.desplegado}
+          />
         ) : vista.pagina === "analitica" ? (
           <PaginaAnalitica />
         ) : (

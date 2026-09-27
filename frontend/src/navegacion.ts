@@ -3,14 +3,17 @@
  * - `#/epicas/{id}`            → página dedicada a las historias de la épica
  * - `#/epicas/{id}/tareas`     → tareas de la épica
  * - `#/epicas/{id}/bugs`       → bugs y métricas de la épica
- * - `#/sprints`                → catálogo de sprints
+ * - `#/sprints`                → cinta de sprints, sin el detalle desplegado
  * - `#/sprints?sprint=…&persona=…&tipo=…&soloAbiertos=1` → sprint filtrado
+ * - `#/sprints?pagina=3`        → tercera página del resultado
+ * - `#/sprints?desplegado=1`    → ver los ítems aunque no haya filtros
  * - `#/analitica`              → señales de analítica QA
  *
  * Los filtros de la vista de sprint viajan **en el hash**, no en estado local:
  * así una URL filtrada se puede compartir o marcar en el navegador, sin
- * depender de las queries guardadas de Azure DevOps. La página también viaja,
- * para que una URL compartida abra en el mismo punto de la lista.
+ * depender de las queries guardadas de Azure DevOps. La página y el estado de
+ * «detalle desplegado» también viajan, para que una URL compartida abra en el
+ * mismo punto y con el mismo nivel de detalle.
  */
 
 import { useEffect, useReducer } from "react";
@@ -28,7 +31,7 @@ export interface FiltrosSprint {
 
 export const FILTROS_VACIOS: FiltrosSprint = {};
 
-/** Tipos offered por los filtros; el primero es el que más abunda. */
+/** Tipos ofrecidos por el filtro; el primero es el que más abunda. */
 export const TIPOS_INDICE = ["Task", "User Story", "Bug", "Issue"] as const;
 
 export type Destino =
@@ -36,10 +39,11 @@ export type Destino =
   | { pagina: "epica"; azureId: number }
   | { pagina: "epicaTareas"; azureId: number }
   | { pagina: "epicaBugs"; azureId: number }
-  // `hoja` (1-based) va aparte de los filtros: no cuenta como filtro activo y
-  // se reinicia a 1 al cambiar cualquier filtro, que es lo que espera quien
-  // acaba de escribir en el buscador.
-  | { pagina: "sprints"; filtros: FiltrosSprint; hoja: number }
+  // `hoja` (1-based) y `desplegado` van aparte de los filtros: ninguno cuenta
+  // como filtro activo, y `hoja` se reinicia a 1 al cambiar cualquier filtro,
+  // que es lo que espera quien acaba de escribir en el buscador. `desplegado`
+  // controla el revelado progresivo de la tabla de ítems.
+  | { pagina: "sprints"; filtros: FiltrosSprint; hoja: number; desplegado: boolean }
   | { pagina: "analitica" };
 
 /** Tamaño de página de la tabla de ítems (coincide con el tope del backend). */
@@ -87,6 +91,12 @@ function leerHoja(busca: URLSearchParams): number {
   return crudo;
 }
 
+/** ¿El detalle está desplegado aunque no haya filtros? Igual que `soloAbiertos`. */
+function leerDesplegado(busca: URLSearchParams): boolean {
+  const valor = busca.get("desplegado");
+  return valor === "1" || valor === "true";
+}
+
 export function parsearHash(hash: string): Destino {
   // La query del hash va tras «?»; se separa antes de trocear los segmentos
   // para que `sprint=Sprint 1` no se confunda con un segmento de ruta.
@@ -103,6 +113,7 @@ export function parsearHash(hash: string): Destino {
       pagina: "sprints",
       filtros: leerFiltros(query),
       hoja: leerHoja(busca),
+      desplegado: leerDesplegado(busca),
     };
   }
   if (partes[0]?.toLowerCase() === "epicas" && partes[1]) {
@@ -144,17 +155,25 @@ export function totalHojas(total: number): number {
   return Math.max(1, Math.ceil(total / ITEMS_POR_PAGINA));
 }
 
-/** Serializa filtros **y** página a la query del hash, omitiendo lo vacío. */
-export function filtrosAQuery(filtros: FiltrosSprint, hoja = 1): string {
+/**
+ * Serializa filtros, página y revelado a la query del hash, omitiendo lo vacío.
+ *
+ * `hoja` 1 y `desplegado` falso se omiten: son los valores por defecto y
+ * escribirlos llenaría el historial de entradas que no cambian nada.
+ */
+export function filtrosAQuery(
+  filtros: FiltrosSprint,
+  hoja = 1,
+  desplegado = false,
+): string {
   const busca = new URLSearchParams();
   if (filtros.sprint) busca.set("sprint", filtros.sprint);
   if (filtros.persona) busca.set("persona", filtros.persona);
   if (filtros.tipo) busca.set("tipo", filtros.tipo);
   if (filtros.etiqueta) busca.set("etiqueta", filtros.etiqueta);
   if (filtros.soloAbiertos) busca.set("soloAbiertos", "1");
-  // La hoja 1 es la que se obtiene sin parámetros: omitirla mantiene las URLs
-  // cortas y evita entradas de historial que no cambian nada.
   if (hoja > 1) busca.set("pagina", String(hoja));
+  if (desplegado) busca.set("desplegado", "1");
   return busca.toString();
 }
 
@@ -167,7 +186,7 @@ function aRuta(destino: Destino): string {
     case "epicaBugs":
       return `#/epicas/${destino.azureId}/bugs`;
     case "sprints": {
-      const query = filtrosAQuery(destino.filtros, destino.hoja);
+      const query = filtrosAQuery(destino.filtros, destino.hoja, destino.desplegado);
       return query === "" ? "#/sprints" : `#/sprints?${query}`;
     }
     case "analitica":

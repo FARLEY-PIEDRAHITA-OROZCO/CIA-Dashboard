@@ -267,6 +267,11 @@ function validarListaSprints(valor: unknown): ListaSprints {
     sprints: lista(item.sprints, "sprints", validarSprint),
     total: numero(item.total, "sprints.total"),
     sprint_actual: texto(item.sprint_actual ?? "", "sprints.sprint_actual"),
+    total_items: numero(item.total_items ?? 0, "sprints.total_items"),
+    asignados_a_sprint: numero(
+      item.asignados_a_sprint ?? 0,
+      "sprints.asignados_a_sprint",
+    ),
   };
 }
 

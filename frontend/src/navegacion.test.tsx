@@ -48,7 +48,7 @@ describe("parsearHash", () => {
   });
 
   it("mapea las páginas de sprints y analítica", () => {
-    expect(parsearHash("#/sprints")).toEqual({ pagina: "sprints", filtros: {}, hoja: 1 });
+    expect(parsearHash("#/sprints")).toEqual({ pagina: "sprints", filtros: {}, hoja: 1, desplegado: false });
     expect(parsearHash("#/analitica")).toEqual({ pagina: "analitica" });
     // Segmentos de más degradan: no se inventa una ruta.
     expect(parsearHash("#/sprints/45")).toEqual({ pagina: "dashboard" });
@@ -62,6 +62,7 @@ describe("parsearHash", () => {
       pagina: "sprints",
       filtros: { sprint: "Proyecto\\Sprint 45", persona: "g-1", tipo: "Bug" },
       hoja: 1,
+      desplegado: false,
     });
   });
 
@@ -84,7 +85,7 @@ describe("parsearHash", () => {
     // `soloAbiertos=no` no es un filtro activo: la clave no debe existir, para
     // que la clave de caché de React Query sea idéntica a la de sin filtro.
     const inactivo = parsearHash("#/sprints?soloAbiertos=no");
-    expect(inactivo).toEqual({ pagina: "sprints", filtros: {}, hoja: 1 });
+    expect(inactivo).toEqual({ pagina: "sprints", filtros: {}, hoja: 1, desplegado: false });
   });
 
   it("produce la misma clave de caché con y sin query vacía", () => {
@@ -120,13 +121,13 @@ describe("filtros compartibles", () => {
       soloAbiertos: true,
     };
     const vuelta = parsearHash(`#/sprints?${filtrosAQuery(original)}`);
-    expect(vuelta).toEqual({ pagina: "sprints", filtros: original, hoja: 1 });
+    expect(vuelta).toEqual({ pagina: "sprints", filtros: original, hoja: 1, desplegado: false });
     // Y la URL generada es estable: compartirla dos veces da lo mismo.
     expect(enlaceA(vuelta)).toBe(`#/sprints?${filtrosAQuery(original)}`);
   });
 
   it("el enlace de la barra no arrastra filtros ni página de la vista anterior", () => {
-    expect(enlaceA({ pagina: "sprints", filtros: {}, hoja: 1 })).toBe("#/sprints");
+    expect(enlaceA({ pagina: "sprints", filtros: {}, hoja: 1, desplegado: false })).toBe("#/sprints");
   });
 });
 
@@ -152,8 +153,10 @@ describe("paginación en la URL", () => {
   it("omite la hoja 1 para mantener las URLs cortas", () => {
     expect(filtrosAQuery({}, 1)).toBe("");
     expect(filtrosAQuery({}, 2)).toBe("pagina=2");
-    expect(enlaceA({ pagina: "sprints", filtros: {}, hoja: 1 })).toBe("#/sprints");
-    expect(enlaceA({ pagina: "sprints", filtros: {}, hoja: 3 })).toBe("#/sprints?pagina=3");
+    expect(enlaceA({ pagina: "sprints", filtros: {}, hoja: 1, desplegado: false })).toBe("#/sprints");
+    expect(enlaceA({ pagina: "sprints", filtros: {}, hoja: 3, desplegado: false })).toBe(
+      "#/sprints?pagina=3",
+    );
   });
 
   it("la hoja no cuenta como filtro activo", () => {
@@ -163,7 +166,36 @@ describe("paginación en la URL", () => {
   });
 
   it("hace el viaje completo hoja → hash → hoja", () => {
-    const destino = { pagina: "sprints", filtros: { tipo: "Bug" }, hoja: 4 } as const;
+    const destino = { pagina: "sprints", filtros: { tipo: "Bug" }, hoja: 4, desplegado: false } as const;
+    expect(parsearHash(enlaceA(destino))).toEqual(destino);
+  });
+});
+
+describe("revelado progresivo del detalle", () => {
+  it("lee el estado desplegado del hash", () => {
+    const de = (q: string) => {
+      const v = parsearHash(`#/sprints?${q}`);
+      return v.pagina === "sprints" ? v.desplegado : null;
+    };
+    expect(de("desplegado=1")).toBe(true);
+    expect(de("desplegado=true")).toBe(true);
+    // Un valor inactivo equivale a no desplegado: así la clave de caché de
+    // React Query es la misma que sin el parámetro.
+    expect(de("desplegado=0")).toBe(false);
+    expect(de("desplegado=no")).toBe(false);
+    expect(de("")).toBe(false);
+  });
+
+  it("omite el parámetro cuando no está desplegado", () => {
+    expect(filtrosAQuery({}, 1, false)).toBe("");
+    expect(filtrosAQuery({}, 1, true)).toBe("desplegado=1");
+    expect(
+      enlaceA({ pagina: "sprints", filtros: {}, hoja: 1, desplegado: true }),
+    ).toBe("#/sprints?desplegado=1");
+  });
+
+  it("hace el viaje completo desplegado → hash → desplegado", () => {
+    const destino = { pagina: "sprints", filtros: {}, hoja: 1, desplegado: true } as const;
     expect(parsearHash(enlaceA(destino))).toEqual(destino);
   });
 });
@@ -175,7 +207,7 @@ describe("enlaceA", () => {
     expect(enlaceA({ pagina: "epicaTareas", azureId: 100 })).toBe("#/epicas/100/tareas");
     expect(enlaceA({ pagina: "epicaBugs", azureId: 100 })).toBe("#/epicas/100/bugs");
     expect(enlaceA({ pagina: "analitica" })).toBe("#/analitica");
-    expect(enlaceA({ pagina: "sprints", filtros: { tipo: "Bug" }, hoja: 1 })).toBe(
+    expect(enlaceA({ pagina: "sprints", filtros: { tipo: "Bug" }, hoja: 1, desplegado: false })).toBe(
       "#/sprints?tipo=Bug",
     );
   });

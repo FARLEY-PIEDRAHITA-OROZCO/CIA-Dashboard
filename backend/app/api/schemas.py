@@ -89,6 +89,12 @@ class ListaSprints(BaseModel):
     sprints: List[SprintOut]
     total: int
     sprint_actual: str = ""
+    #: Ítems del índice local, incluidos los que no tienen sprint asignable.
+    total_items: int = 0
+    #: Ítems que sí están en algún sprint. `total_items - asignados` son los que
+    #: no tienen sprint, y decirlo evita que la suma de las columnas se lea como
+    #: el total del proyecto.
+    asignados_a_sprint: int = 0
 
 
 class PersonaOut(BaseModel):

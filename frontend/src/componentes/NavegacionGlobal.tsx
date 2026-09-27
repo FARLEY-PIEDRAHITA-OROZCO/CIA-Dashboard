@@ -44,7 +44,7 @@ export function NavegacionGlobal({
     },
     {
       etiqueta: "Sprints",
-      destino: { pagina: "sprints", filtros: {}, hoja: 1 },
+      destino: { pagina: "sprints", filtros: {}, hoja: 1, desplegado: false },
       activo: vista.pagina === "sprints",
     },
     {

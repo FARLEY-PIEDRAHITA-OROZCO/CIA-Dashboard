@@ -139,10 +139,16 @@ async def api_sprints(servicio: ServicioDep, indice: IndiceDep) -> ListaSprints:
     _requiere_configuracion(servicio)
     sprints = await indice.sprints()
     actual = await indice.sprint_actual() or ""
+    # La suma de las columnas NO es el total del proyecto: hay ítems sin sprint
+    # asignable. Se expone el total real para que la UI pueda decirlo en lugar
+    # de dejar que parezca que la cinta lo cubre todo.
+    total_items = len(await indice.todos())
     return ListaSprints(
         sprints=[SprintOut(**s) for s in sprints],
         total=len(sprints),
         sprint_actual=actual,
+        total_items=total_items,
+        asignados_a_sprint=sum(s["total"] for s in sprints),
     )
 
 

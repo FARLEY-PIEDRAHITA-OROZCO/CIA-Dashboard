@@ -34,7 +34,10 @@ export function TablaItems({
 }) {
   return (
     <>
-      <p className="texto-suave small" role="status">
+      {/* Sin `role="status"`: es texto estático dentro de una tabla que ya tiene
+          su propio estado de carga, y otra región viva haría que un lector de
+          pantalla anuncie los dos. */}
+      <p className="texto-suave small">
         Mostrando {offset + 1}–{offset + items.length} de {total} {etiquetaConteo}
       </p>
       <div className="tabla-scroll">
