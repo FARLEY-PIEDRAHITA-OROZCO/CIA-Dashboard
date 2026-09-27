@@ -8,6 +8,7 @@ import { PaginaTareas } from "./epicas/PaginaTareas";
 import { useEstadoAzure, useRefrescar } from "./epicas/hooks";
 import { useVista } from "./navegacion";
 import Dashboard from "./pages/Dashboard";
+import { PaginaPruebas } from "./pruebas/PaginaPruebas";
 import { PaginaSprints } from "./sprints/PaginaSprints";
 
 export default function App() {
@@ -51,6 +52,8 @@ export default function App() {
             hoja={vista.hoja}
             desplegado={vista.desplegado}
           />
+        ) : vista.pagina === "pruebas" ? (
+          <PaginaPruebas filtro={vista.filtro} hoja={vista.hoja} />
         ) : vista.pagina === "analitica" ? (
           <PaginaAnalitica />
         ) : (

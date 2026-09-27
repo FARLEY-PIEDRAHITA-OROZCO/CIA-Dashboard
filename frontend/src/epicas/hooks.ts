@@ -16,6 +16,14 @@ export const CLAVES_QUERY = {
   personas: ["personas"] as const,
   items: (filtros: FiltrosItems) => ["items", filtros] as const,
   analitica: (señal: string) => ["analitica", señal] as const,
+  /**
+   * Gestión del proceso de pruebas.
+   *
+   * Prefijo propio y separado de `items`: el índice de pruebas es otro, con
+   * otro TTL, y no tiene nada que ver con el de sprints. Invalidar uno no puede
+   * tirar el otro.
+   */
+  pruebas: (parte: string) => ["pruebas", parte] as const,
 };
 
 /** Filtros del índice local. Vacíos o `undefined` se ignoran (AND). */
@@ -85,6 +93,65 @@ export function useRezagoSprints(activo = true) {
   return useQuery({
     queryKey: CLAVES_QUERY.analitica("rezago"),
     queryFn: ({ signal }) => api.rezagoSprints(signal),
+    enabled: activo,
+    staleTime: 300_000,
+  });
+}
+
+// ------------------------------------------------------------------ //
+// Gestión del proceso de pruebas
+// ------------------------------------------------------------------ //
+
+/**
+ * Filtros de la lista de historias sin caso.
+ *
+ * Sin `sprint` ni `persona` no hay filtro activo y la lista **no se pide**: son
+ * 361 historias en este proyecto y la vista abre con el veredicto y la cinta,
+ * que es lo que responde «¿cómo vamos de pruebas?». La lista es el tercer nivel
+ * de revelado, igual que la tabla de ítems de la vista de sprints.
+ */
+export interface FiltrosSinCubrir {
+  sprint?: string;
+  persona?: string;
+  offset?: number;
+  limite?: number;
+}
+
+/** Resumen de pruebas: inventario, brecha, automatización y diseño. */
+export function usePruebasResumen(activo = true) {
+  return useQuery({
+    queryKey: CLAVES_QUERY.pruebas("resumen"),
+    queryFn: ({ signal }) => api.pruebasResumen(signal),
+    enabled: activo,
+    staleTime: 300_000,
+  });
+}
+
+/** Cobertura por sprint. Se pide siempre que se abre la vista: es la cinta. */
+export function usePruebasCobertura(activo = true) {
+  return useQuery({
+    queryKey: CLAVES_QUERY.pruebas("cobertura"),
+    queryFn: ({ signal }) => api.pruebasCobertura(signal),
+    enabled: activo,
+    staleTime: 300_000,
+  });
+}
+
+/** Historias sin caso, filtradas y paginadas. */
+export function usePruebasSinCubrir(filtros: FiltrosSinCubrir, activo = true) {
+  return useQuery({
+    queryKey: [...CLAVES_QUERY.pruebas("sin-cubrir"), filtros],
+    queryFn: ({ signal }) => api.pruebasSinCubrir(filtros, signal),
+    enabled: activo,
+    staleTime: 300_000,
+  });
+}
+
+/** Planes de pruebas como contexto. Pide 44 filas, no un inventario. */
+export function usePruebasPlanes(activo = true) {
+  return useQuery({
+    queryKey: CLAVES_QUERY.pruebas("planes"),
+    queryFn: ({ signal }) => api.pruebasPlanes(signal),
     enabled: activo,
     staleTime: 300_000,
   });
@@ -171,6 +238,10 @@ export function useActualizarWorkItem() {
         void queryClient.invalidateQueries({ queryKey: ["sprints"] });
         void queryClient.invalidateQueries({ queryKey: ["personas"] });
         void queryClient.invalidateQueries({ queryKey: ["analitica"] });
+        // También el índice de pruebas: el backend invalida los dos al escribir,
+        // y la Fase 5 ampliará la escritura a los tres tipos de test. Si no se
+        // invalidara aquí, la cobertura mostraría números previos a la edición.
+        void queryClient.invalidateQueries({ queryKey: ["pruebas"] });
       }
     },
   });

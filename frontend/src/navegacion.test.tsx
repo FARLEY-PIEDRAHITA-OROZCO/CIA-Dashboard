@@ -7,9 +7,11 @@ import {
   enlaceA,
   filtrosAQuery,
   hojaAOffset,
+  hojaPruebasAOffset,
   irA,
   parsearHash,
   totalHojas,
+  totalHojasPruebas,
   useVista,
 } from "./navegacion";
 
@@ -53,6 +55,37 @@ describe("parsearHash", () => {
     // Segmentos de más degradan: no se inventa una ruta.
     expect(parsearHash("#/sprints/45")).toEqual({ pagina: "dashboard" });
     expect(parsearHash("#/analitica/verificacion")).toEqual({ pagina: "dashboard" });
+  });
+
+  it("mapea la página de pruebas, sin filtros y con ellos", () => {
+    expect(parsearHash("#/pruebas")).toEqual({ pagina: "pruebas", filtro: {}, hoja: 1 });
+    expect(parsearHash("#/pruebas?sprint=Proyecto%5CSprint%2045&pagina=3")).toEqual({
+      pagina: "pruebas",
+      filtro: { sprint: "Proyecto\\Sprint 45" },
+      hoja: 3,
+    });
+    // Misma regla que el resto: un segmento de más degrada al dashboard.
+    expect(parsearHash("#/pruebas/cobertura")).toEqual({ pagina: "dashboard" });
+  });
+
+  it("ignora los filtros que la vista de pruebas no tiene", () => {
+    // `tipo` y `etiqueta` son de la vista de sprints. Aceptarlos aquí daría un
+    // filtro que el backend no aplica: la lista saldría sin filtrar y parecería
+    // que el filtro no funciona.
+    expect(parsearHash("#/pruebas?tipo=Bug&soloAbiertos=1")).toEqual({
+      pagina: "pruebas",
+      filtro: {},
+      hoja: 1,
+    });
+  });
+
+  it("hace el viaje completo de los filtros de pruebas sin pérdida", () => {
+    const destino = {
+      pagina: "pruebas" as const,
+      filtro: { sprint: "Proyecto\\Sprint 45", persona: "g-1" },
+      hoja: 2,
+    };
+    expect(parsearHash(enlaceA(destino))).toEqual(destino);
   });
 
   it("lee los filtros de la vista de sprint desde el hash", () => {
@@ -157,6 +190,18 @@ describe("paginación en la URL", () => {
     expect(enlaceA({ pagina: "sprints", filtros: {}, hoja: 3, desplegado: false })).toBe(
       "#/sprints?pagina=3",
     );
+  });
+
+  it("la hoja de pruebas tiene su propio desplazamiento", () => {
+    // 200 ítems del índice y 50 historias sin caso: con una sola regla, una de las
+    // dos paginaciones calcularía un `offset` que no corresponde con su hoja.
+    expect(hojaPruebasAOffset(1)).toBe(0);
+    expect(hojaPruebasAOffset(2)).toBe(50);
+    expect(hojaPruebasAOffset(8)).toBe(350);
+    expect(hojaPruebasAOffset(0)).toBe(0);
+    expect(totalHojasPruebas(361)).toBe(8);
+    expect(totalHojasPruebas(50)).toBe(1);
+    expect(totalHojasPruebas(0)).toBe(1);
   });
 
   it("la hoja no cuenta como filtro activo", () => {

@@ -1506,3 +1506,155 @@ code {
   display: inline-block;
   margin-top: 8px;
 }
+
+/* ------------------------------------------------------------------ *
+ * Vista de pruebas (#/pruebas)
+ * ------------------------------------------------------------------ */
+
+/* Barra apilada de cobertura: verde abajo, hueco arriba.
+   Comparte `.cinta-barra` con la cinta de sprints a propósito —misma altura
+   relativa, mismo tono por `data-tono`— para que las dos vistas se lean como la
+   misma familia de visual y no como dos inventos distintos. */
+.cinta-parte {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.cinta-cubierta {
+  bottom: 0;
+  background: #16a34a;
+}
+
+.cinta-hueco {
+  top: 0;
+  background: #f97316;
+}
+
+.cinta-barra[data-tono="alerta"] .cinta-hueco {
+  background: #dc2626;
+}
+
+.cinta-barra[data-tono="neutro"] .cinta-hueco {
+  background: #94a3b8;
+}
+
+.cinta-barra[data-tono="ok"] .cinta-hueco {
+  /* Un sprint con todas las historias cubiertas no tiene hueco: se oculta la
+     parte naranja en vez de dejar una franja de 1 px que sugiere que falta algo. */
+  display: none;
+}
+
+/* Aviso de cobertura parcial. Va con borde, no con fondo rojo: no es un error de
+   la aplicación, es una limitación de la lectura, y un `role="note"` lo dice sin
+   alarmar. */
+.aviso-parcial {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--borde);
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  background: var(--fondo);
+  color: var(--texto-suave);
+  font-size: 13px;
+}
+
+.lista-estados {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lista-estados li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.lista-estados-cantidad {
+  color: var(--texto-suave);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lista de historias sin caso: una fila por historia, no una tabla.
+   El título va arriba y los metadatos debajo porque el título es largo y
+   desigual; en una fila de tabla obligaría a una columna ancha y vacía. */
+.lista-hu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.hu-fila {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.hu-fila:last-child {
+  border-bottom: none;
+}
+
+.hu-titulo {
+  font-weight: 600;
+  color: var(--texto);
+  text-decoration: none;
+}
+
+.hu-titulo:hover {
+  text-decoration: underline;
+}
+
+.hu-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.hu-persona,
+.hu-sprint {
+  white-space: nowrap;
+}
+
+.hu-sprint[data-sin-sprint="true"] {
+  font-style: italic;
+}
+
+.lista-planes {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--borde);
+  font-size: 13px;
+}
+
+.plan-fila:last-child {
+  border-bottom: none;
+}
+
+.plan-titulo {
+  color: var(--texto);
+}

@@ -26,6 +26,25 @@ describe("tonoEstado", () => {
     expect(tonoEstado("")).toBe("neutro");
   });
 
+  it("un caso listo para ejecutar no cae al gris de «no sé qué es»", () => {
+    // `Ready` no estaba en ninguna lista: 132 casos listos para ejecutar se
+    // dibujaban como si no significaran nada. Comparte tono con `Design` porque
+    // los dos significan «todavía no se puede ejecutar»; separarlos exigiría un
+    // tono nuevo, con su CSS y los tres títulos de tablero.
+    expect(tonoEstado("Ready")).toBe("pendiente");
+    expect(tonoEstado("Design")).toBe("pendiente");
+    expect(tonoEstado("ready")).toBe("pendiente");
+  });
+
+  it("los estados de los tres tipos de prueba tienen tono propio", () => {
+    // Estados reales medidos en el proyecto, para que un estado nuevo de la
+    // plantilla no aparezca por sorpresa como gris.
+    expect(tonoEstado("Active")).toBe("progreso");
+    expect(tonoEstado("In Progress")).toBe("progreso");
+    expect(tonoEstado("Completed")).toBe("terminado");
+    expect(tonoEstado("Closed")).toBe("terminado");
+  });
+
   it("distingue bloqueado de pendiente y de en curso", () => {
     // Los tres caían en el mismo tono: un ítem atascado pasaba por trabajo
     // normal. Ahora «bloqueado» es rojo y propio.

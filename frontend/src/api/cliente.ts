@@ -2,13 +2,20 @@
 
 import type {
   ActualizacionQA,
+  AutomatizacionPruebas,
+  BrechaCobertura,
   BrechaVerificacion,
   Bug,
+  CoberturaDeSprint,
+  CoberturaPruebas,
   DetalleBugs,
+  DisenoPruebas,
   Epic,
   EpicResumen,
   EstadoAzure,
   Feature,
+  HistoriaSinCubrir,
+  InventarioPruebas,
   ItemIndice,
   ListaEpicas,
   ListaItems,
@@ -18,9 +25,12 @@ import type {
   MuestraItem,
   Persona,
   PersonaCarga,
+  PlanDePrueba,
   RezagoEntreSprints,
+  ResumenPruebas,
   RespuestaAccion,
   ResultadoEscritura,
+  SinCubrir,
   Sprint,
   Tarea,
   TrabajoEstancado,
@@ -444,6 +454,136 @@ function validarActualizacion(valor: unknown): ActualizacionQA {
   return salida;
 }
 
+function validarBrechaCobertura(valor: unknown, nombre: string): BrechaCobertura {
+  const item = objeto(valor, nombre);
+  return {
+    historias: numero(item.historias, `${nombre}.historias`),
+    cubiertas: numero(item.cubiertas, `${nombre}.cubiertas`),
+    sin_cubrir: numero(item.sin_cubrir, `${nombre}.sin_cubrir`),
+    pct_cubiertas: numero(item.pct_cubiertas ?? 0, `${nombre}.pct_cubiertas`),
+    parcial: item.parcial === undefined ? false : booleano(item.parcial, `${nombre}.parcial`),
+    requisitos_cubiertos_total: numero(
+      item.requisitos_cubiertos_total ?? 0,
+      `${nombre}.requisitos_cubiertos_total`,
+    ),
+  };
+}
+
+function validarInventario(valor: unknown): InventarioPruebas {
+  const item = objeto(valor, "inventario de pruebas");
+  return {
+    planes: numero(item.planes ?? 0, "inventario.planes"),
+    suites: numero(item.suites ?? 0, "inventario.suites"),
+    casos: numero(item.casos ?? 0, "inventario.casos"),
+    total: numero(item.total ?? 0, "inventario.total"),
+  };
+}
+
+function validarAutomatizacion(valor: unknown): AutomatizacionPruebas {
+  const item = objeto(valor, "automatización");
+  return {
+    casos: numero(item.casos ?? 0, "automatizacion.casos"),
+    automatizados: numero(item.automatizados ?? 0, "automatizacion.automatizados"),
+    planificados: numero(item.planificados ?? 0, "automatizacion.planificados"),
+    manuales: numero(item.manuales ?? 0, "automatizacion.manuales"),
+    pct_automatizado: numero(item.pct_automatizado ?? 0, "automatizacion.pct_automatizado"),
+  };
+}
+
+function validarDiseno(valor: unknown): DisenoPruebas {
+  const item = objeto(valor, "diseño");
+  return {
+    en_diseno: numero(item.en_diseno ?? 0, "diseno.en_diseno"),
+    sin_mover: numero(item.sin_mover ?? 0, "diseno.sin_mover"),
+    dias: numero(item.dias ?? 0, "diseno.dias"),
+  };
+}
+
+function validarResumenPruebas(valor: unknown): ResumenPruebas {
+  const item = objeto(valor, "resumen de pruebas");
+  return {
+    inventario: validarInventario(item.inventario),
+    estados: Object.fromEntries(
+      Object.entries(objeto(item.estados ?? {}, "estados")).map(([tipo, porEstado]) => [
+        tipo,
+        mapaNumeros(porEstado, `estados.${tipo}`),
+      ]),
+    ),
+    automatizacion: validarAutomatizacion(item.automatizacion),
+    diseno: validarDiseno(item.diseno),
+    brecha: validarBrechaCobertura(item.brecha, "brecha"),
+    parcial: item.parcial === undefined ? false : booleano(item.parcial, "resumen.parcial"),
+    generado: texto(item.generado ?? "", "resumen.generado"),
+  };
+}
+
+function validarCoberturaDeSprint(valor: unknown): CoberturaDeSprint {
+  const item = objeto(valor, "cobertura de sprint");
+  return {
+    nombre: texto(item.nombre, "cobertura.nombre"),
+    ruta: texto(item.ruta ?? "", "cobertura.ruta"),
+    historias: numero(item.historias ?? 0, "cobertura.historias"),
+    cubiertas: numero(item.cubiertas ?? 0, "cobertura.cubiertas"),
+    sin_cubrir: numero(item.sin_cubrir ?? 0, "cobertura.sin_cubrir"),
+    pct_cubiertas: numero(item.pct_cubiertas ?? 0, "cobertura.pct_cubiertas"),
+  };
+}
+
+function validarCoberturaPruebas(valor: unknown): CoberturaPruebas {
+  const item = objeto(valor, "cobertura de pruebas");
+  const resumen = objeto(item.resumen, "cobertura.resumen");
+  return {
+    resumen: {
+      ...validarBrechaCobertura(resumen, "cobertura.resumen"),
+      lotes_con_error: numero(resumen.lotes_con_error ?? 0, "cobertura.lotes_con_error"),
+      generado: texto(resumen.generado ?? "", "cobertura.generado"),
+    },
+    sprints: lista(item.sprints, "cobertura.sprints", validarCoberturaDeSprint),
+  };
+}
+
+function validarPlanDePrueba(valor: unknown): PlanDePrueba {
+  const item = objeto(valor, "plan de pruebas");
+  return {
+    azure_id: numero(item.azure_id, "plan.azure_id"),
+    titulo: texto(item.titulo ?? "", "plan.titulo"),
+    estado: texto(item.estado ?? "", "plan.estado"),
+    sprint: texto(item.sprint ?? "", "plan.sprint"),
+    persona: texto(item.persona ?? "", "plan.persona"),
+    modificado: texto(item.modificado ?? "", "plan.modificado"),
+  };
+}
+
+function validarHistoriaSinCubrir(valor: unknown): HistoriaSinCubrir {
+  const item = objeto(valor, "historia sin cubrir");
+  return {
+    azure_id: numero(item.azure_id, "historia.azure_id"),
+    titulo: texto(item.titulo ?? "", "historia.titulo"),
+    estado: texto(item.estado ?? "", "historia.estado"),
+    sprint: texto(item.sprint ?? "", "historia.sprint"),
+    persona: texto(item.persona ?? "", "historia.persona"),
+    modificado: texto(item.modificado ?? "", "historia.modificado"),
+  };
+}
+
+function validarSinCubrir(valor: unknown): SinCubrir {
+  const item = objeto(valor, "historias sin cubrir");
+  const resumen = objeto(item.resumen, "sin_cubrir.resumen");
+  return {
+    resumen: {
+      total: numero(resumen.total ?? 0, "sin_cubrir.total"),
+      offset: numero(resumen.offset ?? 0, "sin_cubrir.offset"),
+      limite: numero(resumen.limite ?? 0, "sin_cubrir.limite"),
+      hay_mas:
+        resumen.hay_mas === undefined ? false : booleano(resumen.hay_mas, "sin_cubrir.hay_mas"),
+      parcial:
+        resumen.parcial === undefined ? false : booleano(resumen.parcial, "sin_cubrir.parcial"),
+      lotes_con_error: numero(resumen.lotes_con_error ?? 0, "sin_cubrir.lotes_con_error"),
+    },
+    items: lista(item.items, "sin_cubrir.items", validarHistoriaSinCubrir),
+  };
+}
+
 function validarAccion(valor: unknown): RespuestaAccion {
   const item = objeto(valor, "respuesta de acción");
   const detalle = opcionalTexto(item.detalle, "accion.detalle");
@@ -552,6 +692,43 @@ export const api = {
   /** Señal ③: rezago entre sprints. */
   rezagoSprints: async (signal?: AbortSignal) =>
     validarRezagoEntreSprints(await peticion<unknown>("/analitica/rezago", { signal })),
+
+  // ------------------------------------------------------------------ //
+  // Gestión del proceso de pruebas
+  //
+  // La primera llamada tras el arranque cuesta ~5,5 s (3.932 activos con
+  // `$expand=relations`); después es de memoria. Por eso sus hooks solo se
+  // activan al abrir `#/pruebas`: `#/sprints` no las dispara nunca.
+  // ------------------------------------------------------------------ //
+  /** Inventario de activos, brecha, automatización y diseño. */
+  pruebasResumen: async (signal?: AbortSignal) =>
+    validarResumenPruebas(await peticion<unknown>("/pruebas/resumen", { signal })),
+
+  /** Cobertura de historias con caso, global y por sprint. */
+  pruebasCobertura: async (signal?: AbortSignal) =>
+    validarCoberturaPruebas(await peticion<unknown>("/pruebas/cobertura", { signal })),
+
+  /** Las historias sin ningún caso: la lista de trabajo de QA, paginada. */
+  pruebasSinCubrir: async (
+    filtros: { sprint?: string; persona?: string; offset?: number; limite?: number } = {},
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams();
+    if (filtros.sprint) query.set("sprint", filtros.sprint);
+    if (filtros.persona) query.set("persona", filtros.persona);
+    if (filtros.offset) query.set("offset", String(filtros.offset));
+    if (filtros.limite) query.set("limite", String(filtros.limite));
+    const sufijo = query.toString() ? `?${query.toString()}` : "";
+    return validarSinCubrir(await peticion<unknown>(`/pruebas/sin-cubrir${sufijo}`, { signal }));
+  },
+
+  /** Los 44 planes como contexto: sprint y responsable. */
+  pruebasPlanes: async (signal?: AbortSignal) =>
+    lista(
+      await peticion<unknown>("/pruebas/planes", { signal }),
+      "planes",
+      validarPlanDePrueba,
+    ),
 
   /**
    * Aplica (o valida en seco) una actualización de QA sobre un work item.

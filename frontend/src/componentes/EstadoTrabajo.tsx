@@ -78,6 +78,17 @@ const BLOQUEADO = new Set([
   "stuck",
   "atascado",
 ]);
+/**
+ * En cola, esperando su turno.
+ *
+ * `ready` comparte tono con `design` a propósito: los dos significan «todavía no
+ * se puede ejecutar», que es lo que un tablero de pruebas necesita distinguir
+ * del gris de «no sé qué estado es este». `Ready` caía en `neutro` porque no
+ * estaba en ninguna lista, y un caso listo para ejecutar se dibujaba como si no
+ * significara nada. Merece un tono propio cuando separe el que está listo del
+ * que aún se escribe, y ese tono necesita su CSS en `ORDEN_TONOS` y en los tres
+ * títulos de tablero.
+ */
 const PENDIENTE = new Set([
   "approved",
   "aprobado",
@@ -87,6 +98,9 @@ const PENDIENTE = new Set([
   "pending",
   "pendiente",
   "design",
+  "ready",
+  "listo",
+  "lista",
   "planeación",
   "planeacion",
 ]);

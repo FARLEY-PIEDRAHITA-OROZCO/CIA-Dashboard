@@ -7,6 +7,8 @@
  * - `#/sprints?sprint=…&persona=…&tipo=…&soloAbiertos=1` → sprint filtrado
  * - `#/sprints?pagina=3`        → tercera página del resultado
  * - `#/sprints?desplegado=1`    → ver los ítems aunque no haya filtros
+ * - `#/pruebas`                → cobertura de pruebas por sprint
+ * - `#/pruebas?sprint=.&persona=.&pagina=N`  → brecha filtrada, con paginación
  * - `#/analitica`              → señales de analítica QA
  *
  * Los filtros de la vista de sprint viajan **en el hash**, no en estado local:
@@ -44,10 +46,34 @@ export type Destino =
   // que es lo que espera quien acaba de escribir en el buscador. `desplegado`
   // controla el revelado progresivo de la tabla de ítems.
   | { pagina: "sprints"; filtros: FiltrosSprint; hoja: number; desplegado: boolean }
+  | { pagina: "pruebas"; filtro: FiltrosPruebas; hoja: number }
   | { pagina: "analitica" };
+
+/**
+ * Filtros de la vista de pruebas.
+ *
+ * Reutiliza `FiltrosSprint` a propósito: los dos filtros posibles son sprint y
+ * persona, con el mismo nombre y el mismo significado. Duplicarlos daría dos
+ * definiciones que divergirían en cuanto cambiara una.
+ *
+ * `sprint` y `persona` no son obligatorios: sin ellos la vista abre con el
+ * veredicto y la cinta, y la lista de historias sin caso no se pide. Igual que en
+ * la vista de sprints, es revelado progresivo y no una tabla siempre visible.
+ */
+export type FiltrosPruebas = Pick<FiltrosSprint, "sprint" | "persona">;
 
 /** Tamaño de página de la tabla de ítems (coincide con el tope del backend). */
 export const ITEMS_POR_PAGINA = 200;
+
+/**
+ * Tamaño de página de la lista de historias sin caso de prueba.
+ *
+ * Smaller que `ITEMS_POR_PAGINA` a propósito: son 361 en este proyecto y la lista
+ * es una **cola de trabajo**, no un volcado. Nadie avanza en 200 filas de golpe.
+ * El backend acepta hasta 200, así que 50 no es un tope nuevo sino una elección
+ * de lectura.
+ */
+export const PRUEBAS_POR_PAGINA = 50;
 
 /** Lee un parámetro de la query del hash, ignorando los vacíos. */
 function parametro(busca: URLSearchParams, nombre: string): string | undefined {
@@ -116,6 +142,14 @@ export function parsearHash(hash: string): Destino {
       desplegado: leerDesplegado(busca),
     };
   }
+  if (raiz === "pruebas" && partes.length === 1) {
+    const busca = new URLSearchParams(query);
+    return {
+      pagina: "pruebas",
+      filtro: leerFiltrosPruebas(query),
+      hoja: leerHoja(busca),
+    };
+  }
   if (partes[0]?.toLowerCase() === "epicas" && partes[1]) {
     const idTexto = partes[1];
     if (!/^\d+$/.test(idTexto)) {
@@ -138,6 +172,23 @@ export function parsearHash(hash: string): Destino {
   return { pagina: "dashboard" };
 }
 
+/**
+ * Normaliza los filtros de pruebas leídos del hash.
+ *
+ * Igual que `leerFiltros`: solo se incluyen las claves activas, porque un
+ * `undefined` explícito generaría una clave de caché de React Query distinta de
+ * la equivalente sin filtro, y con ella una petición de más.
+ */
+function leerFiltrosPruebas(query: string): FiltrosPruebas {
+  const busca = new URLSearchParams(query);
+  const filtros: FiltrosPruebas = {};
+  const sprint = parametro(busca, "sprint");
+  const persona = parametro(busca, "persona");
+  if (sprint) filtros.sprint = sprint;
+  if (persona) filtros.persona = persona;
+  return filtros;
+}
+
 /** Cuántos filtros hay activos, para el badge «N filtros». La página no cuenta. */
 export function contarFiltros(filtros: FiltrosSprint): number {
   return Object.values(filtros).filter((v) => v !== undefined && v !== "" && v !== false)
@@ -147,6 +198,23 @@ export function contarFiltros(filtros: FiltrosSprint): number {
 /** Índice de desplazamiento de una hoja (1-based) al parámetro `offset`. */
 export function hojaAOffset(hoja: number): number {
   return (Math.max(1, Math.floor(hoja)) - 1) * ITEMS_POR_PAGINA;
+}
+
+/**
+ * Desplazamiento de la hoja de la lista de historias sin caso.
+ *
+ * Función aparte de `hojaAOffset` y no un parámetro: mezclar los dos tamaños de
+ * página en una sola regla es la forma más fácil de que una paginación calcule
+ * un `offset` que no corresponde con su `hoja` y salte o repita filas.
+ */
+export function hojaPruebasAOffset(hoja: number): number {
+  return (Math.max(1, Math.floor(hoja)) - 1) * PRUEBAS_POR_PAGINA;
+}
+
+/** Cuántas hojas hacen falta para la lista de historias sin caso. */
+export function totalHojasPruebas(total: number): number {
+  if (total <= 0) return 1;
+  return Math.max(1, Math.ceil(total / PRUEBAS_POR_PAGINA));
 }
 
 /** Cuántas hojas hacen falta para `total` ítems. */
@@ -177,6 +245,21 @@ export function filtrosAQuery(
   return busca.toString();
 }
 
+/**
+ * Serializa los filtros de pruebas a la query del hash.
+ *
+ * `hoja` 1 se omite por ser el valor por defecto. No hay `desplegado` aquí: en
+ * esta vista la lista de historias sin caso **es** el tercer nivel, y se pide con
+ * un filtro, no con un interruptor aparte.
+ */
+export function filtrosPruebasAQuery(filtros: FiltrosPruebas, hoja = 1): string {
+  const busca = new URLSearchParams();
+  if (filtros.sprint) busca.set("sprint", filtros.sprint);
+  if (filtros.persona) busca.set("persona", filtros.persona);
+  if (hoja > 1) busca.set("pagina", String(hoja));
+  return busca.toString();
+}
+
 function aRuta(destino: Destino): string {
   switch (destino.pagina) {
     case "epica":
@@ -188,6 +271,10 @@ function aRuta(destino: Destino): string {
     case "sprints": {
       const query = filtrosAQuery(destino.filtros, destino.hoja, destino.desplegado);
       return query === "" ? "#/sprints" : `#/sprints?${query}`;
+    }
+    case "pruebas": {
+      const query = filtrosPruebasAQuery(destino.filtro, destino.hoja);
+      return query === "" ? "#/pruebas" : `#/pruebas?${query}`;
     }
     case "analitica":
       return "#/analitica";

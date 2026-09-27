@@ -48,6 +48,11 @@ export function NavegacionGlobal({
       activo: vista.pagina === "sprints",
     },
     {
+      etiqueta: "Pruebas",
+      destino: { pagina: "pruebas", filtro: {}, hoja: 1 },
+      activo: vista.pagina === "pruebas",
+    },
+    {
       etiqueta: "Analítica QA",
       destino: { pagina: "analitica" },
       activo: vista.pagina === "analitica",

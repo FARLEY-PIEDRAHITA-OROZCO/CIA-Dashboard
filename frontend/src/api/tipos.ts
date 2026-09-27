@@ -241,3 +241,131 @@ export interface RespuestaAccion {
   ok: boolean;
   detalle?: string;
 }
+
+// ------------------------------------------------------------------ //
+// Gestión del proceso de pruebas (contrato de /api/pruebas/*)
+//
+// Los tres tipos de test (plan, suite, caso) viven en su propio índice, no en
+// el de sprints: son 3.932 ítems que nadie consulta al abrir `#/sprints`, y
+// cargarlos ahí duplicaría el tiempo en frío de esa vista.
+// ------------------------------------------------------------------ //
+
+export interface InventarioPruebas {
+  planes: number;
+  suites: number;
+  casos: number;
+  total: number;
+}
+
+/**
+ * Automatización de los casos.
+ *
+ * Eje **independiente** del estado: un caso `Closed` puede no estar automatizado
+ * y uno `Design` puede estarlo. Por eso no es un tono de estado ni una barra de
+ * un tablero. `planificados` son casos que alguien重现 automatizar; hoy siguen
+ * siendo manuales y no cuentan como automatizados.
+ */
+export interface AutomatizacionPruebas {
+  casos: number;
+  automatizados: number;
+  planificados: number;
+  manuales: number;
+  pct_automatizado: number;
+}
+
+/**
+ * Casos en `Design`, separados entre trabajo reciente y caso abandonado.
+ *
+ * 1.577 casos en diseño no son todos deuda: los que no se tocan desde hace más
+ * de `dias` no son trabajo en curso.
+ */
+export interface DisenoPruebas {
+  en_diseno: number;
+  sin_mover: number;
+  dias: number;
+}
+
+/** Brecha de cobertura: cuántas historias no tienen ningún caso que las pruebe. */
+export interface BrechaCobertura {
+  historias: number;
+  cubiertas: number;
+  sin_cubrir: number;
+  pct_cubiertas: number;
+  /**
+   * `true` si algún lote de relaciones no se pudo leer. Entonces `sin_cubrir` es
+   * una **cota superior**: puede haber más historias sin caso de las que se
+   * indican, nunca menos. La UI lo dice en vez de presentar la cifra completa.
+   */
+  parcial: boolean;
+  /** Requisitos cubiertos de cualquier tipo, no solo historias. */
+  requisitos_cubiertos_total: number;
+}
+
+export interface ResumenPruebas {
+  inventario: InventarioPruebas;
+  /** Estados por tipo: `{ "Test Case": { Design: 1577, … } }`. */
+  estados: Record<string, Record<string, number>>;
+  automatizacion: AutomatizacionPruebas;
+  diseno: DisenoPruebas;
+  brecha: BrechaCobertura;
+  parcial: boolean;
+  generado: string;
+}
+
+export interface CoberturaDeSprint {
+  nombre: string;
+  ruta: string;
+  historias: number;
+  cubiertas: number;
+  sin_cubrir: number;
+  pct_cubiertas: number;
+}
+
+/**
+ * Cobertura global y por sprint.
+ *
+ * `resumen` es la **misma forma** que `ResumenPruebas.brecha`: es el mismo dato
+ * en dos endpoints. Los dos nombres (`resumen` aquí, `brecha` en el resumen) son
+ * por contexto, pero los campos son los mismos a propósito.
+ */
+export interface CoberturaPruebas {
+  resumen: BrechaCobertura & {
+    lotes_con_error: number;
+    generado: string;
+  };
+  sprints: CoberturaDeSprint[];
+}
+
+/** Plan de pruebas como contexto: quién lleva las pruebas de qué sprint. */
+export interface PlanDePrueba {
+  azure_id: number;
+  titulo: string;
+  estado: string;
+  /** Hoja de la iteración. Vacío si el plan no está en un sprint real. */
+  sprint: string;
+  persona: string;
+  modificado: string;
+}
+
+/** Historia sin ningún caso que la pruebe: la lista de trabajo de QA. */
+export interface HistoriaSinCubrir {
+  azure_id: number;
+  titulo: string;
+  estado: string;
+  /** Vacío si la historia no está en un sprint real. */
+  sprint: string;
+  persona: string;
+  modificado: string;
+}
+
+export interface SinCubrir {
+  resumen: {
+    total: number;
+    offset: number;
+    limite: number;
+    hay_mas: boolean;
+    parcial: boolean;
+    lotes_con_error: number;
+  };
+  items: HistoriaSinCubrir[];
+}
