@@ -8,7 +8,7 @@ cambiar el modelo (abierto a extensión).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, FrozenSet, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -333,6 +333,88 @@ _ESTADO_UNICO = ("Test Plan", "Test Suite")
 def campos_admitidos(tipo: str) -> FrozenSet[str]:
     """Campos que QA puede escribir en un tipo, o conjunto vacío si no es editable."""
     return CAMPOS_POR_TIPO.get((tipo or "").strip(), frozenset())
+
+
+#: Rol que alguien tiene en el proceso de pruebas de una épica.
+#:
+#: Texto y no `Enum`: es parte del contrato del fichero de registro y de la API,
+#: y un `Enum` obliga a migrar el JSON cada vez que se renombra un rol. La lista
+#: de valores válidos está en `ROLES`.
+ROLES = ("qa", "dev")
+
+
+class PerfilPersona(BaseModel):
+    """Qué papel juega una persona en el proceso de pruebas.
+
+    Vive **en el registro local**, no en Azure: no existe ningún campo de Azure
+    para esto, y por eso esta información se perdería si se guardara solo allí.
+    Se identifica por GUID porque el nombre de una persona cambia cuando se
+    renombra o cambia de cuenta, y una asignación no debe romperse por eso.
+    """
+
+    guid: str
+    es_qa: bool = False
+    es_dev: bool = False
+    #: Rol forzado a mano. `None` significa «sin criterio», que no es lo mismo
+    #: que `False`: la sugerencia automática nunca sobrescribe una decisión.
+    forzado: Optional[bool] = None
+
+    @property
+    def es_ambos(self) -> bool:
+        """Alguien que hace de QA y de desarrollo a la vez.
+
+        Es habitual en equipos pequeños y tratarlo como error obligaría a elegir
+        un rol que no es cierto.
+        """
+        return self.es_qa and self.es_dev
+
+
+class Asignacion(BaseModel):
+    """Una épica asignada a una persona, con su rol y desde cuándo.
+
+    `desde` es **la** fecha que sostiene el «tiempo invertido»: días laborables
+    entre ese día y hoy. No se puede poner en el futuro, porque una diferencia
+    negativo no significa nada y delataría que la fecha es una estimativa.
+    """
+
+    epica: int
+    persona: str
+    rol: str = "qa"
+    desde: date
+    nota: str = ""
+
+    @model_validator(mode="after")
+    def _comprobar_rol(self) -> "Asignacion":
+        if self.rol not in ROLES:
+            raise ValueError(f"Rol desconocido: {self.rol!r}. Admitidos: {', '.join(ROLES)}.")
+        if self.epica <= 0:
+            raise ValueError("El id de la épica debe ser un entero positivo.")
+        if not (self.persona or "").strip():
+            raise ValueError("La asignación necesita el GUID de una persona.")
+        return self
+
+
+class Instantanea(BaseModel):
+    """Contenido del registro junto al hash de lo que se leyó del disco.
+
+    El hash es lo que permite **no pisar cambios ajenos**: al guardar se vuelve
+    a calcular el del fichero y, si no coincide con el que traía esta
+    instantánea, la escritura se rechaza.
+
+    Sin esto, dos pestañas abiertas —o un `git checkout` de otra rama—
+    se sobrescriben en silencio. Y aquí no hay red de seguridad: la información de
+    qué épica lleva cada persona no existe en Azure, así que lo que se pisa está
+    perdido.
+    """
+
+    #: `perfiles` y `asignaciones`, ya validados.
+    perfiles: Dict[str, PerfilPersona] = Field(default_factory=dict)
+    asignaciones: List[Asignacion] = Field(default_factory=list)
+    #: Hash SHA-256 del fichero leído. Vacío si no existía.
+    hash: str = ""
+    #: `True` cuando el fichero no existía y se devolvió un registro vacío.
+    #: No es un error: es el primer arranque.
+    recien_creado: bool = False
 
 
 class ResultadoActualizacion(BaseModel):

@@ -11,11 +11,13 @@ from typing import Optional
 
 from ..application.indice import IndiceWorkItems
 from ..application.indice_pruebas import IndicePruebas
+from ..application.registro import ServicioRegistro
 from ..application.services import ServicioBacklog
 from ..config import Settings, obtener_settings
 from ..domain.ports import (
     CachePort,
     EscrituraBacklogPort,
+    RegistroAsignacionesPort,
     RepositorioBacklogPort,
     TransportePort,
 )
@@ -23,6 +25,7 @@ from ..infrastructure.azure.escritura import AzureEscrituraRepositorio
 from ..infrastructure.azure.repository import AzureBacklogRepositorio
 from ..infrastructure.azure.transport import AzureTransporte
 from ..infrastructure.cache import CacheMemoria
+from ..infrastructure.registro_json import RegistroJson
 
 logger = logging.getLogger("devops")
 
@@ -38,6 +41,8 @@ class Contenedor:
     servicio: ServicioBacklog
     indice: IndiceWorkItems
     indice_pruebas: IndicePruebas
+    registro_principal: RegistroAsignacionesPort
+    servicio_registro: ServicioRegistro
     escritura: Optional[EscrituraBacklogPort] = None
     transporte_escritura: Optional[TransportePort] = None
 
@@ -95,6 +100,15 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
             "el sistema queda en modo solo lectura."
         )
 
+    # --- Registro local de pruebas ---------------------------------------- #
+    # Perfiles de rol y asignaciones de épicas. Fichero JSON **rastreado en
+    # git**: son ~264 filas y el objetivo es que no se pierdan, porque Azure no
+    # tiene ningún campo donde vivan. No usa caché: leerlo es una operación de
+    # disco de microsegundos y cachearlo abriría la puerta a servir un registro
+    # viejo justo cuando otra pestaña acaba de cambiarlo.
+    registro_principal: RegistroAsignacionesPort = RegistroJson(cfg.registro_ruta)
+    servicio_registro = ServicioRegistro(registro_principal, indice, indice_pruebas)
+
     servicio = ServicioBacklog(
         repositorio=repositorio,
         cache=cache,
@@ -114,6 +128,8 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
         servicio=servicio,
         indice=indice,
         indice_pruebas=indice_pruebas,
+        registro_principal=registro_principal,
+        servicio_registro=servicio_registro,
         escritura=escritura,
         transporte_escritura=transporte_escritura,
     )

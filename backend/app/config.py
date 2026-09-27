@@ -13,7 +13,12 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+#: Raíz del backend (`backend/`). El registro se resuelve con rutas **absolutas**
+#: desde aquí, igual que el `.env`: una ruta relativa dependería del directorio de
+#: trabajo desde el que se arranque, y el fichero de asignaciones cayendo en otro
+#: sitio es la peor forma de perderlo.
+RAIZ_BACKEND = Path(__file__).resolve().parents[1]
+ENV_FILE = RAIZ_BACKEND / ".env"
 
 
 class Settings(BaseSettings):
@@ -58,6 +63,22 @@ class Settings(BaseSettings):
     # medidos) y porque los casos en `Design` cambian muy poco. Es un segundo
     # índice, con carga perezosa: la vista de sprints no lo toca nunca.
     index_pruebas_ttl_seg: float = 900.0
+
+    # --- Registro local de pruebas ---------------------------------------- #
+    # Fichero donde viven los perfiles de rol y las asignaciones de épicas. Es
+    # el ÚNICO sitio donde existe esa información: Azure no tiene ningún campo
+    # para ella, así que si el fichero se pierde, no hay de dónde recuperarla.
+    # Por eso está **rastreado en git** y no ignorado.
+    registro_ruta: str = "datos/asignaciones.json"
+
+    @field_validator("registro_ruta")
+    @classmethod
+    def _resolver_registro(cls, valor: str) -> str:
+        """Absoluta siempre, resuelta desde la raíz del backend."""
+        ruta = Path(str(valor or "")).expanduser()
+        if not ruta.is_absolute():
+            ruta = RAIZ_BACKEND / ruta
+        return str(ruta)
 
     @field_validator("azure_org_url")
     @classmethod

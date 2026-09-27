@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.application.indice import IndiceWorkItems
 from app.application.indice_pruebas import IndicePruebas
+from app.application.registro import ServicioRegistro
 from app.application.services import ServicioBacklog
 from app.config import Settings
 from app.core.container import Contenedor
@@ -15,12 +16,15 @@ from app.domain.models import (
     CargaPruebas,
     Epic,
     Feature,
+    Instantanea,
     ItemIndice,
     ItemPrueba,
     Persona,
     Task,
     UserStory,
 )
+from app.domain.ports import RegistroAsignacionesPort
+from app.infrastructure.registro_json import RegistroModificado
 from app.main import crear_app
 
 
@@ -279,11 +283,36 @@ class FakeEscritura:
         return self.rev
 
 
+class RegistroMemoria(RegistroAsignacionesPort):
+    """Doble del registro para las pruebas de la API.
+
+    El adaptador real (`RegistroJson`) tiene sus propias pruebas, con fichero
+    temporal. Aquí interesa que las rutas de la API no toquen disco: un test que
+    escribiese en `backend/datos/asignaciones.json` dejaría basura en el repo y
+    podría, con mala suerte, pisar el registro real de alguien.
+    """
+
+    def __init__(self) -> None:
+        self.datos = Instantanea()
+        self.escrituras = 0
+
+    async def leer(self) -> Instantanea:
+        return self.datos
+
+    async def guardar(self, instantanea: Instantanea) -> Instantanea:
+        if self.datos.hash != (instantanea.hash or ""):
+            raise RegistroModificado("el registro cambió en disco")
+        self.datos = instantanea
+        self.escrituras += 1
+        return instantanea
+
+
 def contenedor_con(
     repo: FakeRepositorio,
     configurado: bool = True,
     *,
     escritura: Optional[FakeEscritura] = None,
+    registro: Optional[RegistroAsignacionesPort] = None,
 ) -> Contenedor:
     from app.infrastructure.cache import CacheMemoria
 
@@ -308,6 +337,8 @@ def contenedor_con(
         area_path=settings.area_path_efectivo,
     )
     indice = IndiceWorkItems(repo, cache)
+    indice_pruebas = IndicePruebas(repo, cache, indice)
+    registro_real = registro or RegistroMemoria()
     return Contenedor(
         settings=settings,
         transporte=SabanaTransporte([], []),
@@ -315,7 +346,9 @@ def contenedor_con(
         cache=cache,
         servicio=servicio,
         indice=indice,
-        indice_pruebas=IndicePruebas(repo, cache, indice),
+        indice_pruebas=indice_pruebas,
+        registro_principal=registro_real,
+        servicio_registro=ServicioRegistro(registro_real, indice, indice_pruebas),
         escritura=escritura,
     )
 

@@ -12,6 +12,7 @@ from .models import (
     ActualizacionQA,
     CargaPruebas,
     Epic,
+    Instantanea,
     ItemIndice,
     ResultadoActualizacion,
 )
@@ -79,6 +80,38 @@ class CachePort(Protocol):
     def eliminar(self, clave: str) -> None: ...
 
     def limpiar(self) -> None: ...
+
+
+class RegistroAsignacionesPort(Protocol):
+    """Persistencia local de perfiles y asignaciones de pruebas.
+
+    Vive aparte de `CachePort` a propósito: la caché es volátil y se puede tirar
+    sin consecuencias, mientras que esto es **el único sitio donde existe la
+    información de qué épica lleva cada persona**. Un error aquí pierde trabajo
+    que Azure no conoce y no puede devolver.
+
+    Se lee y se escribe con un hash de versión, no con un `PUT` ciego: si el
+    fichero en disco cambió desde que se leyó, la escritura se rechaza en vez de
+    pisar el cambio ajeno.
+    """
+
+    async def leer(self) -> Instantanea:
+        """Lee el registro. Un fichero ausente devuelve una instantánea vacía.
+
+        No es un error: es el primer arranque. Un fichero **corrupto** sí lo es, y
+        debe decirlo en vez de devolver un registro vacío, porque «no hay
+        asignaciones» y «no se pudo leer el fichero» llevan a decisiones
+        opuestas.
+        """
+        ...
+
+    async def guardar(self, instantanea: Instantanea) -> Instantanea:
+        """Escribe el registro y devuelve la instantánea nueva con su hash.
+
+        Si el hash guardado no coincide con el del disco, lanza
+        `RegistroModificado`: el registro cambió desde que se leyó.
+        """
+        ...
 
 
 class EscrituraBacklogPort(Protocol):
