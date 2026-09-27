@@ -152,6 +152,14 @@ def requisitos_de_prueba(item: Dict) -> List[int]:
     prueban estos casos», que es como la guarda Azure en el caso. Las demás
     relaciones del caso (pasos compartidos, archivos, dependencias) no hablan de
     cobertura y se ignoran.
+
+    .. note:: Solo el `Test Case` aporta cobertura. Azure admite `TestedBy`
+       entre cualquier par de tipos, y en este proyecto hay una `User Story`
+       (17548) enlazada por `TestedBy` a cuatro **Tasks** del proceso de QA
+       («Creación de casos de pruebas», «Ejecución de casos», «Evidencias»…) y
+       no a ningún caso. Esa historia tiene proceso de QA documentado, pero
+       **ningún caso de prueba**, así que cuenta como descubierta. Verificado
+       medido: 240 historias con caso frente a 241 enlazadas por `TestedBy`.
     """
     relations = item.get("relations") if isinstance(item, dict) else None
     if not isinstance(relations, list):

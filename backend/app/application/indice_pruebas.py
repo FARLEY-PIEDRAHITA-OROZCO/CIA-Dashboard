@@ -31,7 +31,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 from ..domain.models import CargaPruebas, ItemIndice, ItemPrueba
 from ..domain.ports import CachePort, RepositorioBacklogPort
 from ..infrastructure.azure.queries import clave_orden_sprint, nombre_sprint
-from .indice import TIPOS_PRUEBA, IndiceWorkItems
+from .indice import TIPOS_PRUEBA, IndiceWorkItems, _raiz_iteracion
 
 logger = logging.getLogger("devops")
 
@@ -173,6 +173,9 @@ class IndicePruebas:
         contiene; lo único que aporta de fiable es su sprint y su responsable.
         """
         carga = await self._cargar()
+        # La raíz se detecta sobre los propios planes: 2 de 44 apuntan a la raíz
+        # de iteración, y esa no es un sprint (medido).
+        raiz = _raiz_iteracion(carga.items)
         filas: List[Dict[str, Any]] = []
         for item in carga.items:
             if item.tipo != "Test Plan":
@@ -182,14 +185,14 @@ class IndicePruebas:
                     "azure_id": item.azure_id,
                     "titulo": item.titulo,
                     "estado": item.estado,
-                    "sprint": nombre_sprint(item.sprint),
+                    "sprint": "" if item.sprint == raiz else nombre_sprint(item.sprint),
                     "persona": item.persona.nombre if item.persona else "",
                     "modificado": item.modificado.isoformat() if item.modificado else "",
                 }
             )
         filas.sort(
             key=lambda f: (
-                _clave_sprint(f["sprint"]),
+                _clave_sprint(f["sprint"], raiz),
                 f["persona"].lower(),
                 f["azure_id"],
             )
@@ -244,6 +247,7 @@ class IndicePruebas:
         historias = await self._historias()
         cubierto, _ = _requisitos_cubiertos(carga.items)
         pendientes = [h for h in historias if h.azure_id not in cubierto]
+        raiz = _raiz_iteracion(historias)
         if sprint.strip():
             objetivo = sprint.strip()
             pendientes = [
@@ -262,7 +266,9 @@ class IndicePruebas:
                     or objetivo in h.persona.nombre.lower()
                 )
             ]
-        pendientes.sort(key=lambda h: (_clave_sprint(h.sprint), h.azure_id))
+        # Sin sprint propio van primero, para que la deuda que no pertenece a
+        # ninguna iteración no quede enterrada al final de 361 filas.
+        pendientes.sort(key=lambda h: (_clave_sprint(h.sprint, raiz), h.azure_id))
         total = len(pendientes)
         pagina = pendientes[max(0, offset) : max(0, offset) + max(1, limite)]
         return {
@@ -279,7 +285,10 @@ class IndicePruebas:
                     "azure_id": h.azure_id,
                     "titulo": h.titulo,
                     "estado": h.estado,
-                    "sprint": nombre_sprint(h.sprint),
+                    # La raíz de iteración se devuelve vacía: no es un sprint y
+                    # la UI debe poder decir «sin sprint» en vez de pintar el
+                    # nombre del proyecto como si fuera una iteración.
+                    "sprint": "" if h.sprint == raiz else nombre_sprint(h.sprint),
                     "persona": h.persona.nombre if h.persona else "",
                     "modificado": h.modificado.isoformat() if h.modificado else "",
                 }
@@ -314,11 +323,21 @@ class IndicePruebas:
         Una historia cuenta como cubierta si **algún** caso la prueba, sin mirar
         en qué sprint está el caso: el sprint de un caso es dónde se planificó
         ejecutarlo, no dónde está el requisito.
+
+        Se excluye la raíz de la iteración con la misma detección que el índice de
+        sprints (la ruta que es **prefijo** de otras, no la más corta). 46
+        historias apuntan a la raíz en este proyecto: si la raíz apareciera como
+        una barra más de la cinta, se leería como un sprint con nombre de
+        proyecto. Esas historias no se pierden: siguen contando en la brecha
+        global y en la lista de trabajo, que las etiqueta como «sin sprint».
         """
         conteo: Counter[str] = Counter()
         cubiertas: Counter[str] = Counter()
         rutas: dict[str, str] = {}
+        raiz = _raiz_iteracion(historias)
         for h in historias:
+            if not h.sprint or h.sprint == raiz:
+                continue
             hoja = nombre_sprint(h.sprint)
             if not hoja:
                 continue
@@ -380,10 +399,14 @@ def _pct(parte: int, total: int) -> float:
     return round(parte * 100.0 / total, 1)
 
 
-def _clave_sprint(sprint: str) -> tuple:
-    """Orden de sprint tolerante a números, con la raíz al final.
+def _clave_sprint(sprint: str, raiz: str = "") -> tuple:
+    """Orden de sprint tolerante a números, agrupando lo que no tiene sprint.
 
-    Las historias sin sprint no son un sprint más: si se mezclaran en la
-    secuencia, la cinta mostraría un grupo invisible con un número.
+    Las historias sin sprint (o apuntando a la raíz de la iteración) no son un
+    sprint más: si se mezclaran en la secuencia, la lista de trabajo mostraría un
+    grupo con el nombre del proyecto donde se espera un sprint. Se ordenan al
+    principio, no al final, porque son la deuda más difícil de situar.
     """
-    return (0, "") if not sprint else (1, clave_orden_sprint(sprint))
+    if not sprint or (raiz and sprint == raiz):
+        return (0, "")
+    return (1, clave_orden_sprint(sprint))

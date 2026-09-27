@@ -264,6 +264,41 @@ async def test_historias_sin_sprint_no_inventan_un_sprint():
 
 
 @pytest.mark.asyncio
+async def test_la_raiz_de_iteracion_no_sale_como_un_sprint():
+    """46 historias apuntan a la raíz: no es un sprint con nombre de proyecto.
+
+    Se detecta por ser **prefijo** de otras rutas, nunca por ser la más corta:
+    con `Sprint 1` y `Sprint 10` la más corta sería `Sprint 1`.
+    """
+    historias = [
+        historia(1, sprint=RAIZ),
+        historia(2, sprint=f"{RAIZ}\\Sprint 1"),
+        historia(3, sprint=f"{RAIZ}\\Sprint 10"),
+    ]
+    _, indice = armar(historias, [])
+    nombres = [f["nombre"] for f in (await indice.cobertura())["sprints"]]
+    assert nombres == ["Sprint 1", "Sprint 10"]
+
+    # Y en la lista de trabajo se etiquetan como «sin sprint», no con el nombre
+    # del proyecto, que en la cinta se leería como una iteración más.
+    pendientes = await indice.sin_cubrir()
+    en_raiz = [i for i in pendientes["items"] if i["azure_id"] == 1]
+    assert en_raiz[0]["sprint"] == ""
+
+
+@pytest.mark.asyncio
+async def test_las_historias_sin_sprint_van_primero_en_la_lista():
+    """La deuda más difícil de situar no debe quedar enterrada al final."""
+    historias = [
+        historia(1, sprint=f"{RAIZ}\\Sprint 5"),
+        historia(2, sprint=RAIZ),
+    ]
+    _, indice = armar(historias, [])
+    pendientes = (await indice.sin_cubrir())["items"]
+    assert [i["azure_id"] for i in pendientes] == [2, 1]
+
+
+@pytest.mark.asyncio
 async def test_sin_cubrir_pagina_sin_repetir_ni_saltar():
     historias = [historia(i, sprint=f"{RAIZ}\\Sprint {i}") for i in range(1, 26)]
     _, indice = armar(historias, [])
@@ -341,10 +376,24 @@ async def test_planes_solo_los_planes_ordenados_por_sprint():
 
 @pytest.mark.asyncio
 async def test_plan_en_raiz_de_iteracion_no_equivale_a_un_sprint():
-    """2 de 44 planes apuntan a la raíz; la raíz no es un sprint más."""
+    """2 de 44 planes apuntan a la raíz; la raíz no es un sprint más.
+
+    Se detecta por ser prefijo de otra ruta, igual que en el índice de sprints.
+    """
+    _, indice = armar(
+        [historia(1)],
+        [plan(10, sprint=RAIZ), plan(11, sprint=f"{RAIZ}\\Sprint 3")],
+    )
+    filas = {f["azure_id"]: f for f in await indice.planes()}
+    assert filas[10]["sprint"] == ""
+    assert filas[11]["sprint"] == "Sprint 3"
+
+
+@pytest.mark.asyncio
+async def test_sin_jerarquia_la_ruta_se_muestra_tal_cual():
+    """Sin otra ruta no hay nada que delate la raíz: no se inventa el filtro."""
     _, indice = armar([historia(1)], [plan(10, sprint=RAIZ)])
-    filas = await indice.planes()
-    assert filas[0]["sprint"] == RAIZ
+    assert (await indice.planes())[0]["sprint"] == RAIZ
 
 
 # --------------------------------------------------------------------- #
