@@ -29,6 +29,7 @@ Todos los endpoints devuelven **JSON** (`application/json`).
 | GET | `/api/pruebas/cobertura` | Cobertura de historias con caso, global y por sprint | experimental |
 | GET | `/api/pruebas/sin-cubrir` | Historias sin caso de prueba, paginadas (la lista de trabajo de QA) | experimental |
 | GET | `/api/pruebas/planes` | Los planes como contexto: sprint y responsable | experimental |
+| GET | `/api/pruebas/activos` | Activos de prueba filtrados, con los campos que QA puede editar en su tipo | experimental |
 | PATCH | `/api/workitems/{id}` | Escritura QA (opt-in, ADR-11) | experimental |
 | GET | `/api/workitems/{id}/rev` | Revisión actual, para control de concurrencia | experimental |
 | POST | `/api/epics/refresh` | Invalida la caché **y los dos índices locales** | estable |
@@ -711,6 +712,48 @@ cambiante el `offset` repetiría o saltaría historias entre páginas.
     "sprint": "Sprint 1", "persona": "…", "modificado": "2026-02-01T…" }
 ]
 ```
+
+### `GET /api/pruebas/activos`
+
+Los activos filtrados y paginados, para **editarlos**.
+
+| Parámetro | Por defecto | Notas |
+| --------- | ----------- | ----- |
+| `tipo` | — | `Test Plan`, `Test Suite` o `Test Case` |
+| `estado` | — | Texto exacto |
+| `persona` | — | GUID o fragmento del nombre |
+| `sprint` | — | Ruta completa **o** nombre corto |
+| `limite` | `50` | 1–200 |
+| `offset` | `0` | ≥ 0 |
+
+```json
+{
+  "resumen": { "total": 3431, "offset": 0, "limite": 50, "hay_mas": true,
+               "parcial": false, "lotes_con_error": 0 },
+  "items": [
+    { "azure_id": 5733, "tipo": "Test Case", "titulo": "Validar…",
+      "estado": "Design", "sprint": "Sprint 45", "persona": "…",
+      "tags": "smoke", "prioridad": "2", "automatizacion": "Not Automated",
+      "modificado": "2026-02-01T…",
+      "campos_editables": ["estado", "notas_qa", "prioridad", "tags"] }
+  ],
+  "estados": { "Test Case": ["Design", "Ready", "Closed"],
+               "Test Plan": ["Active"] }
+}
+```
+
+Dos campos que existen por una razón concreta:
+
+- **`campos_editables`** lo envía el backend desde `CAMPOS_POR_TIPO`, la **misma**
+  tabla que aplica el adaptador de escritura. El frontend no decide qué
+  controles mostrar. No es una comodidad: Azure acepta en silencio escribir un
+  campo que el tipo no tiene (ver la enmienda a ADR-11 en
+  [02-backend](02-backend.md)), así que un control de más deja un campo huérfano
+  sin dar error. `Test Plan` y `Test Suite` llegan con `["estado"]`.
+- **`estados`** son los estados que el tipo **usa**, no el catálogo de la
+  plantilla, que no se puede leer. Azure rechaza con HTTP 400 un estado
+  inexistente, así que ofrecer el catálogo completo sería ofrecer transiciones
+  que siempre fallan.
 
 ### Cobertura parcial
 

@@ -523,10 +523,14 @@ ofrece una proyección con métricas.
    5,4 s son el precio de `$expand=relations`, sin el cual no hay cobertura. Si
    molesta, el índice de pruebas ya tiene TTL propio (900 s) y se puede precargar
    en el lifespan como el de sprints.
-8. Si algún día se activan escrituras sobre activos de prueba, la lista blanca
-   pasa a ser **por tipo** (`Microsoft.VSTS.Common.Priority` en test items y
-   `System.Priority` en Bug; `severidad` solo donde existe) y hay que enmendar
-   ADR-11, que hoy fija tres tipos editables.
+8. Escritura sobre activos de prueba: hecha (Fase 5). La lista blanca es
+   `CAMPOS_POR_TIPO` en `domain/models.py`; ver la enmienda a ADR-11 en
+   [02-backend](02-backend.md). Revisar si `mostrarPrioridad` debe activarse en
+   los tableros de historias y tareas: el campo existe (medido) y está apagado
+   por una decisión anterior que ya nadie recuerda.
+9. `Test Plan` y `Test Suite` solo admiten estado, y eso es de la plantilla, no
+   de la herramienta. Si algún día cambian de tipo en Azure, hay que volver a
+   medir `CAMPOS_POR_TIPO` antes de confiar en ella.
 
 ### Límites conocidos de la capa de pruebas
 

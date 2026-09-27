@@ -188,11 +188,17 @@ Complemento **de solo escritura**, separado de `repository.py`:
 | Método | Qué hace |
 | ------ | -------- |
 | `obtener_revision(id)` | `GET workitems/{id}` → `rev` actual (control de concurrencia) |
+| `_tipo_actual(id)` | `GET workitems/{id}?$fields=System.WorkItemType` → tipo real |
 | `actualizar_work_item(id, cambios, validar=, rev_esperada=)` | Traduce `ActualizacionQA` a *JSON Patch* y aplica `PATCH workitems/{id}` |
 
 Garantías del adaptador:
-- **Lista blanca estricta**: solo genera operaciones para los campos de
-  `ActualizacionQA`; nada más puede llegar a Azure.
+- **Lista blanca estricta por tipo**: solo genera operaciones para los campos de
+  `ActualizacionQA`, y **solo los que el tipo admite** (`CAMPOS_POR_TIPO`, en
+  `domain/models.py`). El tipo se lee de Azure al guardar, no lo declara el
+  cliente: una lista blanca que depende de lo que dice el cliente no es una
+  lista blanca.
+- **El tipo se valida antes de la red**: un campo que el tipo no tiene se
+  rechaza con 422 y un mensaje que lo explica, sin gastar una llamada.
 - **Notas QA append-only**: lee la descripción actual y agrega el bloque al
   final, preservando el formato HTML del autor original.
 - **Escape de HTML**: el texto del usuario se escapa con `html.escape` antes
@@ -202,6 +208,56 @@ Garantías del adaptador:
 - **Concurrencia**: si `rev_esperada` no coincide con la revisión actual, aborta
   **antes** de escribir.
 - **Nunca** envía `bypassRules`: las reglas del proyecto se respetan siempre.
+
+### Enmienda a ADR-11: la lista blanca es por tipo (2026-09-27)
+
+ADR-11 fijaba tres tipos editables (Bug, User Story, Task) y una lista de campos
+para todos por igual. Eso era correcto mientras los tipos coincidían, y dejó de
+serlo al añadir los activos de prueba.
+
+**Qué se mide** (proyecto `CIA`, leyendo qué campos devuelve Azure por tipo, sin
+asumir el nombre del campo):
+
+| Tipo | Campos en la respuesta | `Priority` | `Tags` | `Description` | `Severity` |
+| ---- | ---------------------- | ---------- | ------ | ------------- | ---------- |
+| Bug | 32 | 143/143 | 123/143 | 44/143 | **143/143** |
+| Issue | 32 | 3/3 | 3/3 | 3/3 | 0/3 |
+| User Story | 36 | 601/601 | 400/601 | 601/601 | 0/601 |
+| Task | 33 | 4904/4904 | 2873/4904 | 1503/4904 | 0/4904 |
+| Epic | 38 | 132/132 | 2/132 | 35/132 | 0/132 |
+| Feature | 36 | 203/203 | 102/203 | 32/203 | 0/203 |
+| **Test Plan** | **27** | **0/44** | **0/44** | **0/44** | **0/44** |
+| **Test Suite** | **28** | **0/457** | **0/457** | **0/457** | **0/457** |
+| Test Case | 33 | 3431/3431 | 486/3431 | 176/3431 | 0/3431 |
+
+`Test Plan` y `Test Suite` no tienen **ninguno** de los cuatro campos: no
+aparecen ni siquiera en la respuesta de Azure. La tabla `CAMPOS_POR_TIPO`
+(`domain/models.py`) los deja editables **solo en su estado**, que es lo único
+que su tipo tiene en esta plantilla.
+
+**Por qué hace falta una lista blanca propia, y por qué no la pone Azure.**
+Con `validateOnly=true` se comprobó (2026-09-27) que Azure **sí** acepta
+escribir `Severity` en un `Test Case`, o `Tags` y `Description` en un
+`Test Plan`: valida el *valor* del campo (una severidad inventada o un estado
+inexistente dan HTTP 400) pero **no** que el campo exista en el tipo. Escribir un
+campo que el tipo no tiene crea un campo huérfano, o se descarta, **sin ningún
+error visible**. La lista blanca no es un esquema del adaptador: es la única
+barrera contra ese silencio.
+
+**Consecuencias de la enmienda:**
+
+1. Los tipos editables pasan de 3 a 6, con `Test Plan`, `Test Suite` y
+   `Test Case` añadidos.
+2. `Epic` y `Feature` **siguen excluidos** (decisión de producto intacta), pero
+   ahora lo cumple el backend y no solo la ausencia de formulario. `Issue`
+   tampoco es editable, por la misma razón.
+3. `Test Plan` y `Test Suite` solo admiten estado. No es una limitación de la
+   herramienta: es la forma del tipo en la plantilla del proyecto.
+4. `/api/pruebas/activos` envía `campos_editables` **derivado de la misma tabla**,
+   de modo que la UI no pueda ofrecer un control que el backend rechazaría.
+5. El tipo se lee de Azure en cada guardado (~50 ms) en lugar de confiar en el
+   cliente. Las escrituras son raras y deliberadas; el coste es irrelevante y la
+   comprobación, no negociable.
 
 ---
 
