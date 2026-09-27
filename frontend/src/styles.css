@@ -1068,17 +1068,14 @@ code {
   overflow: hidden;
 }
 
-/* Relleno de abajo hacia arriba: la parte cerrada de la barra. */
+/* Relleno de abajo hacia arriba: la parte cerrada de la barra.
+   Sin `opacity`: un verde al 55 % sobre fondo claro se mezcla a un verde
+   lavado que se lee gris, que es justo lo que pasaba con los sprints cerrados. */
 .cinta-cierre {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  background: var(--acento);
-  opacity: 0.55;
-}
-
-.cinta-barra[data-tono="ok"] .cinta-cierre {
   background: #16a34a;
 }
 
@@ -1091,7 +1088,7 @@ code {
 }
 
 .cinta-barra[data-tono="acento"] .cinta-cierre {
-  opacity: 0.85;
+  background: var(--acento);
 }
 
 /* Marca de rezago: los ítems que el sprint dejó sin cerrar. Va pegada al

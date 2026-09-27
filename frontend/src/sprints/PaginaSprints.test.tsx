@@ -312,6 +312,34 @@ describe("Nivel 2 · detalle bajo demanda", () => {
 
     expect(await screen.findByText("Ningún ítem cumple los filtros indicados.")).toBeInTheDocument();
   });
+
+  it("el tono del estado sale de la regla única de la app", async () => {
+    // La tabla duplicaba el mapeo de tonos y la copia se contradecía: «Removed»
+    // salía verde como si estuviera cerrado. Ahora usa `EstadoTrabajo`, que es
+    // lo que usan el tablero de historias, el de tareas y el de bugs.
+    stubApi({
+      ...ITEMS,
+      items: [
+        { ...ITEMS.items[0], azure_id: 901, titulo: "Uno", estado: "Closed", cerrado: true },
+        { ...ITEMS.items[0], azure_id: 902, titulo: "Dos", estado: "Removed", cerrado: true },
+        { ...ITEMS.items[0], azure_id: 903, titulo: "Tres", estado: "Doing", cerrado: false },
+      ],
+      total: 3,
+    });
+    renderPagina({ filtros: { tipo: "Bug" } });
+
+    await screen.findByRole("cell", { name: /Uno/ });
+    const tono = (id: number) =>
+      screen.getByRole("link", { name: String(id) }).closest("tr")
+        ?.querySelector(".badge-estado")
+        ?.className ?? "";
+
+    // Cerrado en verde, que es lo que se pidió.
+    expect(tono(901)).toContain("estado-terminado");
+    // Removido NO es lo mismo que cerrado: es un tono propio, no verde.
+    expect(tono(902)).toContain("estado-removido");
+    expect(tono(903)).toContain("estado-progreso");
+  });
 });
 
 describe("Embudo de filtros", () => {

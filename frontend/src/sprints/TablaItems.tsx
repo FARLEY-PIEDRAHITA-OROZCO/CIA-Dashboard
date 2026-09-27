@@ -5,6 +5,7 @@
  */
 
 import type { ItemIndice } from "../api/tipos";
+import { EstadoTrabajo } from "../componentes/EstadoTrabajo";
 import { antiguedadLegible } from "./fechas";
 
 const TOPE_TAGS = 3;
@@ -76,18 +77,11 @@ export function TablaItems({
                   <td>{item.titulo || <span className="texto-suave">(sin título)</span>}</td>
                   <td>{item.tipo}</td>
                   <td>
-                    <span
-                      className={`badge-estado ${
-                        item.cerrado
-                          ? "estado-terminado"
-                          : item.estado.toLowerCase().includes("progress") ||
-                              item.estado.toLowerCase().includes("active")
-                            ? "estado-progreso"
-                            : "estado-nuevo"
-                      }`}
-                    >
-                      {item.estado || "—"}
-                    </span>
+                    {/* `EstadoTrabajo` es la regla única de toda la app para el
+                        tono de un estado. Aquí se duplicaba, y la copia
+                        contradecía al resto: «Removed» salía verde (como
+                        cerrado) y «Testing» salía gris (como sin empezar). */}
+                    <EstadoTrabajo estado={item.estado} />
                   </td>
                   <td>{item.persona?.nombre || <span className="texto-suave">sin asignar</span>}</td>
                   <td className="small">{item.sprint.split("\\").pop() || "—"}</td>
