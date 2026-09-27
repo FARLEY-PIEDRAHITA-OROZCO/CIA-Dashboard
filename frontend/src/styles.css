@@ -1526,6 +1526,10 @@ code {
   background: #16a34a;
 }
 
+/* El hueco se ancla arriba y su borde inferior lo fija el componente, que es lo
+   que lo hace ocupar exactamente lo que sobra. Con `height: 0` implícito (un
+   `top: 0` sin `bottom` en un elemento vacío colapsa) la parte naranja no se
+   vería. */
 .cinta-hueco {
   top: 0;
   background: #f97316;

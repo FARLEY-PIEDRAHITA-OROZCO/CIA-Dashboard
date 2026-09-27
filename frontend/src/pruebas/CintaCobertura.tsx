@@ -36,7 +36,7 @@ export function CintaCobertura({
             <li className="cinta-item" key={columna.ruta}>
               <button
                 type="button"
-                className="cinta-barra cinta-apilada"
+                className="cinta-barra"
                 data-tono={tonoColumna(columna)}
                 data-activo={activo ? "true" : undefined}
                 onClick={() => onElegir(columna.ruta)}
@@ -45,14 +45,19 @@ export function CintaCobertura({
                 title={describirColumna(columna)}
                 style={{ height: `${alto}%` }}
               >
-                {/* Abajo: lo cubierto. Arriba: lo que falta. La parte cubierta
-                    lleva su propia altura y la del hueco ocupa el resto, así que
-                    el reparto es exacto con cualquier fracción. */}
+                {/* Las dos partes se reparten la barra anclándose a extremos
+                    opuestos: la cubierta al suelo con su altura, y el hueco al
+                    remate con el borde inferior a la altura cubierta. Así el
+                    reparto es exacto con cualquier fracción, sin calcular dos
+                    alturas que podrían dejar un hueco de un píxel entre ellas. */}
                 <span
                   className="cinta-parte cinta-cubierta"
                   style={{ height: `${columna.cobertura * 100}%` }}
                 />
-                <span className="cinta-parte cinta-hueco" />
+                <span
+                  className="cinta-parte cinta-hueco"
+                  style={{ bottom: `${columna.cobertura * 100}%` }}
+                />
               </button>
               <span className="visualmente-oculto">{describirColumna(columna)}</span>
             </li>
