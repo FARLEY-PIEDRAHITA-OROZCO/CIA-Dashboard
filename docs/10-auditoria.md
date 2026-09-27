@@ -83,6 +83,43 @@ Bugs reales encontrados y corregidos durante la ejecución (detalle en el plan):
 | 8 | `?sprint=Sprint 45` devolvía **0** en silencio: solo funcionaba la ruta completa | `filtrar()` acepta también la hoja de la ruta, sin distinguir mayúsculas |
 | 9 | El campo de persona escribía el hash en cada pulsación: 4 teclas = 4 entradas de historial y 4 peticiones a `/api/items` | Efecto con retardo de 300 ms; el `onChange` solo actualiza estado local |
 | 10 | El efecto con retardo se **añadió junto a** la llamada inmediata del `onChange`, sin reemplazarla: el retardo era un no-op | Se quitó la llamada inmediata. Lo detectó la traza de pila de una escritura de hash |
+| 11 | `TarjetaSenal` solo renderizaba sus hijos si estaba abierta, así que **el mensaje de error de una señal caída nunca se veía** | Los hijos se renderizan siempre; quien llama decide qué pasa (la lista solo si está abierta, el error siempre) |
+| 12 | La suma de las columnas de la cinta (5.483) se tomaba como el total del proyecto (5.651): 168 ítems no tienen sprint asignable | `GET /api/sprints` devuelve `total_items` y `asignados_a_sprint`, y el veredicto dice ambos |
+| 13 | El botón de una tarjeta de analítica prometía el total (410 casos) y abría la lista recortada a 50 | El botón promete lo que se ve; la nota dice cuántos hay en total |
+
+### Rediseño de la vista de sprints (2026-09-26)
+
+El diagnóstico no fue «falta una librería de UI» sino «todo está desplegado a la
+vez». Contando lo que había en pantalla al abrir: 4 tarjetas de KPIs, 37 filas ×
+7 columnas de catálogo y 200 filas × 8 de ítems, unas **1.900 celdas**. Y los 4
+KPIs mostraban las mismas constantes sin filtro, así que no informaban de nada en
+el estado por defecto.
+
+Decisión: **no** adoptar MUI/Ant/shadcn. El problema no son los componentes sino
+la jerarquía de información, y un framework habría añadido ~100 KB para pintar lo
+mismo que ya se pintaba. Se implementaron tres primitivas nuevas y se
+reutilizaron las existentes:
+
+| Primitiva | Qué resuelve |
+| --------- | ------------ |
+| `CintaSprints` | 37 sprints son una **secuencia**: la tabla obliga a leer fila a fila, la barra se lee de un vistazo. Fusiona catálogo y rezago en un visual |
+| `LineaVeredicto` | Una frase en vez de cuatro tarjetas constantes. Responde la pregunta real |
+| `Embudo` | Los filtros activos como pastillas quitables, no una frase que solo los describe |
+| `TarjetaSenal` | Una señal = un número y una frase; los ejemplos bajo demanda |
+
+Con tres niveles de revelado, el estado por defecto pasó de ~1.900 celdas a 37
+barras y una frase.
+
+**Lo que no se resolvió y conviene revisar:**
+
+1. **Sin verificación visual.** No había navegador conectado en esta sesión. La
+   cobertura es de pruebas de componentes y de API real; el juicio de «¿se ve
+   bien?» queda pendiente de que alguien abra la vista.
+2. **La cinta crece sin agrupar.** Con 37 sprints cabe; con 150 se desplazará en
+   horizontal. Se prefirió desplazar antes que agregar en silencio sprints que el
+   usuario puede querer abrir uno a uno, pero es una decisión revisable.
+3. **200 filas siguen renderizándose** con el detalle desplegado. Aceptable para
+   el navegador; si molesta, virtualización.
 
 ## Actualización 2026-09-25
 
@@ -199,8 +236,8 @@ run.py → app.main:app
 
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
-| Backend pytest | **174 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
-| Frontend Vitest | **155 passed / 18 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs, sprints, analítica y sanitización. |
+| Backend pytest | **175 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
+| Frontend Vitest | **200 passed / 20 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs, cinta de sprints, analítica y sanitización. |
 | Frontend build | **PASS** | `tsc -b` y `vite build`; bundle generado correctamente. |
 | `pip check` | **PASS** | No hay requisitos Python rotos en el entorno auditado. |
 | `pip-audit --local` | **PASS** | Sin vulnerabilidades conocidas en el lockfile instalado. |

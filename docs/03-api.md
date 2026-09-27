@@ -350,7 +350,9 @@ iteración).
     }
   ],
   "total": 37,
-  "sprint_actual": "Sprint 45"
+  "sprint_actual": "Sprint 45",
+  "total_items": 5651,
+  "asignados_a_sprint": 5483
 }
 ```
 
@@ -361,6 +363,13 @@ iteración).
 | `personas` | personas distintas con ítems en el sprint |
 | `ultimo_cambio` | `System.ChangedDate` más reciente del sprint; `""` si no hay fechas |
 | `sprint_actual` | sprint con el cambio más reciente |
+| `total_items` | ítems del índice local, incluidos los que no tienen sprint |
+| `asignados_a_sprint` | ítems que sí están en algún sprint |
+
+> `total_items - asignados_a_sprint` son los ítems **sin sprint asignable**. En el
+> proyecto medido: 5.651 en total, 5.483 en sprints y 168 sin sprint. La UI dice
+> ambos porque la suma de las columnas no es el total del proyecto, y presentarla
+> como tal sería una mentira silenciosa.
 
 - El orden es **numérico y tolerante**: `Sprint 9` antes que `Sprint 10`, y el
   legado `Sprint_001-HUB` conserva su posición. Los nombres sin número van al
@@ -451,6 +460,15 @@ solo lectura y salen del índice local.
 > notas». Las notas de QA se agregan a la descripción, que el índice no carga por
 > peso; indexar descripciones es una mejora futura, no un atajo.
 
+Cada lista trae como máximo **50** ejemplos, mientras que los conteos del
+`resumen` son completos. La UI lo dice: el botón de una tarjeta promete los casos
+que se van a **ver**, y la nota indica cuántos son en total. Un botón que
+promete 136 y abre 50 filas es peor que no tener botón.
+
+La página presenta cada señal como una tarjeta con un número grande y una frase
+de contexto, y los ejemplos bajo demanda. Antes eran tres filas de KPIs más
+seis listas de veinte elementos, todas a la vez.
+
 ### Vista de sprint en el frontend
 
 La página `#/sprints` mantiene filtros y hoja **en el hash**, no en estado
@@ -466,6 +484,31 @@ local, para que la URL sea compartible. Reglas:
   entrada de historial y una petición por palabra, no por pulsación. Los
   desplegables se aplican al instante, porque elegir es una decisión
   deliberada.
+
+### Cómo se presenta
+
+La vista tiene **tres niveles de revelado**, no una pantalla con todo desplegado.
+Abrirla mostraba unas 1.900 celdas de tabla: 4 tarjetas de KPIs, un catálogo de
+37 filas y una tabla de 200 ítems. Y los KPIs no informaban de nada sin filtro
+(37 · 5.651 · 35 · «Sprint 45» fueran cuales fueran las constantes).
+
+| Nivel | Qué se ve | Cuándo |
+| ----- | --------- | ------ |
+| 1 | Una línea de veredicto y la cinta de sprints | Al abrir |
+| 2 | La tabla de ítems filtrada | Con un filtro activo, o con `?desplegado=1` |
+| 3 | La ficha del ítem | Al abrir un ítem (vista de épica) |
+
+La **cinta** sustituye a la tabla de catálogo porque 37 sprints son una
+*secuencia*, no un conjunto: una tabla obliga a leer fila por fila para comparar
+y 37 barras se leen de un vistazo. Altura = volumen, relleno = porcentaje
+cerrado, marca en la base = ítems que ese sprint dejó sin cerrar. La marca no
+cuesta ninguna petición extra: el rezago de un sprint histórico es exactamente su
+número de ítems abiertos.
+
+La cinta también es el selector de sprint, así que el desplegable de 37 opciones
+desapareció. Con scroll horizontal en lugar de agrupar: si el proyecto llegara a
+150 sprints, se desplaza, que es mejor que agregar en silencio sprints que
+alguien puede querer abrir uno a uno.
 
 ### `GET /api/analitica/verificacion` — señal ①
 
