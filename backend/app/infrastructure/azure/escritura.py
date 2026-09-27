@@ -27,7 +27,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
-from ...domain.models import ActualizacionQA, ResultadoActualizacion
+from ...domain.models import (
+    CAMPOS_POR_TIPO,
+    ActualizacionQA,
+    ResultadoActualizacion,
+    campos_admitidos,
+)
 from ...domain.ports import EscrituraBacklogPort, TransportePort
 from . import queries
 from .transport import AzureError
@@ -42,6 +47,52 @@ MAX_TAGS = 500
 MARCA_NOTAS_QA = "Notas de QA"
 #: Separador de tags en Azure DevOps.
 SEPARADOR_TAGS = ";"
+
+#: Traducción de campo a su nombre de campo en Azure, para los mensajes de error.
+NOMBRE_CAMPO_AZURE = {
+    "estado": queries.CAMPO_ESTADO,
+    "prioridad": queries.CAMPO_PRIORIDAD,
+    "severidad": queries.CAMPO_SEVERIDAD,
+    "tags": queries.CAMPO_TAGS,
+    "notas_qa": queries.CAMPO_DESCRIPCION,
+}
+
+#: Tipos con un único campo editable: merecen un mensaje propio porque son el
+#: caso que más sorprende (el tipo sí está en la lista de editables).
+_ESTADO_UNICO = ("Test Plan", "Test Suite")
+
+
+def comprobar_tipo(tipo: str, campos: List[str]) -> None:
+    """Rechaza campos que el tipo no admite, antes de la red.
+
+    Sin esto, guardar «severidad» en una historia llega a Azure y vuelve un 400
+    opaco; aquí el error dice qué campo sobra y por qué. Los tipos **no
+    editables** (Epic y Feature en la decisión de ADR-11, o cualquier tipo
+    desconocido) se rechazan con el mismo mecanismo.
+    """
+    admitidos = campos_admitidos(tipo)
+    if not admitidos:
+        raise ErrorValidacionEscritura(
+            f"El tipo «{tipo}» no es editable por QA. "
+            "Los tipos editables son: " + ", ".join(sorted(CAMPOS_POR_TIPO)) + "."
+        )
+    sobrantes = [c for c in campos if c not in admitidos]
+    if not sobrantes:
+        return
+    if tipo in _ESTADO_UNICO:
+        # Merece su propio mensaje: es el caso que más sorprende, porque el
+        # tipo sí aparece en la lista de editables. Nótese que Azure lo habría
+        # dejado pasar (comprobado con `validateOnly`): lo que hace falta aquí
+        # es no crear un campo que el tipo no tiene y que nadie va a leer.
+        raise ErrorValidacionEscritura(
+            f"Un «{tipo}» de este proyecto solo tiene estado editable: no tiene "
+            f"tags, descripción ni prioridad (0 de sus elementos los tienen). "
+            f"Quita: {', '.join(sobrantes)}."
+        )
+    raise ErrorValidacionEscritura(
+        f"El tipo «{tipo}» no admite: {', '.join(sobrantes)}. "
+        f"Sus campos editables son: {', '.join(sorted(admitidos))}."
+    )
 
 
 class ErrorValidacionEscritura(ValueError):
@@ -132,6 +183,22 @@ class AzureEscrituraRepositorio(EscrituraBacklogPort):
         )
         datos = await self._transporte.get(url)
         return int(datos.get("rev") or 0)
+
+    async def _tipo_actual(self, work_item_id: int) -> str:
+        """Tipo real del work item en Azure, para aplicar la lista blanca por tipo.
+
+        No se pide al cliente: una lista blanca que depende de lo que dice el
+        cliente sobre el tipo no es una lista blanca. Es una lectura extra de
+        un solo campo (~50 ms) y solo ocurre al guardar, que es una operación
+        rara y deliberada.
+        """
+        url = self._ruta_workitem(
+            work_item_id,
+            f"?$fields={quote(queries.CAMPO_TIPO, safe=',')}"
+            f"&api-version={queries.API_VERSION}",
+        )
+        datos = await self._transporte.get(url)
+        return queries.tipo(datos)
 
     async def _descripcion_actual(self, work_item_id: int) -> str:
         url = self._ruta_workitem(
@@ -236,6 +303,13 @@ class AzureEscrituraRepositorio(EscrituraBacklogPort):
                 f"→ {rev_actual}). Vuelve a cargarlo antes de guardar."
             )
 
+        # La lista blanca depende del tipo **real**: `Test Plan` y `Test Suite`
+        # solo admiten estado, así que un formulario que ofrezca tags fallaría
+        # con un 400 de Azure sin explicar por qué.
+        tipo = await self._tipo_actual(work_item_id)
+        campos = cambios.campos_modificados()
+        comprobar_tipo(tipo, campos)
+
         operaciones = await self._json_patch(
             work_item_id, cambios, rev_esperada=rev_actual
         )
@@ -247,10 +321,10 @@ class AzureEscrituraRepositorio(EscrituraBacklogPort):
         datos = await self._transporte.patch(url, operaciones)
 
         rev_resultado = int(datos.get("rev") or rev_actual)
-        campos = cambios.campos_modificados()
         logger.info(
-            "Work item %s %s: campos=%s rev=%s",
+            "Work item %s (%s) %s: campos=%s rev=%s",
             work_item_id,
+            tipo,
             "validado" if validar else "actualizado",
             ",".join(campos),
             rev_resultado,

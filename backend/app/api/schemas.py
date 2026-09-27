@@ -294,6 +294,44 @@ class SinCubrir(BaseModel):
     items: List[HistoriaSinCubrir] = []
 
 
+class ActivoDePrueba(BaseModel):
+    """Activo de prueba en la lista editable.
+
+    `campos_editables` lo envía el backend desde `CAMPOS_POR_TIPO`, la misma tabla
+    que aplica el adaptador de escritura. El frontend **no** calcula qué controles
+    ofrecer: si lo hiciera, bastaría con que los dos se equivocaran para ofrecer
+    un campo que el tipo no tiene, y Azure lo aceptaría en silencio.
+    """
+
+    azure_id: int
+    tipo: str
+    titulo: str = ""
+    estado: str = ""
+    sprint: str = ""
+    persona: str = ""
+    tags: str = ""
+    prioridad: str = ""
+    automatizacion: str = ""
+    modificado: str = ""
+    campos_editables: List[str] = []
+
+
+class ResumenActivos(BaseModel):
+    total: int = 0
+    offset: int = 0
+    limite: int = 0
+    hay_mas: bool = False
+    parcial: bool = False
+    lotes_con_error: int = 0
+
+
+class ActivosPrueba(BaseModel):
+    resumen: ResumenActivos
+    items: List[ActivoDePrueba] = []
+    #: Estados observados por tipo, para los selectores de transición.
+    estados: Dict[str, List[str]] = {}
+
+
 class ResultadoEscritura(BaseModel):
     """Resultado de una escritura de QA (o de su validación en seco)."""
 

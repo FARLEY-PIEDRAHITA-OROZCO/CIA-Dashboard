@@ -19,12 +19,24 @@ PROY = "Proyecto de ejemplo"
 
 
 class TransporteEscritura:
-    """Fake que registra PATCH y devuelve un work item de Azure."""
+    """Fake que registra PATCH y devuelve un work item de Azure.
 
-    def __init__(self, rev: int = 3, descripcion: str = "", campos: dict | None = None) -> None:
+    `tipo` modela el `System.WorkItemType` que Azure devuelve. No es decorativo:
+    la lista blanca de escritura es **por tipo** (Fase 5), así que sin esto
+    cualquier prueba pasaría con un tipo vacío.
+    """
+
+    def __init__(
+        self,
+        rev: int = 3,
+        descripcion: str = "",
+        campos: dict | None = None,
+        tipo: str = "Bug",
+    ) -> None:
         self.rev = rev
         self.descripcion = descripcion
         self.campos = campos or {}
+        self.tipo = tipo
         self.patches: list[tuple[str, object, bool]] = []
         self.gets: list[str] = []
         self.error: Exception | None = None
@@ -33,6 +45,12 @@ class TransporteEscritura:
         self.gets.append(url)
         if "System.Description" in url:
             return {"id": 1, "rev": self.rev, "fields": {"System.Description": self.descripcion}}
+        if "System.WorkItemType" in url:
+            return {
+                "id": 1,
+                "rev": self.rev,
+                "fields": {"System.WorkItemType": self.tipo},
+            }
         return {"id": 1, "rev": self.rev, "fields": dict(self.campos)}
 
     async def post(self, url: str, body=None) -> dict:

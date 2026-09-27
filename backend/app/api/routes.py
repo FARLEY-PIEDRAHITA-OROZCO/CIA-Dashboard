@@ -10,6 +10,7 @@ from ..domain.models import Epic
 from ..infrastructure.azure.transport import AzureError
 from .deps import IndiceDep, IndicePruebasDep, ServicioDep
 from .schemas import (
+    ActivosPrueba,
     BrechaVerificacion,
     CoberturaPruebas,
     DetalleBugs,
@@ -323,6 +324,37 @@ async def api_pruebas_sin_cubrir(
     return SinCubrir(
         **await indice.sin_cubrir(
             persona=persona, sprint=sprint, limite=limite, offset=offset
+        )
+    )
+
+
+@router.get(f"{PRUEBAS}/activos", response_model=ActivosPrueba, tags=["Pruebas"])
+async def api_pruebas_activos(
+    servicio: ServicioDep,
+    indice: IndicePruebasDep,
+    tipo: str = "",
+    estado: str = "",
+    persona: str = "",
+    sprint: str = "",
+    limite: Annotated[int, Query(ge=1, le=MAXIMO_ITEMS)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ActivosPrueba:
+    """Los activos de prueba filtrados y paginados, con sus campos editables.
+
+    Es lo que permite editarlos: cada elemento trae `campos_editables`, derivado
+    de la tabla que aplica el adaptador de escritura, para que el formulario no
+    ofrezca un campo que el tipo no tiene. `Test Plan` y `Test Suite` llegan con
+    `["estado"]` y nada más.
+    """
+    _requiere_configuracion(servicio)
+    return ActivosPrueba(
+        **await indice.activos(
+            tipo=tipo,
+            estado=estado,
+            persona=persona,
+            sprint=sprint,
+            limite=limite,
+            offset=offset,
         )
     )
 

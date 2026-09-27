@@ -28,7 +28,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Set
 
-from ..domain.models import CargaPruebas, ItemIndice, ItemPrueba
+from ..domain.models import CargaPruebas, ItemIndice, ItemPrueba, campos_admitidos
 from ..domain.ports import CachePort, RepositorioBacklogPort
 from ..infrastructure.azure.queries import clave_orden_sprint, nombre_sprint
 from .indice import TIPOS_PRUEBA, IndiceWorkItems, _raiz_iteracion
@@ -198,6 +198,76 @@ class IndicePruebas:
             )
         )
         return filas
+
+    async def activos(
+        self,
+        *,
+        tipo: str = "",
+        estado: str = "",
+        persona: str = "",
+        sprint: str = "",
+        limite: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Los activos de prueba filtrados, para poder editarlos en la UI.
+
+        Cada elemento lleva `campos_editables`, derivado de la **misma** tabla
+        `CAMPOS_POR_TIPO` que aplica el adaptador de escritura. No es una
+        comodidad del frontend: si la UI calculara por su cuenta qué controles
+        ofrecer, bastaría con que uno de los dos se equivocara para ofrecer un
+        campo que el tipo no tiene, y Azure lo aceptaría en silencio
+        (comprobado con `validateOnly`).
+
+        `Test Plan` y `Test Suite` llegan con `["estado"]` y nada más, que es lo
+        único que su tipo tiene en esta plantilla.
+        """
+        carga = await self._cargar()
+        tipo = (tipo or "").strip()
+        estado = (estado or "").strip()
+        objetivo_persona = (persona or "").strip().lower()
+        objetivo_sprint = (sprint or "").strip()
+        raiz = _raiz_iteracion(carga.items)
+
+        seleccion: List[ItemPrueba] = []
+        for item in carga.items:
+            if tipo and item.tipo != tipo:
+                continue
+            if estado and (item.estado or "") != estado:
+                continue
+            if objetivo_persona and not (
+                item.persona
+                and (
+                    objetivo_persona == item.persona.guid.lower()
+                    or objetivo_persona in item.persona.nombre.lower()
+                )
+            ):
+                continue
+            if objetivo_sprint and not (
+                item.sprint == objetivo_sprint
+                or nombre_sprint(item.sprint).lower() == objetivo_sprint.lower()
+            ):
+                continue
+            seleccion.append(item)
+
+        # Orden estable (tipo, id) para que el `offset` no repita ni salte.
+        seleccion.sort(key=lambda i: (i.tipo, i.azure_id))
+        total = len(seleccion)
+        pagina = seleccion[max(0, offset) : max(0, offset) + max(1, limite)]
+        return {
+            "resumen": {
+                "total": total,
+                "offset": max(0, offset),
+                "limite": max(1, limite),
+                "hay_mas": max(0, offset) + len(pagina) < total,
+                "parcial": carga.parcial,
+                "lotes_con_error": carga.lotes_con_error,
+            },
+            "items": [_a_activo(item, raiz) for item in pagina],
+            # Estados que el tipo usa de verdad. No es el catálogo de la plantilla
+            # (no se puede leer) sino los valores presentes, que es lo que evita
+            # ofrecer una transición que Azure va a rechazar con un 400.
+            "estados": _estados_por_tipo(carga.items),
+        }
 
     # ------------------------------------------------------------------ #
     # Cobertura
@@ -385,6 +455,43 @@ def _brecha(
         "sin_cubrir": len(historias) - cubiertas,
         "pct_cubiertas": _pct(cubiertas, len(historias)),
         "parcial": parcial,
+    }
+
+
+def _a_activo(item: ItemPrueba, raiz: str) -> Dict[str, Any]:
+    """Proyección de un activo para la lista editable.
+
+    `campos_editables` sale de `CAMPOS_POR_TIPO`, la misma tabla que usa el
+    adaptador de escritura: una sola fuente para lo que se puede tocar.
+    """
+    return {
+        "azure_id": item.azure_id,
+        "tipo": item.tipo,
+        "titulo": item.titulo,
+        "estado": item.estado,
+        "sprint": "" if item.sprint == raiz else nombre_sprint(item.sprint),
+        "persona": item.persona.nombre if item.persona else "",
+        "tags": item.tags,
+        "prioridad": item.prioridad,
+        "automatizacion": item.automatizacion,
+        "modificado": item.modificado.isoformat() if item.modificado else "",
+        "campos_editables": sorted(campos_admitidos(item.tipo)),
+    }
+
+
+def _estados_por_tipo(items: List[ItemPrueba]) -> Dict[str, List[str]]:
+    """Estados observados por tipo, de más a menos frecuente.
+
+    Se ofrecen los que el tipo **usa**, no el catálogo completo de la plantilla:
+    Azure rechaza con HTTP 400 un estado que no existe en el tipo (comprobado),
+    y un catálogo inventado ofrecería transiciones que siempre fallan.
+    """
+    conteo: dict[str, Counter[str]] = {}
+    for item in items:
+        conteo.setdefault(item.tipo, Counter())[item.estado or "(vacío)"] += 1
+    return {
+        tipo: [estado for estado, _ in c.most_common()]
+        for tipo, c in conteo.items()
     }
 
 

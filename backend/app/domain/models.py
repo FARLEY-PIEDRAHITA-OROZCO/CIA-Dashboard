@@ -9,7 +9,7 @@ cambiar el modelo (abierto a extensión).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, FrozenSet, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -266,6 +266,73 @@ class ActualizacionQA(BaseModel):
             for nombre in ("estado", "prioridad", "severidad", "tags", "notas_qa")
             if getattr(self, nombre) is not None
         ]
+
+
+#: Tipos de work item que QA puede editar, con los campos que admiten.
+#:
+#: **Fuente única de verdad** de la lista blanca (ADR-11, Fase 5). Un tipo
+#: ausente de esta tabla no es editable; un campo ausente de la lista de un tipo
+#: no se puede escribir en él. La tabla sustituye a dos listas paralelas
+#: (tipos editables + campos por tipo) que divergirían en silencio, y la consulta
+#: la usan tanto el adaptador de escritura como la API que informa al frontend de
+#: qué controles ofrecer.
+#:
+#: Medido contra el proyecto real el 2026-09-27 leyendo qué campos devuelve Azure
+#: por tipo, **sin asumir el nombre del campo**:
+#:
+#: ============  =========  =========  ========  ======  ========
+#: Tipo         Prioridad  Severidad  Tags      Notas   Campos
+#: ============  =========  =========  ========  ======  ========
+#: Bug               sí        sí       sí       sí      32
+#: Issue             sí        no       sí       sí      32
+#: User Story        sí        no       sí       sí      36
+#: Task              sí        no       sí       sí      33
+#: Epic              sí        no       sí       sí      38
+#: Feature           sí        no       sí       sí      36
+#: Test Plan         **no**    **no**   **no**   **no**   27
+#: Test Suite        **no**    **no**   **no**   **no**   28
+#: Test Case         sí        no       sí       sí      33
+#: ============  =========  =========  ========  ======  ========
+#:
+#: El dato que obliga a esto: **``Test Plan`` y ``Test Suite`` no tienen ninguno
+#: de los cuatro campos**. En los 44 planes y 457 suites del proyecto, Tags,
+#: Description y Priority salen a 0, y los campos ni siquiera aparecen en la
+#: respuesta de Azure (27 y 28 campos frente a los 33 de un caso). Quedan
+#: editables **solo en su estado**, que es lo único que su tipo tiene: no es una
+#: limitación de la herramienta, es la forma del tipo en la plantilla.
+#:
+#: .. warning:: **Azure no nos ayuda a impedirlo, y por eso esta tabla importa.**
+#:    Comprobado con ``validateOnly=true`` el 2026-09-27: escribir ``Severity``
+#:    en un ``Test Case``, o ``Tags`` y ``Description`` en un ``Test Plan``,
+#:    **pasa la validación de Azure**. Lo que Azure sí comprueba es el *valor*
+#:    (una severidad inventada o un estado inexistente dan HTTP 400), no la
+#:    *existencia del campo en el tipo*. Escribir un campo que el tipo no tiene
+#:    crea un campo huérfano que nadie lee, o se descarta en silencio. Ninguna de
+#:    las dos cosas es un error visible, así que la única forma de evitarlo es no
+#:    ofrecer el campo: de ahí la lista blanca por tipo.
+#:
+#: ``Epic`` y ``Feature`` no aparecen y por eso quedan rechazados: es la decisión
+#: de ADR-11 que hasta ahora solo vivía en que la UI no ofrecía el formulario.
+#: ``Issue`` tampoco, por lo mismo: el campo existiría, pero no hay formulario.
+CAMPOS_POR_TIPO: Dict[str, FrozenSet[str]] = {
+    "Bug": frozenset({"estado", "prioridad", "severidad", "tags", "notas_qa"}),
+    "User Story": frozenset({"estado", "prioridad", "tags", "notas_qa"}),
+    "Task": frozenset({"estado", "prioridad", "tags", "notas_qa"}),
+    "Test Plan": frozenset({"estado"}),
+    "Test Suite": frozenset({"estado"}),
+    "Test Case": frozenset({"estado", "prioridad", "tags", "notas_qa"}),
+}
+
+#: Campos de :class:`ActualizacionQA` en el orden en que se reportan.
+CAMPOS_QA = ("estado", "prioridad", "severidad", "tags", "notas_qa")
+
+#: Tipos con un único campo editable, con el mensaje que lo explica.
+_ESTADO_UNICO = ("Test Plan", "Test Suite")
+
+
+def campos_admitidos(tipo: str) -> FrozenSet[str]:
+    """Campos que QA puede escribir en un tipo, o conjunto vacío si no es editable."""
+    return CAMPOS_POR_TIPO.get((tipo or "").strip(), frozenset())
 
 
 class ResultadoActualizacion(BaseModel):
