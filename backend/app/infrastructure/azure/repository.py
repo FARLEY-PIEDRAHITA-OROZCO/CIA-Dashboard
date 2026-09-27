@@ -13,10 +13,20 @@ import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote
 
-from ...domain.models import Bug, Epic, Feature, ItemIndice, Persona, Task, UserStory
+from ...domain.models import (
+    Bug,
+    CargaPruebas,
+    Epic,
+    Feature,
+    ItemIndice,
+    ItemPrueba,
+    Persona,
+    Task,
+    UserStory,
+)
 from ...domain.ports import RepositorioBacklogPort, TransportePort
 from . import queries
 from .transport import AzureError
@@ -106,14 +116,7 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
         no necesita saber cómo se llaman los campos en Azure.
         """
         inicio = time.perf_counter()
-        condiciones = ["[System.TeamProject] = @project"]
-        if tipos:
-            lista = ", ".join(f"'{str(t).replace(chr(39), chr(39) * 2)}'" for t in tipos)
-            condiciones.append(f"[System.WorkItemType] IN ({lista})")
-        consulta = (
-            f"SELECT [{queries.CAMPO_ID}] FROM WorkItems "
-            f"WHERE {' AND '.join(condiciones)} ORDER BY [{queries.CAMPO_ID}]"
-        )
+        consulta = queries.wiql_tipos(tuple(tipos) if tipos else ())
         ids = await self._ejecutar_wiql(consulta)
         if not ids:
             logger.info("Índice: el proyecto no devolvió work items")
@@ -148,6 +151,81 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
             persona=self._a_persona(queries.identidad(item, queries.CAMPO_ASIGNADO)),
             creado=queries.fecha(item, queries.CAMPO_CREADO),
             modificado=queries.fecha(item, queries.CAMPO_MODIFICADO),
+        )
+
+    def _a_item_prueba(self, item: Dict) -> ItemPrueba:
+        """Traduce el JSON de Azure al modelo plano de un activo de prueba.
+
+        Los pasos de prueba y la descripción **no** se piden: son la causa de los
+        errores HTTP 500 al leer los 3.431 casos, y no aportan a medir la
+        cobertura. Un caso sin pasos es un dato de calidad, no de cobertura, así
+        que si algún día hace falta va en un endpoint de detalle.
+        """
+        try:
+            id_ = int(item.get("id", 0))
+        except (AttributeError, TypeError, ValueError):
+            id_ = 0
+        return ItemPrueba(
+            azure_id=id_,
+            tipo=queries.tipo(item),
+            titulo=queries.campo(item, queries.CAMPO_TITULO),
+            estado=queries.campo(item, queries.CAMPO_ESTADO),
+            sprint=queries.campo(item, queries.CAMPO_ITERACION),
+            persona=self._a_persona(queries.identidad(item, queries.CAMPO_ASIGNADO)),
+            tags=queries.campo(item, queries.CAMPO_TAGS),
+            prioridad=queries.campo(item, queries.CAMPO_PRIORIDAD),
+            automatizacion=queries.campo(item, queries.CAMPO_AUTOMATIZACION),
+            ragon=queries.campo(item, queries.CAMPO_RAGON),
+            creado=queries.fecha(item, queries.CAMPO_CREADO),
+            modificado=queries.fecha(item, queries.CAMPO_MODIFICADO),
+            requisitos=queries.requisitos_de_prueba(item),
+        )
+
+    async def listar_activos_prueba(
+        self,
+        tipos: tuple[str, ...],
+    ) -> CargaPruebas:
+        """Activos de prueba del proyecto: planes, suites y casos.
+
+        Es el mismo mecanismo de dos pasos que el índice de sprints (WIQL para
+        los ids, lotes para los valores) pero con dos diferencias deliberadas:
+
+        1. ``$expand=relations`` **sí** se pide, porque el vínculo
+           `TestedBy-Reverse` del caso a su requisito es el único dato que hace
+           posible medir la cobertura. La pertenencia de un caso a un plan no es
+           accesible (las rutas de casos del plan devuelven 404), así que el plan
+           no se puede "abrir": se cuenta, nada más.
+        2. Un lote que falla **no** tumba la carga. Se cuenta y se devuelve en
+           `lotes_con_error` para que la cobertura pueda declararse parcial en
+           vez de completar un hueco con ceros.
+
+        Los campos son los de `CAMPOS_PRUEBA`: sin `System.Description` ni
+        `Microsoft.VSTS.TCM.Steps`. Medido: con ellos, la lectura de los 3.431
+        casos devuelve errores 500; sin ellos, son 18 lotes y 0 errores.
+        """
+        inicio = time.perf_counter()
+        ids = await self._ejecutar_wiql(queries.wiql_tipos(tuple(tipos)))
+        if not ids:
+            logger.info("Índice de pruebas: el proyecto no devolvió activos")
+            return CargaPruebas()
+        items, lotes_con_error, lotes_totales = await self._detallar_lote_tolerante(
+            ids,
+            campos=queries.CAMPOS_PRUEBA,
+            incluir_relaciones=True,
+        )
+        # Se ordena por id para que el índice sea determinista entre cargas.
+        resultado = [self._a_item_prueba(items[id_]) for id_ in ids if id_ in items]
+        logger.info(
+            "Índice de pruebas: items=%d lotes=%d lotes_con_error=%d duration_ms=%d",
+            len(resultado),
+            lotes_totales,
+            lotes_con_error,
+            int((time.perf_counter() - inicio) * 1000),
+        )
+        return CargaPruebas(
+            items=resultado,
+            lotes_con_error=lotes_con_error,
+            lotes_totales=lotes_totales,
         )
 
     async def obtener_epica(
@@ -255,6 +333,66 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
                 if id_ > 0:
                     result[id_] = item
         return result
+
+    async def _detallar_lote_tolerante(
+        self,
+        ids: List[int],
+        *,
+        campos: str,
+        incluir_relaciones: bool,
+    ) -> Tuple[Dict[int, Dict], int, int]:
+        """Como `_detallar_lote`, pero un lote caído no tumba la carga entera.
+
+        Devuelve ``(items, lotes_con_error, lotes_totales)``.
+
+        Existe por la cobertura de pruebas. Si un lote de 200 casos falla y se
+        descarta en silencio, la cobertura cuenta 200 historias como
+        «descubiertas» que sí tienen caso: el error apunta en la dirección
+        equivocada, que es la peor. Preferimos una cifra declarada parcial y
+        visible a una cifra completa y falsa.
+        """
+        result: Dict[int, Dict] = {}
+        lotes_con_error = 0
+        lotes_totales = 0
+        for inicio in range(0, len(ids), queries.TAMANO_LOTE_API):
+            lote = ids[inicio : inicio + queries.TAMANO_LOTE_API]
+            lotes_totales += 1
+            parametros = ",".join(str(i) for i in lote)
+            query = f"ids={parametros}"
+            if incluir_relaciones:
+                query += "&$expand=relations"
+            query += f"&$fields={quote(campos, safe=',')}"
+            query += f"&api-version={queries.API_VERSION}"
+            url = self._ruta_proyecto(f"_apis/wit/workitems?{query}")
+            try:
+                datos = await self._transporte.get(url)
+            except AzureError as exc:
+                lotes_con_error += 1
+                logger.warning(
+                    "Lote de activos de prueba ilegible (%d ids): %s",
+                    len(lote),
+                    exc,
+                )
+                continue
+            except Exception as exc:  # noqa: BLE001 - mismo criterio que arriba
+                lotes_con_error += 1
+                logger.warning(
+                    "Lote de activos de prueba ilegible (%d ids, %s): %s",
+                    len(lote),
+                    type(exc).__name__,
+                    exc,
+                )
+                continue
+            for item in datos.get("value") or []:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    id_ = int(item.get("id", 0))
+                except (AttributeError, TypeError, ValueError):
+                    continue
+                if id_ > 0:
+                    result[id_] = item
+        return result, lotes_con_error, lotes_totales
 
     async def _cargar_grafo(
         self,

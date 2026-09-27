@@ -7,7 +7,7 @@ y mapear resultados.
 """
 
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 # Versión de API REST de Azure DevOps usada por todo el transporte.
 API_VERSION = "7.1"
@@ -60,7 +60,112 @@ CAMPOS_LISTADO = ",".join(
 )
 CAMPOS_ARBOL = CAMPOS_LISTADO
 
+# --- Activos de prueba (Test Plan / Test Suite / Test Case) ---------------
+#: ¿El caso tiene pasos de prueba ejecutables? Es un campo booleano
+#: calculado por Azure a partir de `Microsoft.VSTS.TCM.Steps`. El paso **no**
+#: se pide nunca: ver `CAMPOS_PRUEBA`.
+CAMPO_TIENE_PASOS = "Microsoft.VSTS.TCM.Steps"
+#: `Not Automated` / `Planned` / `Automated`. Es un eje distinto al estado: un
+#: caso `Closed` puede estar automatizado o no, así que no es un tono de estado.
+CAMPO_AUTOMATIZACION = "Microsoft.VSTS.TCM.AutomationStatus"
+#: Motivo del cambio de estado (`New`, `Fixed`, …). Presente en los casos.
+CAMPO_RAGON = "System.Reason"
+
+#: Campos del inventario de pruebas.
+#:
+#: Deliberadamente **sin** `System.Description` ni `Microsoft.VSTS.TCM.Steps`.
+#: Pedirlos con `$expand=relations` sobre los 3.431 casos provoca errores HTTP
+#: 500 medidos; con esta lista y `$expand=relations` la misma lectura son 18
+#: lotes, 0 errores y 5,5 s. Los pasos, si algún día hacen falta, irán en un
+#: endpoint de detalle bajo demanda.
+CAMPOS_PRUEBA = ",".join(
+    (
+        CAMPO_ID,
+        CAMPO_TIPO,
+        CAMPO_TITULO,
+        CAMPO_ESTADO,
+        CAMPO_PRIORIDAD,
+        CAMPO_ASIGNADO,
+        CAMPO_TAGS,
+        CAMPO_ITERACION,
+        CAMPO_CREADO,
+        CAMPO_MODIFICADO,
+        CAMPO_AUTOMATIZACION,
+        CAMPO_RAGON,
+    )
+)
+
+#: Relación que dice «este caso prueba este requisito». Es el único vínculo
+#: entre pruebas y requisitos que se puede leer: la pertenencia de un caso a un
+#: plan **no** es accesible (las rutas de casos del plan devuelven 404).
+RELACION_TESTED_BY = "Microsoft.VSTS.Common.TestedBy-Reverse"
+
 TAMANO_LOTE_API = 200
+
+
+def escapar_wiql(valor: str) -> str:
+    """Duplica las comillas simples para incrustar texto en una consulta WIQL.
+
+    Única fuente de este escape: dos copias divergen en silencio y solo se nota
+    con un tipo de work item que traiga apostrofo en el nombre.
+    """
+    return str(valor or "").replace("'", "''")
+
+
+def wiql_tipos(tipos: "tuple[str, ...]") -> str:
+    """WIQL que trae los ids de los tipos indicados, ordenados por id.
+
+    El orden por id hace la carga determinista entre ejecuciones, que es lo que
+    permite que el índice sea reproducible y sus pruebas fiables.
+    """
+    condiciones = ["[System.TeamProject] = @project"]
+    if tipos:
+        lista = ", ".join(f"'{escapar_wiql(t)}'" for t in tipos)
+        condiciones.append(f"[System.WorkItemType] IN ({lista})")
+    return (
+        f"SELECT [{CAMPO_ID}] FROM WorkItems "
+        f"WHERE {' AND '.join(condiciones)} ORDER BY [{CAMPO_ID}]"
+    )
+
+
+def id_destino_de_relacion(relacion: Dict) -> Optional[int]:
+    """Saca el work item destino de una relación a partir de su URL.
+
+    Azure devuelve la URL completa del destino; solo interesa el id final. Se
+    toleran query strings y barras porque la forma varía entre relaciones.
+    """
+    url = str((relacion or {}).get("url") or "").strip()
+    if not url:
+        return None
+    frag = url.rstrip("/").split("/")[-1].split("?")[0]
+    try:
+        valor = int(frag)
+    except ValueError:
+        return None
+    return valor if valor > 0 else None
+
+
+def requisitos_de_prueba(item: Dict) -> List[int]:
+    """Ids de los requisitos que prueba un `Test Case`.
+
+    Solo se lee `TestedBy-Reverse`: es la relación inversa de «este requisito lo
+    prueban estos casos», que es como la guarda Azure en el caso. Las demás
+    relaciones del caso (pasos compartidos, archivos, dependencias) no hablan de
+    cobertura y se ignoran.
+    """
+    relations = item.get("relations") if isinstance(item, dict) else None
+    if not isinstance(relations, list):
+        return []
+    vistos: set[int] = set()
+    for relacion in relations:
+        if not isinstance(relacion, dict):
+            continue
+        if str(relacion.get("rel") or "") != RELACION_TESTED_BY:
+            continue
+        destino = id_destino_de_relacion(relacion)
+        if destino:
+            vistos.add(destino)
+    return sorted(vistos)
 
 
 def wiql_epicas(area_path: str) -> str:

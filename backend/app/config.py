@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # porque construirlo implica varios lotes contra Azure; filtrar, en cambio,
     # es local y no consume red.
     index_ttl_seg: float = 300.0
+    # TTL del índice local de activos de prueba. Mayor que `index_ttl_seg`
+    # porque cuesta más construirlo (3.932 ítems y `$expand=relations`: ~5,5 s
+    # medidos) y porque los casos en `Design` cambian muy poco. Es un segundo
+    # índice, con carga perezosa: la vista de sprints no lo toca nunca.
+    index_pruebas_ttl_seg: float = 900.0
 
     @field_validator("azure_org_url")
     @classmethod

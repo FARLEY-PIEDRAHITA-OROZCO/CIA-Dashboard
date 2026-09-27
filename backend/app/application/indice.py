@@ -40,6 +40,12 @@ TIPOS_POR_SPRINT = ("User Story", "Task", "Bug", "Issue")
 #: Etiqueta que el propio sistema escribe al verificar un ítem (§6 del plan).
 TAG_VERIFICADO = "verificado-qa"
 
+#: Tipos que forman el inventario de pruebas. No se mezclan con
+#: `TIPOS_POR_SPRINT` porque viven en un índice aparte: son 3.932 ítems que nadie
+#: consulta al abrir la vista de sprints, y cargarlos ahí duplicaría el tiempo
+#: en frío de una vista que ya funciona.
+TIPOS_PRUEBA = ("Test Plan", "Test Suite", "Test Case")
+
 
 class IndiceWorkItems:
     """Proyección plana y cacheada de los work items del proyecto.

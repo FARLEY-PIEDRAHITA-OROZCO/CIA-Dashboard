@@ -8,7 +8,13 @@ sin tocar la capa de negocio.
 
 from typing import Any, Dict, List, Optional, Protocol
 
-from .models import ActualizacionQA, Epic, ItemIndice, ResultadoActualizacion
+from .models import (
+    ActualizacionQA,
+    CargaPruebas,
+    Epic,
+    ItemIndice,
+    ResultadoActualizacion,
+)
 
 
 class TransportePort(Protocol):
@@ -43,6 +49,18 @@ class RepositorioBacklogPort(Protocol):
 
         Se mantiene separada de `listar_epicas` porque responde a un uso
         distinto: el índice de sprints y personas, no el listado del dashboard.
+        """
+        ...
+
+    async def listar_activos_prueba(
+        self, tipos: tuple[str, ...]
+    ) -> CargaPruebas:
+        """Activos de prueba (Test Plan / Suite / Case) con sus requisitos.
+
+        Vive en este puerto y no en el de escritura porque es **solo lectura**.
+        Devuelve un `CargaPruebas` y no una lista a propósito: el conteo de
+        lotes fallidos es lo que permite que la cobertura se declare parcial en
+        lugar de completa y falsa.
         """
         ...
 
