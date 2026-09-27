@@ -121,6 +121,48 @@ barras y una frase.
 3. **200 filas siguen renderizándose** con el detalle desplegado. Aceptable para
    el navegador; si molesta, virtualización.
 
+| 14 | `TablaItems` duplicaba el mapeo de estado → tono y la copia se contradecía: «Removed» salía verde como cerrado y «Testing» gris como sin empezar | Usa `EstadoTrabajo`, la regla única; regresión que la fija |
+| 15 | El relleno verde de la cinta iba con `opacity: 0.55`, que sobre fondo claro se mezclaba a `rgb(122,200,153)` — un verde que se lee gris | Rellenos sólidos por tono; el sprint actual conserva el azul por tono, no por una regla de opacidad aparte |
+
+### Tonos de estado: `verificacion` y `bloqueado` (2026-09-26)
+
+Al revisar los colores se vio que dos estados del proyecto no tenían tono
+propio. Reparto real de los 5.651 ítems tras el cambio:
+
+| Tono | Ítems | Estados del proyecto |
+| ---- | ----- | -------------------- |
+| `terminado` | 4.881 | Closed (4.752), Done (78), Resolved (51) |
+| `nuevo` | 392 | New |
+| `progreso` | 294 | Doing (163), Active (131) |
+| `pendiente` | 32 | To do (27), Pendiente (5) |
+| `removido` | 25 | Removed |
+| **`verificacion`** | **19** | Testing |
+| **`bloqueado`** | **4** | Bloqueado |
+| `neutro` | 4 | `tested` |
+
+- **`verificacion`** (turquesa) va aparte de `progreso` porque en una
+  herramienta de QA «en pruebas» es una cola con dueño, no «siguiendo».
+- **`bloqueado`** (rojo) va aparte de `pendiente` (naranja): *en cola* y *parado
+  sin avanzar* son cosas distintas, y un ítem atascado pasaba por trabajo normal.
+- `bloqueado` se coloca después de `terminado` y antes de `removido`, para formar
+  grupo con lo que está fuera del flujo y necesita a alguien.
+- `tested` (4 ítems) sigue en `neutro` a propósito: puede significar «probado y
+  aprobado» o «probado y fallido», y mapearlo a `terminado` inflaría el recuento
+  de cerrados. Mejor un gris honesto que un verde falso.
+
+**Los tres tableros ya no pueden divergir.** Tenían listas literales de columnas
+y añadir un tono a uno olvidándolo en otro era un fallo silencioso. Ahora
+`columnasDesdeOrden(ORDEN_TONOS, …)` los deriva del mismo orden, y el tipo
+`Record<TonoEstado, string>` convierte un título ausente en un error de compilación.
+
+**Inconsistencia conocida que NO se cambió:** el backend cuenta `removed` y
+`canceled` como cerrados en `ESTADOS_CERRADOS` (y por tanto en el `cerrados` de
+cada sprint y en la señal ①), mientras que la UI los muestra como `removido`.
+Excluirlos del recuento «cerrado» subiría la señal ①, así que es una decisión de
+producto, no un arreglo: queda pendiente de decidir.
+
+---
+
 ## Actualización 2026-09-25
 
 - Se corrigió `verificar_proyecto()` para usar el endpoint Core de organización
@@ -237,7 +279,7 @@ run.py → app.main:app
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
 | Backend pytest | **175 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
-| Frontend Vitest | **200 passed / 20 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs, cinta de sprints, analítica y sanitización. |
+| Frontend Vitest | **211 passed / 20 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs, cinta de sprints, analítica, tonos de estado y sanitización. |
 | Frontend build | **PASS** | `tsc -b` y `vite build`; bundle generado correctamente. |
 | `pip check` | **PASS** | No hay requisitos Python rotos en el entorno auditado. |
 | `pip-audit --local` | **PASS** | Sin vulnerabilidades conocidas en el lockfile instalado. |

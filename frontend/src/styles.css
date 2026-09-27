@@ -598,6 +598,19 @@ code {
   color: #047857;
 }
 
+/* En pruebas: cola de verificación. Turquesa para no confundirse con el azul
+   de «en curso» ni con el verde de «terminada». */
+.estado-verificacion {
+  background: #cffafe;
+  color: #0e7490;
+}
+
+/* Bloqueado: rojo, distinto del naranja de «pendiente» (en cola). */
+.estado-bloqueado {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 .estado-removido {
   background: #e2e8f0;
   color: #475569;
@@ -915,6 +928,27 @@ code {
 
 .hu-card[data-tono="terminado"] {
   border-left-color: #047857;
+}
+
+/* En pruebas: turquesa, distinto del azul de «en curso» y del verde de
+   «terminada», para que la cola de verificación se lea de un vistazo. */
+.cinturon-chip[data-tono="verificacion"] .punto-tono,
+.hu-columna[data-tono="verificacion"] .punto-tono {
+  background: #0e7490;
+}
+
+.hu-card[data-tono="verificacion"] {
+  border-left-color: #0e7490;
+}
+
+/* Bloqueado: rojo. `pendiente` ya es naranja, que significa «en cola». */
+.cinturon-chip[data-tono="bloqueado"] .punto-tono,
+.hu-columna[data-tono="bloqueado"] .punto-tono {
+  background: #b91c1c;
+}
+
+.hu-card[data-tono="bloqueado"] {
+  border-left-color: #b91c1c;
 }
 
 .cinturon-chip[data-tono="removido"] .punto-tono,
@@ -1343,7 +1377,10 @@ code {
   gap: 10px;
 }
 
+/* Las columnas en vuelo se tiñen para que el tablero se lea de izquierda a
+   derecha. «En pruebas» entra con ellas: sigue siendo trabajo en marcha. */
 .hu-columna[data-tono="progreso"],
+.hu-columna[data-tono="verificacion"],
 .hu-columna[data-tono="terminado"] {
   background: rgba(37, 99, 235, 0.06);
 }

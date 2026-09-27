@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
 import type { Feature, Tarea, UserStory } from "../api/tipos";
 import { ContenidoRico } from "../componentes/ContenidoRico";
-import { EstadoTrabajo, tonoEstado, type TonoEstado } from "../componentes/EstadoTrabajo";
+import {
+  EstadoTrabajo,
+  ORDEN_TONOS,
+  tonoEstado,
+  type TonoEstado,
+} from "../componentes/EstadoTrabajo";
 import { EdicionInline } from "./EdicionInline";
 import { useEdicionQA } from "./useEdicionQA";
 
@@ -67,21 +72,17 @@ export function aplanarTareas(epica: {
 }
 
 /** Tonos de estado que forman las columnas del tablero, en orden. */
-export const ORDEN_COLUMNA: TonoEstado[] = [
-  "nuevo",
-  "pendiente",
-  "progreso",
-  "terminado",
-  "removido",
-  "neutro",
-];
+/** Orden de columnas: el de `ORDEN_TONOS`, reutilizado para no divergir. */
+export const ORDEN_COLUMNA: TonoEstado[] = [...ORDEN_TONOS];
 
 /** Título de cada columna del tablero de tareas. */
 export const TITULOS_COLUMNA: Record<TonoEstado, string> = {
   nuevo: "Nueva",
   pendiente: "Pendiente",
   progreso: "En curso",
+  verificacion: "En pruebas",
   terminado: "Terminada",
+  bloqueado: "Bloqueadas",
   removido: "Removida",
   neutro: "Sin clasificar",
 };

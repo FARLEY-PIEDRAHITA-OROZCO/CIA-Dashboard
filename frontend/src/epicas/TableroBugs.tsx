@@ -1,17 +1,19 @@
 import { useMemo, useState } from "react";
 
 import type { Bug } from "../api/tipos";
-import { type TonoEstado, tonoEstado } from "../componentes/EstadoTrabajo";
+import { columnasDesdeOrden, type TonoEstado, tonoEstado } from "../componentes/EstadoTrabajo";
 import { TarjetaBugEditable } from "./TarjetaBugEditable";
 
-const COLUMNAS: ReadonlyArray<{ tono: TonoEstado; titulo: string }> = [
-  { tono: "nuevo", titulo: "Nuevo" },
-  { tono: "pendiente", titulo: "Pendiente" },
-  { tono: "progreso", titulo: "En curso" },
-  { tono: "terminado", titulo: "Terminado" },
-  { tono: "removido", titulo: "Removido" },
-  { tono: "neutro", titulo: "Sin clasificar" },
-];
+const COLUMNAS = columnasDesdeOrden({
+  nuevo: "Nuevo",
+  pendiente: "Pendiente",
+  progreso: "En curso",
+  verificacion: "En pruebas",
+  terminado: "Terminado",
+  bloqueado: "Bloqueados",
+  removido: "Removido",
+  neutro: "Sin clasificar",
+});
 
 function opciones(campos: Array<[string, string]>): Array<[string, string]> {
   return [...new Map(campos.map(([valor, etiqueta]) => [valor, etiqueta])).entries()].sort(

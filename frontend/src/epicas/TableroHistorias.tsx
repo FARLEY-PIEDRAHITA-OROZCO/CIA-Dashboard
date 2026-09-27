@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import type { Feature, UserStory } from "../api/tipos";
 import { ContenidoRico } from "../componentes/ContenidoRico";
-import { EstadoTrabajo, tonoEstado, type TonoEstado } from "../componentes/EstadoTrabajo";
+import { columnasDesdeOrden, EstadoTrabajo, tonoEstado, type TonoEstado } from "../componentes/EstadoTrabajo";
 import { EdicionInline } from "./EdicionInline";
 import { useEdicionQA } from "./useEdicionQA";
 
@@ -28,14 +28,16 @@ export function aplanarHistorias(epica: {
   ];
 }
 
-const COLUMNAS: ReadonlyArray<{ tono: TonoEstado; titulo: string }> = [
-  { tono: "nuevo", titulo: "Nueva" },
-  { tono: "pendiente", titulo: "Pendiente" },
-  { tono: "progreso", titulo: "En curso" },
-  { tono: "terminado", titulo: "Terminada" },
-  { tono: "removido", titulo: "Removida" },
-  { tono: "neutro", titulo: "Sin clasificar" },
-];
+const COLUMNAS = columnasDesdeOrden({
+  nuevo: "Nueva",
+  pendiente: "Pendiente",
+  progreso: "En curso",
+  verificacion: "En pruebas",
+  terminado: "Terminada",
+  bloqueado: "Bloqueadas",
+  removido: "Removida",
+  neutro: "Sin clasificar",
+});
 
 const CLAVE_DIRECTAS = "directas";
 type Densidad = "detallada" | "compacta";
