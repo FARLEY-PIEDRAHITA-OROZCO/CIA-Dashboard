@@ -28,6 +28,7 @@ export const CLAVES_QA = {
   sugerencias: (minimo: number) => ["qa", "sugerencias", minimo] as const,
   asignaciones: (filtros: FiltrosAsignaciones) => ["qa", "asignaciones", filtros] as const,
   carga: ["qa", "carga"] as const,
+  actividad: (epica: number) => ["qa", "actividad", epica] as const,
 };
 
 /** Personas del proyecto con su papel en pruebas y su carga. */
@@ -79,6 +80,28 @@ export function useCargaQA(activo = true) {
     queryFn: ({ signal }) => api.qaCarga(signal),
     enabled: activo,
     staleTime: 300_000,
+  });
+}
+
+/**
+ * Actividad registrada de una épica.
+ *
+ * **`activo` es `false` por defecto y no es un descuido**: es la petición más
+ * cara de la aplicación, una llamada a Azure por ítem del árbol (hasta 254 en una
+ * épica grande; mediana medida 1,2 s, máximo 5,8 s). Se pide solo cuando alguien
+ * despliega el panel, y se cachea 15 min porque el historial no cambia de forma
+ * útil de un minuto a otro.
+ *
+ * Devuelve `null` para «sin épica» en vez de adivinar: quien llame tiene que
+ * decidir si pide 0 o pide otra cosa, y ese `0` sería una petición de 254
+ * llamadas por un ID que ya está en la URL.
+ */
+export function useActividadEpica(epica: number | null) {
+  return useQuery({
+    queryKey: CLAVES_QA.actividad(epica ?? 0),
+    queryFn: ({ signal }) => api.qaActividadEpica(epica as number, signal),
+    enabled: epica !== null,
+    staleTime: 900_000,
   });
 }
 

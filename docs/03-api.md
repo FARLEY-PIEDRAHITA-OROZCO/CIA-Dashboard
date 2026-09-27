@@ -30,6 +30,14 @@ Todos los endpoints devuelven **JSON** (`application/json`).
 | GET | `/api/pruebas/sin-cubrir` | Historias sin caso de prueba, paginadas (la lista de trabajo de QA) | experimental |
 | GET | `/api/pruebas/planes` | Los planes como contexto: sprint y responsable | experimental |
 | GET | `/api/pruebas/activos` | Activos de prueba filtrados, con los campos que QA puede editar en su tipo | experimental |
+| GET | `/api/qa/personas` | Perfiles con su papel en pruebas y su carga | experimental |
+| PUT | `/api/qa/personas/{guid}` | Fija el papel. `null` = «no lo toques», `false` = «quítaselo» | experimental |
+| GET | `/api/qa/sugerencia-qa?minimo=N` | Quién **parece** hacer QA, por volumen de activos tocados | experimental |
+| GET | `/api/qa/asignaciones` | Asignaciones de épicas; filtros `epica`, `persona`, `rol` | experimental |
+| PUT | `/api/qa/asignaciones` | Asigna (idempotente) | experimental |
+| DELETE | `/api/qa/asignaciones/{epica}/{persona}/{rol}` | Quita (idempotente) | experimental |
+| GET | `/api/qa/carga` | Quién lleva qué épicas, por volumen | experimental |
+| GET | `/api/qa/epicas/{id}/actividad` | Revisiones por persona y tipo. **No son horas**; 1 llamada a Azure por ítem | experimental |
 | PATCH | `/api/workitems/{id}` | Escritura QA (opt-in, ADR-11) | experimental |
 | GET | `/api/workitems/{id}/rev` | Revisión actual, para control de concurrencia | experimental |
 | POST | `/api/epics/refresh` | Invalida la caché **y los dos índices locales** | estable |
@@ -54,6 +62,13 @@ consulta al abrir la vista de sprints, así que meterlos en el índice de sprint
 duplicaría su tiempo en frío sin ganar nada. Tiene su propio TTL
 (`INDEX_PRUEBAS_TTL_SEG`, 900 s) y se carga **de forma perezosa**: `#/sprints` no lo
 toca nunca.
+
+`/api/qa/*` **no lee nada de Azure salvo para resolver nombres**: las
+asignaciones, los roles y las notas viven en `backend/datos/asignaciones.json`,
+que está **rastreado en git** porque es el único sitio donde existen. Y
+`/api/qa/epicas/{id}/actividad` es la excepción: lee el historial de revisiones de
+Azure, **una llamada por ítem del árbol**, y por eso es por épica y bajo demanda.
+Ver [§12](#12-registro-local-de-pruebas-apiqua).
 
 La cobertura de pruebas cruza los dos índices: los requisitos a los que apunta
 cada caso (relación `TestedBy-Reverse`) con las historias del índice de trabajo.
@@ -795,7 +810,170 @@ esperar. Ver [10-auditoria](10-auditoria.md).
 
 ---
 
-## 12. Modelo de errores
+## 12. Registro local de pruebas (`/api/qa/*`)
+
+Azure no tiene dónde anotar **a quién le corresponde probar una épica**: las
+épicas no las crea el equipo de QA, y `System.AssignedTo` significa otra cosa.
+Esa información solo existe en un fichero local
+(`backend/datos/asignaciones.json`, **rastreado en git**), y por eso estos
+endpoints son los únicos que escriben algo que Azure no puede devolver.
+
+**Todo lo que hay aquí no es Azure.** Los nombres de las personas se resuelven
+del índice, pero las asignaciones, los roles y las notas son locales. Si el
+fichero se pierde, esa información se pierde.
+
+### `GET /api/qa/personas`
+
+Perfiles con su papel en pruebas y su carga. `es_qa` / `es_dev` / `forzado`
+vienen del registro; `items_backlog` y `bugs` vienen del índice de Azure, y son
+el contraste entre lo declarado y lo real.
+
+```json
+{
+  "personas": [
+    {
+      "guid": "75712602-99c0-6599-96e8-9f8847c0f673",
+      "nombre": "Lina Vanessa Salazar",
+      "es_qa": true, "es_dev": false, "forzado": true,
+      "epicas": 7, "epicas_qa": 7, "epicas_dev": 0,
+      "mas_antigua": "2026-03-02",
+      "dias_laborables": 142,
+      "items_backlog": 210, "bugs": 4
+    }
+  ],
+  "total": 35, "qa": 6, "dev": 21, "sin_rol": 8
+}
+```
+
+> **`dias_laborables` no son horas.** El registro de tiempos de Azure responde
+> 401 con el PAT de lectura, así que no hay ninguna fuente de horas en este
+> sistema. Es días laborables desde la asignación más antigua, contados de lunes
+> a viernes (`work/teamSettings.workingDays` devuelve `monday..friday`).
+
+### `PUT /api/qa/personas/{guid}`
+
+Fija el papel. `es_qa`, `es_dev` y `forzado` aceptan `true`, `false` o `null`;
+**`null` es "no lo toques"**, que no es lo mismo que `false` ("quítaselo"). Por eso
+el cliente quita los `null` del cuerpo en vez de mandarlos: JSON no distingue
+"ausente" de "nulo" una vez serializado, y mandarlos borraría el rol que no se
+quería cambiar.
+
+`forzado: true` marca que la decisión fue humana y no el valor por defecto, que
+es como la sugerencia se distingue de una afirmación.
+
+### `GET /api/qa/sugerencia-qa?minimo=3`
+
+Quién **parece** hacer QA, por volumen de activos de prueba tocados. Es una
+heurística, no un dato: no guarda nada y la decisión es de quien la ve. Por eso
+el campo `ya_es_qa` existe —para no repetir la sugerencia de alguien que ya
+está marcado— y la respuesta trae su propia `nota`.
+
+### `GET /api/qa/asignaciones`
+
+Filtros opcionales `epica`, `persona`, `rol`. Cada fila trae `titulo` resuelto
+desde el índice y **`titulo_conocido`**: `false` significa que la épica ya no
+está en Azure. La asignación **sigue existiendo y se muestra** —ocultarla sería
+perderla de la vista sin aviso— y la respuesta declara `epicas_desconocidas`
+para poder limpiarlas.
+
+### `PUT` y `DELETE /api/qa/asignaciones[/{epica}/{persona}/{rol}]`
+
+Idempotentes. `desde` es opcional (por defecto, hoy) y no admite fechas futuras.
+
+### `GET /api/qa/carga`
+
+Quién lleva qué épicas, ordenado por volumen. Es la lectura que responde «en qué
+está trabajando cada QA».
+
+### `GET /api/qa/epicas/{epic_id}/actividad`
+
+**Actividad registrada**: revisiones por persona, por tipo y rango de fechas, de
+la épica y de **todo** su árbol.
+
+```json
+{
+  "epica": 5716,
+  "titulo": "Epic- IA Buzón de requerimientos jurídicos",
+  "items_analizados": 232, "items_totales": 232,
+  "parcial": false, "items_sin_actividad": 2,
+  "revisiones": 1938, "personas": 12,
+  "primera": "2024-10-21T20:01:41.183000+00:00",
+  "ultima": "2026-08-05T19:59:29.187000+00:00",
+  "por_persona": [
+    { "guid": "…", "nombre": "Brian Ferney Rojas Medina", "revisiones": 629 }
+  ],
+  "por_tipo": { "Epic": 1, "Feature": 5, "User Story": 35, "Task": 191 },
+  "nota": "Actividad registrada = número de revisiones, no horas. …"
+}
+```
+
+Cuatro cosas que hay que leer antes que el número:
+
+1. **No son horas.** `work/previewUpdates` (el registro de tiempos) responde
+   **401** con el PAT de lectura. No hay ninguna fuente de horas en este sistema,
+   y por eso el campo se llama `revisiones` y no `horas` ni `esfuerzo`: un nombre
+   de medida sobre un número no medido es peor que no tener el campo.
+
+2. **`parcial` es una cota _inferior_.** Si un historial no se pudo leer, el
+   recuento **resta** actividad. Es lo contrario que la cobertura de pruebas,
+   donde perder relaciones produce una cota _superior_ de la brecha (ver §11).
+   `items_analizados` frente a `items_totales` es lo que revela el hueco.
+
+3. **La revisión de creación no cuenta.** Llega con `revisedDate` centinela
+   (`9999-01-01T00:00:00Z`, medido en el 100 % de las revisiones actuales) y
+   `rev=1`. Sin filtrar el centinela, `ultima` sería el año 9999 en **todas** las
+   épicas; sin descartar la revisión 1, quien solo abrió el ítem aparecería
+   como quien trabajó en él.
+
+4. **Compara solo épicas de antigüedad parecida.** Los ítems antiguos tienen una
+   revisión y los recientes muchas (historias nuevas: mediana 79 revisiones;
+   las más antiguas: 1). Una épica con 1.938 revisiones y otra con 300 no se
+   comparan sin mirar cuándo existen.
+
+#### Coste, y por qué no hay vista global
+
+**Una llamada a Azure por ítem del árbol**: `workitems/{id}/updates` es de un solo
+ítem y no existe endpoint por lotes (medido). Medido en el proyecto real:
+
+| Épica | Ítems | Tiempo | Revisiones |
+| ----- | ----- | ------ | ---------- |
+| #5716 | 232 | 4,8 s | 1.938 |
+| #12915 | 254 | 5,8 s | 1.811 |
+| #32350 | 63 | 1,9 s | 300 |
+| #29773 | 29 | 1,2 s | 148 |
+| #19174 | 4 | 0,7 s | 25 |
+| #31253 | 1 | 0,3 s | 8 |
+
+Mediana de 26 ítems y 1,2 s. La segunda petición sale de caché en ~0 s (TTL
+900 s).
+
+Por eso **no hay vista global de actividad**: leer el historial de los 5.651
+ítems del proyecto serían 5.651 peticiones. Eso no es una vista, es un ataque a
+la API. La actividad es por épica y bajo demanda, y el panel del frontend no
+pide nada hasta que alguien lo abre.
+
+### Errores de `/api/qa/*`
+
+Tres fallos distintos con tres códigos distintos, porque confundirlos manda a la
+puerta equivocada:
+
+| Código | Cuándo | Quién puede arreglarlo |
+| ------ | ------ | ---------------------- |
+| `422` | Asignación inválida (GUID que no existe, fecha futura, rol desconocido) | quien está en el formulario |
+| `409` | `RegistroModificado`: el fichero cambió en disco desde que se leyó | recargar y reintentar; no se perdió nada |
+| `500` | `ErrorRegistro`: el JSON está corrupto | el servidor; **no** se arregla desde el formulario |
+
+Un fichero **ausente** devuelve un registro vacío sin error: es el primer
+arranque. Un fichero **corrupto** sí es un error, y lo dice, porque «no hay
+asignaciones» y «no se pudo leer el fichero» llevan a decisiones opuestas.
+
+La actividad usa además los del upstream: **404** si la épica ya no existe en
+Azure (traducido desde el 404 de Azure, no un 502), **502** si Azure falla por
+otra causa, y **422** si el `epic_id` no es un entero positivo.
+
+---
+
+## 13. Modelo de errores
 
 Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 `detail` (string, o array de detalles de validación).
@@ -809,11 +987,11 @@ Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 | Código | Significado | Origen |
 | ------ | ----------- | ------ |
 | `200` | OK | — |
-| `409` | Configuración ausente (organización, proyecto o PAT) | rutas |
+| `409` | Configuración ausente (organización, proyecto o PAT), o `RegistroModificado` | rutas |
 | `404` | La raíz no existe o no se encuentra | rutas |
 | `422` | Validación de `{epic_id}` (no entero o no positivo) | FastAPI/pydantic |
+| `500` | Error inesperado (bug), o `ErrorRegistro` (JSON corrupto) | FastAPI |
 | `502` | Error upstream de Azure; 203/204/3xx o JSON inválido | transporte + rutas |
-| `500` | Error inesperado (bug) | FastAPI |
 
 > Los endpoints del índice y de la analítica devuelven **listas vacías** en vez
 > de error cuando no hay datos (`sprints: []`, `items: []`, `sprints: []` en
@@ -824,7 +1002,7 @@ Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 
 ---
 
-## 13. Ejemplos de uso
+## 14. Ejemplos de uso
 
 ### PowerShell
 ```powershell
@@ -842,6 +1020,11 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/epics/refresh
 curl http://127.0.0.1:8000/api/health
 curl http://127.0.0.1:8000/api/azure/estado
 curl http://127.0.0.1:8000/api/epics/5586/arbol
+# Registro local de pruebas
+curl http://127.0.0.1:8000/api/qa/personas
+curl http://127.0.0.1:8000/api/qa/carga
+# Actividad de una épica: 1 llamada a Azure por ítem del árbol (~1-6 s)
+curl http://127.0.0.1:8000/api/qa/epicas/5716/actividad
 # Filtros combinables; la ruta del sprint debe ir codificada
 curl -G http://127.0.0.1:8000/api/items \
   --data-urlencode 'sprint=<proyecto>\Sprint 45' \

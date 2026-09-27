@@ -543,6 +543,21 @@ ofrece una proyección con métricas.
 | `Microsoft.VSTS.TCM.Steps` no se pide (causa los HTTP 500) | La vista no muestra los pasos de un caso; irían en un endpoint de detalle |
 | 98,5 % de los casos no está automatizado | Se presenta como dato, sin tono rojo/verde: es una mide el proceso, no juzga al equipo |
 
+### Límites conocidos de la actividad por épica
+
+Medido el 2026-09-27 contra el proyecto real, no supuesto:
+
+| Límite | Consecuencia |
+| ------ | ------------ |
+| `work/previewUpdates` (registro de tiempos) responde **401** con el PAT de lectura | **No hay horas en ninguna parte del sistema.** El campo se llama `revisiones`, nunca `horas`: un nombre de medida sobre un número no medido es peor que no tener el campo |
+| `workitems/{id}/updates` es de **un** ítem; no hay endpoint por lotes | 1 llamada a Azure por ítem del árbol. Medido: 1–254 ítems por épica (mediana 26), 0,3–5,8 s (mediana 1,2 s). **No hay vista global**: 5.651 ítems serían 5.651 peticiones |
+| La revisión **actual** de cada ítem llega con `revisedDate = 9999-01-01T00:00:00Z` (6 de 6 en la muestra, y también en la #5324) | Se traduce a ausente en el adaptador. Sin filtrarlo, `ultima` sería el año 9999 en todas las épicas: un dato falso con aspecto de bueno |
+| La revisión 1 es la de creación y llega sin fecha | No cuenta como actividad. Si contara, quien solo abrió el ítem aparecería como quien trabajó en él |
+| Las historias nuevas tienen mediana 79 revisiones y las más antiguas 1 | Una épica con 1.938 revisiones y otra con 300 **no son comparables** sin mirar antigüedad. La `nota` de la respuesta lo dice, porque el número se ve suelto mucho después de leer el manual |
+| Un historial ilegible **resta** actividad (al revés que la cobertura, que sobrestima) | `parcial: true` + `items_analizados` frente a `items_totales`; la UI lo presenta como **cota inferior** |
+| La actividad de Azure no sabe nada del registro local de roles | El panel **no** separa QA de dev. Cruzar «rol declarado» con «tocó el ítem» sería un reparto que parece medido y mezcla dos fuentes |
+| `Persona` de `revisedBy` usa `id`/`displayName`, no `guid`/`nombre` | Traducción propia en `_a_autor_revision`. Reutilizar `_a_persona` no da error: da `None` en todas las revisiones y la respuesta sería «0 personas» sin una sola queja |
+
 ## 8. Criterios de cierre recomendados
 
 - `backend`: `pytest`, `pip check` y auditoría de dependencias en verde.

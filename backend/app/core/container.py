@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
+from ..application.actividad import ServicioActividad
 from ..application.indice import IndiceWorkItems
 from ..application.indice_pruebas import IndicePruebas
 from ..application.registro import ServicioRegistro
@@ -43,6 +44,7 @@ class Contenedor:
     indice_pruebas: IndicePruebas
     registro_principal: RegistroAsignacionesPort
     servicio_registro: ServicioRegistro
+    actividad: ServicioActividad
     escritura: Optional[EscrituraBacklogPort] = None
     transporte_escritura: Optional[TransportePort] = None
 
@@ -120,6 +122,13 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
         proyecto=cfg.azure_proyecto,
         area_path=cfg.area_path_efectivo,
     )
+
+    # --- Actividad por épica (bajo demanda) ------------------------------- #
+    # Se compone DESPUÉS del servicio de backlog porque reutiliza su árbol
+    # cacheado: si no, cada petición de actividad volvería a construir el grafo
+    # de la épica, que ya está en memoria de la vista anterior.
+    actividad = ServicioActividad(repositorio, servicio, cache, ttl_seg=cfg.actividad_ttl_seg)
+
     return Contenedor(
         settings=cfg,
         transporte=transporte,
@@ -130,6 +139,7 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
         indice_pruebas=indice_pruebas,
         registro_principal=registro_principal,
         servicio_registro=servicio_registro,
+        actividad=actividad,
         escritura=escritura,
         transporte_escritura=transporte_escritura,
     )

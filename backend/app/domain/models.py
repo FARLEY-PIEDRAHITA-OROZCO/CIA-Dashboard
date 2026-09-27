@@ -9,7 +9,7 @@ cambiar el modelo (abierto a extensión).
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Dict, FrozenSet, List, Optional
+from typing import Any, Dict, FrozenSet, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -415,6 +415,64 @@ class Instantanea(BaseModel):
     #: `True` cuando el fichero no existía y se devolvió un registro vacío.
     #: No es un error: es el primer arranque.
     recien_creado: bool = False
+
+
+class Revision(BaseModel):
+    """Una revisión de un work item: quién lo cambió, cuándo y en qué revisión.
+
+    ``fecha`` es opcional a propósito. Azure devuelve la revisión **actual** con
+    ``revisedDate = 9999-01-01T00:00:00Z``, que es su centinela de «sin fecha»
+    (medido: 6 de 6 en una muestra, y también en la épica #5324). Sin filtrarlo,
+    «última actividad» de cualquier épica sería el año 9999, que es un número
+    que no significa nada y que además se ve convincente.
+    """
+
+    rev: int = 0
+    persona: Optional[Persona] = None
+    fecha: Optional[datetime] = None
+
+    @property
+    def tiene_fecha(self) -> bool:
+        return self.fecha is not None
+
+
+class ActividadEpica(BaseModel):
+    """Actividad registrada en una épica y en todo su árbol.
+
+    **No son horas.** El registro de tiempos de Azure responde 401 y no hay
+    ninguna fuente de horas. Esto cuenta *revisiones*: cuántas veces alguien tocó
+    un ítem, y cuándo fue la última.
+
+    Y tiene un límite que conviene no esconder: los ítems antiguos tienen una
+    sola revisión —la de creación— y los que se acababan de crear también. Medido
+    en el proyecto real: historias viejas mediana 1 revisión, nuevas mediana 79.
+    Por eso el recuento sirve para comparar épicas **de la misma antigüedad**, no
+    para decir que una épica con 300 revisiones está más trabajada que otra con
+    30: puede ser simplemente más reciente.
+    """
+
+    epica: int
+    titulo: str = ""
+    #: Ítems del árbol a los que se les leyó el historial.
+    items_analizados: int = 0
+    #: Ítems del árbol en total. Si no coinciden, el análisis se quedó corto.
+    items_totales: int = 0
+    revisiones: int = 0
+    #: Personas distintas que tocaron algo, por GUID estable.
+    personas: int = 0
+    primera: Optional[datetime] = None
+    ultima: Optional[datetime] = None
+    por_persona: List[Dict[str, Any]] = []
+    por_tipo: Dict[str, int] = {}
+    #: `True` si algún ítem no se pudo leer. El recuento queda **por debajo** de lo
+    #: real, al revés que la cobertura: aquí perder historial resta actividad.
+    parcial: bool = False
+    #: Ítems del árbol en los que **ninguna** revisión cuenta como actividad: solo
+    #: tienen la de creación, o directamente no tienen historial. Es la señal de
+    #: «abierto y nunca tocado», y es distinta de `items_analizados` (que cuenta
+    #: los que sí se leyeron, tengan actividad o no).
+    items_sin_actividad: int = 0
+    nota: str = ""
 
 
 class ResultadoActualizacion(BaseModel):

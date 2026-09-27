@@ -468,6 +468,48 @@ class AsignacionDePersona(BaseModel):
     asignaciones: List[AsignacionOut] = []
 
 
+class RevisionPorPersona(BaseModel):
+    """Revisiones que hizo una persona, por GUID estable.
+
+    El GUID va en la respuesta aunque no se use como clave: es lo que permite
+    enlazar con `#/dashboard?qa=<guid>` sin volver a buscar por nombre, que no
+    es único ni estable.
+    """
+
+    guid: str
+    nombre: str = ""
+    revisiones: int = 0
+
+
+class ActividadEpicaOut(BaseModel):
+    """Actividad registrada en una épica y su árbol.
+
+    Los nombres de los campos son deliberados: `revisiones` y **no** `horas`.
+    El registro de tiempos de Azure responde 401 con el PAT de lectura, así que
+    no hay ninguna fuente de horas en este sistema, y un campo `horas` aquí
+    sería un número inventado con nombre de medida.
+    """
+
+    epica: int
+    titulo: str = ""
+    items_analizados: int = 0
+    items_totales: int = 0
+    #: `True` si algún historial no se pudo leer. El recuento es entonces una
+    #: **cota inferior** (pierde actividad), al revés que la cobertura de pruebas
+    #: donde perder relaciones produce una cota superior de la brecha.
+    parcial: bool = False
+    #: Ítems del árbol en los que ninguna revisión cuenta como actividad: solo
+    #: tienen la de creación, o no tienen historial. Es «abierto y nunca tocado».
+    items_sin_actividad: int = 0
+    revisiones: int = 0
+    personas: int = 0
+    primera: str = ""
+    ultima: str = ""
+    por_persona: List[RevisionPorPersona] = []
+    por_tipo: dict[str, int] = {}
+    nota: str = ""
+
+
 class ResultadoEscritura(BaseModel):
     """Resultado de una escritura de QA (o de su validación en seco)."""
 

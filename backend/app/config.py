@@ -64,6 +64,15 @@ class Settings(BaseSettings):
     # índice, con carga perezosa: la vista de sprints no lo toca nunca.
     index_pruebas_ttl_seg: float = 900.0
 
+    # --- Actividad por épica ---------------------------------------------- #
+    # TTL de la agregación de historial de revisiones. Es el más largo porque
+    # es la lectura más cara del sistema: **una llamada a Azure por ítem del
+    # árbol** (no existe endpoint por lotes, medido). Medido en el proyecto real:
+    # de 1 a 254 ítems por épica, mediana 26; de 0,3 s a 5,8 s, mediana 1,2 s. Y
+    # el historial de un ítem no cambia de forma útil de un minuto a otro.
+    # Reescribir un ítem invalida su caché.
+    actividad_ttl_seg: float = 900.0
+
     # --- Registro local de pruebas ---------------------------------------- #
     # Fichero donde viven los perfiles de rol y las asignaciones de épicas. Es
     # el ÚNICO sitio donde existe esa información: Azure no tiene ningún campo

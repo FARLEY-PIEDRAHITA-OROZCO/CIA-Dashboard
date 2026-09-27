@@ -2,6 +2,7 @@ import type { Epic } from "../api/tipos";
 import { ContenidoRico } from "../componentes/ContenidoRico";
 import { EstadoTrabajo } from "../componentes/EstadoTrabajo";
 import { irA } from "../navegacion";
+import { PanelActividad } from "../qa/PanelActividad";
 import { aplanarTareas } from "./TableroTareas";
 
 /** Total de historias de usuario de la épica (directas + las de las Features). */
@@ -79,6 +80,11 @@ export function DetalleEpica({ epica }: { epica: Epic }) {
           Abrir la épica en Azure DevOps ↗
         </a>
       )}
+
+      {/* Al final y cerrado por defecto: la actividad es la lectura más cara de
+          la aplicación (una llamada a Azure por ítem del árbol) y no tiene nada
+          que ver con la estructura que se acaba de mostrar. */}
+      <PanelActividad epica={epica.azure_id} titulo={epica.titulo} />
     </div>
   );
 }

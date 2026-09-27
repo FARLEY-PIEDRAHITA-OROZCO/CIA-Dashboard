@@ -473,6 +473,48 @@ export interface CargaQA {
   asignaciones: AsignacionQA[];
 }
 
+// ------------------------------------------------------------------ //
+// Actividad por épica
+//
+// **No son horas.** El registro de tiempos de Azure responde 401 con el PAT de
+// lectura, así que no hay ninguna fuente de horas en este sistema. El nombre
+// del campo (`revisiones`) es la defensa: un `horas` aquí sería un número que
+// nadie ha medido, con nombre de medida.
+// ------------------------------------------------------------------ //
+
+export interface RevisionPorPersona {
+  /** GUID estable; es lo que enlaza con `#/dashboard?qa=<guid>`. */
+  guid: string;
+  nombre: string;
+  revisiones: number;
+}
+
+export interface ActividadEpica {
+  epica: number;
+  titulo: string;
+  /** Ítems del árbol a los que sí se les leyó el historial. */
+  items_analizados: number;
+  /** Ítems del árbol en total. Si no coinciden con `items_analizados`, falta lectura. */
+  items_totales: number;
+  /**
+   * `true` si algún historial no se pudo leer. El recuento es entonces una
+   * **cota inferior** —pierde actividad—, al revés que la cobertura de pruebas,
+   * donde perder relaciones produce una cota superior de la brecha.
+   */
+  parcial: boolean;
+  /** Ítems con la revisión de creación y nada más: abiertos y nunca tocados. */
+  items_sin_actividad: number;
+  revisiones: number;
+  personas: number;
+  /** Vacío si no hay ninguna fecha válida. Nunca el centinela `9999` de Azure. */
+  primera: string;
+  ultima: string;
+  por_persona: RevisionPorPersona[];
+  por_tipo: Record<string, number>;
+  /** El aviso de límites viaja con el dato, no solo en la documentación. */
+  nota: string;
+}
+
 /** Campos de QA que admite un tipo de work item. */
 export type CampoEditable = "estado" | "prioridad" | "severidad" | "tags" | "notas_qa";
 

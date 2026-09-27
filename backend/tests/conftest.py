@@ -1,10 +1,11 @@
 """Fixtures y dobles compartidos por las pruebas del backend."""
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.application.actividad import ServicioActividad
 from app.application.indice import IndiceWorkItems
 from app.application.indice_pruebas import IndicePruebas
 from app.application.registro import ServicioRegistro
@@ -20,10 +21,12 @@ from app.domain.models import (
     ItemIndice,
     ItemPrueba,
     Persona,
+    Revision,
     Task,
     UserStory,
 )
 from app.domain.ports import RegistroAsignacionesPort
+from app.infrastructure.azure.transport import AzureError
 from app.infrastructure.registro_json import RegistroModificado
 from app.main import crear_app
 
@@ -80,6 +83,10 @@ class SabanaTransporte:
         self.wiql_ids = wiql_ids
         self.items = {int(i["id"]): i for i in items}
         self.llamadas: List[tuple] = []
+        #: Respuesta de `_apis/wit/workitems/{id}/updates`. Se fija por prueba
+        #: porque el historial es de un ítem y no hay forma de cocinarlo todas
+        #: las URLs a la vez.
+        self.actualizaciones: Dict = {"value": []}
 
     async def post(self, url: str, body: Optional[Dict] = None) -> Dict:
         self.llamadas.append(("post", url))
@@ -93,6 +100,10 @@ class SabanaTransporte:
             ids_str = url.split("ids=")[1].split("&")[0]
             ids = [int(x) for x in ids_str.split(",")]
             return {"value": [self.items[i] for i in ids if i in self.items]}
+        if "/updates" in url:
+            # Antes de la rama de un solo ítem: la ruta lleva `/updates` detrás
+            # del ID y `int()` reventaría con «40983/updates».
+            return self.actualizaciones
         id_ = int(url.split("/workitems/")[1].split("?")[0])
         return self.items[id_]
 
@@ -191,6 +202,8 @@ class FakeRepositorio:
         activos_prueba: Optional[List["ItemPrueba"]] = None,
         lotes_prueba_con_error: int = 0,
         lotes_prueba_totales: int = 0,
+        historiales: Optional[Dict[int, List["Revision"]]] = None,
+        historiales_fallan: Optional[Set[int]] = None,
     ) -> None:
         self.epicas = epicas or []
         self.arbol = arbol
@@ -198,8 +211,11 @@ class FakeRepositorio:
         self.activos_prueba = activos_prueba or []
         self.lotes_prueba_con_error = lotes_prueba_con_error
         self.lotes_prueba_totales = lotes_prueba_totales
+        self.historiales = historiales or {}
+        self.historiales_fallan = historiales_fallan or set()
         self.llamadas_indice = 0
         self.llamadas_indice_pruebas = 0
+        self.llamadas_historial: List[int] = []
         self.sintoma = None  # excepción opcional para simular fallos
 
     async def verificar_proyecto(self) -> Dict[str, str]:
@@ -241,6 +257,18 @@ class FakeRepositorio:
             lotes_con_error=self.lotes_prueba_con_error,
             lotes_totales=self.lotes_prueba_totales or 1,
         )
+
+    async def historial_work_item(self, work_item_id: int) -> List["Revision"]:
+        """Historial de revisiones de un ítem, desde `historiales`.
+
+        Un ID que no está en el diccionario devuelve lista vacía, que es un dato
+        (un ítem sin revisiones) y no un error. `historiales_fallan` permite
+        comprobar que un historial ilegible marca la actividad como **parcial**.
+        """
+        self.llamadas_historial.append(work_item_id)
+        if work_item_id in self.historiales_fallan:
+            raise AzureError("historial no disponible")
+        return list(self.historiales.get(work_item_id, []))
 
 
 class FakeEscritura:
@@ -349,6 +377,9 @@ def contenedor_con(
         indice_pruebas=indice_pruebas,
         registro_principal=registro_real,
         servicio_registro=ServicioRegistro(registro_real, indice, indice_pruebas),
+        # ttl_seg=0 como la caché del servicio: la actividad no debe sobrevivir
+        # entre pruebas. El árbol sí lo aporta el servicio (mismo `cache`).
+        actividad=ServicioActividad(repo, servicio, cache, ttl_seg=0),
         escritura=escritura,
     )
 

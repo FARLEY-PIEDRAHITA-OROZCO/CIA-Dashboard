@@ -3,6 +3,7 @@
 import type {
   ActualizacionQA,
   ActivoDePrueba,
+  ActividadEpica,
   ActivosPrueba,
   AutomatizacionPruebas,
   CampoEditable,
@@ -11,6 +12,7 @@ import type {
   ListaAsignaciones,
   ListaPersonasQA,
   PersonaQA,
+  RevisionPorPersona,
   RolActualizable,
   SugerenciaQA,
   SugerenciasQA,
@@ -739,9 +741,38 @@ function validarCargaQA(valor: unknown): CargaQA {
   };
 }
 
-/**
- * Quita los campos `null` del cuerpo de rol.
- *
+function validarRevisionPorPersona(valor: unknown): RevisionPorPersona {
+  const item = objeto(valor, "revisión por persona");
+  return {
+    guid: texto(item.guid, "revisionPersona.guid"),
+    nombre: texto(item.nombre ?? "", "revisionPersona.nombre"),
+    revisiones: numero(item.revisiones ?? 0, "revisionPersona.revisiones"),
+  };
+}
+
+function validarActividadEpica(valor: unknown): ActividadEpica {
+  const item = objeto(valor, "actividad de épica");
+  return {
+    epica: numero(item.epica, "actividad.epica"),
+    titulo: texto(item.titulo ?? "", "actividad.titulo"),
+    items_analizados: numero(item.items_analizados ?? 0, "actividad.items_analizados"),
+    items_totales: numero(item.items_totales ?? 0, "actividad.items_totales"),
+    parcial: booleano(item.parcial, "actividad.parcial"),
+    items_sin_actividad: numero(item.items_sin_actividad ?? 0, "actividad.items_sin_actividad"),
+    revisiones: numero(item.revisiones ?? 0, "actividad.revisiones"),
+    personas: numero(item.personas ?? 0, "actividad.personas"),
+    // Cadena vacía cuando no hay fecha. El centinela `9999-01-01` de Azure se
+    // filtra en el backend: si alguna vez se colara, aquí se vería como la fecha
+    // más reciente de todas, y no como un error evidente.
+    primera: texto(item.primera ?? "", "actividad.primera"),
+    ultima: texto(item.ultima ?? "", "actividad.ultima"),
+    por_persona: lista(item.por_persona, "actividad.por_persona", validarRevisionPorPersona),
+    por_tipo: mapaNumeros(item.por_tipo, "actividad.por_tipo"),
+    nota: texto(item.nota ?? "", "actividad.nota"),
+  };
+}
+
+/** Quita los campos `null` del cuerpo de rol.
  * El backend distingue `null` («no lo toques») de `false` («quítaselo»), y esa
  * diferencia es justo lo que impide que reenviar un formulario borre el rol que
  * no se quería cambiar. Mandar `null` explícito lo borraría igual, porque JSON no
@@ -961,6 +992,18 @@ export const api = {
 
   qaCarga: async (signal?: AbortSignal) =>
     lista(await peticion<unknown>("/qa/carga", { signal }), "carga", validarCargaQA),
+
+  /**
+   * Actividad registrada de una épica.
+   *
+   * Es la petición más cara del sistema (una llamada a Azure por ítem del árbol,
+   * hasta 254 en una épica grande), así que la UI la pide **bajo demanda**, nunca
+   * al abrir una vista. `useActividadEpica` es el sitio donde se decide eso.
+   */
+  qaActividadEpica: async (epica: number, signal?: AbortSignal) =>
+    validarActividadEpica(
+      await peticion<unknown>(`/qa/epicas/${epica}/actividad`, { signal }),
+    ),
 
   qaMarcarRol: async (
     guid: string,

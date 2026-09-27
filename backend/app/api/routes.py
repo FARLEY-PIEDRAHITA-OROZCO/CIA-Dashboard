@@ -8,8 +8,9 @@ from fastapi import APIRouter, HTTPException, Path, Query
 from ..application.services import ServicioBacklog
 from ..domain.models import Epic
 from ..infrastructure.azure.transport import AzureError
-from .deps import IndiceDep, IndicePruebasDep, RegistroDep, ServicioDep
+from .deps import ActividadDep, IndiceDep, IndicePruebasDep, RegistroDep, ServicioDep
 from .schemas import (
+    ActividadEpicaOut,
     ActivosPrueba,
     AsignacionActualizable,
     AsignacionDePersona,
@@ -34,6 +35,7 @@ from .schemas import (
     RezagoEntreSprints,
     ResumenPruebas,
     ResultadoEscritura,
+    RevisionPorPersona,
     RolActualizable,
     SinCubrir,
     SprintOut,
@@ -709,6 +711,69 @@ async def api_qa_carga(servicio: ServicioDep, registro: RegistroDep) -> List[Asi
 
 
 # ---------------------------------------------------------------------- #
+# Actividad por épica (bajo demanda)
+# ---------------------------------------------------------------------- #
+@router.get(
+    f"{QA}/epicas/{{epic_id}}/actividad",
+    response_model=ActividadEpicaOut,
+    tags=["QA"],
+)
+async def api_actividad_epica(
+    servicio: ServicioDep,
+    actividad: ActividadDep,
+    epic_id: Annotated[int, Path(gt=0)],
+) -> ActividadEpicaOut:
+    """Actividad registrada en una épica: revisiones por persona, por tipo y fechas.
+
+    Es la lectura más cara del sistema —**una llamada a Azure por ítem del
+    árbol**— y por eso va por épica y bajo demanda. Medido en el proyecto real: de
+    1 a 254 ítems por épica, mediana 26; de 0,3 s a 5,8 s, mediana 1,2 s. No hay
+    vista global a propósito: leer el historial de los 5.651 ítems del proyecto
+    serían 5.651 peticiones, y eso no es una vista, es un ataque a la API.
+
+    Cuenta revisiones, no horas. El registro de tiempos de Azure responde 401 con
+    el PAT de lectura, así que no hay horas en ninguna parte de este sistema.
+    """
+    _requiere_configuracion(servicio)
+    try:
+        datos = await actividad.actividad_epica(epic_id)
+    except AzureError as exc:
+        # Una épica que ya no existe en Azure responde 404 aguas arriba. Traducir
+        # eso a 502 diría «Azure falló» y, para quien sigue un enlace guardado de
+        # una épica borrada, es un diagnóstico equivocado: el épica no existe, y
+        # eso no se arregla reintentando.
+        if exc.status_code == 404:
+            raise HTTPException(
+                status_code=404, detail=f"La épica {epic_id} ya no existe en Azure."
+            ) from exc
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if datos is None:
+        raise HTTPException(status_code=404, detail=f"La épica {epic_id} no existe.")
+    return ActividadEpicaOut(
+        epica=datos.epica,
+        titulo=datos.titulo,
+        items_analizados=datos.items_analizados,
+        items_totales=datos.items_totales,
+        parcial=datos.parcial,
+        items_sin_actividad=datos.items_sin_actividad,
+        revisiones=datos.revisiones,
+        personas=datos.personas,
+        primera=datos.primera.isoformat() if datos.primera else "",
+        ultima=datos.ultima.isoformat() if datos.ultima else "",
+        por_persona=[
+            RevisionPorPersona(
+                guid=str(fila.get("guid") or ""),
+                nombre=str(fila.get("nombre") or ""),
+                revisiones=int(fila.get("revisiones") or 0),
+            )
+            for fila in datos.por_persona
+        ],
+        por_tipo=datos.por_tipo,
+        nota=datos.nota,
+    )
+
+
+# ---------------------------------------------------------------------- #
 # Escritura QA (opt-in, ADR-11)
 # ---------------------------------------------------------------------- #
 @router.patch(
@@ -720,6 +785,7 @@ async def api_actualizar_work_item(
     servicio: ServicioDep,
     indice: IndiceDep,
     indice_pruebas: IndicePruebasDep,
+    actividad: ActividadDep,
     work_item_id: Annotated[int, Path(gt=0)],
     cambios: ActualizacionQA,
     validar: bool = False,
@@ -755,6 +821,9 @@ async def api_actualizar_work_item(
         # números previos a la edición.
         indice.invalidar()
         indice_pruebas.invalidar()
+        # Y la actividad: acaba de aparecer una revisión en el historial, así que
+        # el recuento del panel de la épica sería el anterior a esta edición.
+        actividad.invalidar()
     return ResultadoEscritura(**resultado.model_dump())
 
 

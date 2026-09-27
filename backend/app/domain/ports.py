@@ -15,6 +15,7 @@ from .models import (
     Instantanea,
     ItemIndice,
     ResultadoActualizacion,
+    Revision,
 )
 
 
@@ -68,6 +69,19 @@ class RepositorioBacklogPort(Protocol):
     async def obtener_epica(
         self, epic_id: int, *, incluir_bugs: bool = False
     ) -> Optional[Epic]: ...
+
+    async def historial_work_item(self, work_item_id: int) -> List[Revision]:
+        """Historial de revisiones de **un** work item, en orden de revisión.
+
+        Va en este puerto, uno a uno, y no por lote a propósito: no existe un
+        endpoint de Azure que dé el historial de varios ítems en una llamada
+        (medido), así que una vista global de actividad serían 5.651 peticiones
+        y no es una opción. Por eso se ofrece por épica y bajo demanda.
+
+        Un item sin historial legible devuelve lista vacía, no error: que un ítem
+        no tenga revisiones no es un fallo de lectura, es un dato.
+        """
+        ...
 
 
 class CachePort(Protocol):

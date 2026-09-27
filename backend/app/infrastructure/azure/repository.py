@@ -13,6 +13,7 @@ import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote
 
@@ -24,6 +25,7 @@ from ...domain.models import (
     ItemIndice,
     ItemPrueba,
     Persona,
+    Revision,
     Task,
     UserStory,
 )
@@ -303,6 +305,53 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
             f"?$expand=relations&api-version={queries.API_VERSION}"
         )
         return await self._transporte.get(url)
+
+    async def historial_work_item(self, work_item_id: int) -> List[Revision]:
+        """Revisiones de un ítem, de la más antigua a la más reciente.
+
+        Filtra el centinela de fecha de Azure. La revisión **actual** de cada
+        ítem llega con ``revisedDate = 9999-01-01T00:00:00Z`` (medido: 6 de 6
+        en una muestra de historias, y también en la épica #5324), que es su
+        forma de decir «sin fecha». Se traduce a `None` en vez de propagarse:
+        conservarlo daría un «último cambio en el año 9999» que no es un dato
+        raro, es un dato falso con aspecto de bueno.
+        """
+        url = self._ruta_proyecto(
+            f"_apis/wit/workitems/{work_item_id}/updates"
+            f"?api-version={queries.API_VERSION}&top={queries.TOPE_REVISIONES}"
+        )
+        datos = await self._transporte.get(url)
+        revisiones: List[Revision] = []
+        for bruta in datos.get("value") or []:
+            fecha = self._a_fecha(bruta.get("revisedDate"))
+            revisiones.append(
+                Revision(
+                    rev=int(bruta.get("rev") or 0),
+                    persona=self._a_autor_revision(bruta.get("revisedBy")),
+                    fecha=fecha,
+                )
+            )
+        # `revisedDate` no viene garantizado en orden. Ordenar por `rev` sí lo
+        # está: es un entero monótono y es el número con el que Azure ordena.
+        revisiones.sort(key=lambda r: r.rev)
+        return revisiones
+
+    @staticmethod
+    def _a_fecha(bruto: Any) -> Optional[datetime]:
+        """Convierte una fecha de Azure, descartando centinelas y basura.
+
+        Dos formas de «sin fecha»: el centinela ``9999-01-01`` y una cadena
+        vacía o nula. Se acepta cualquier año real (el backlog empieza en 2020 y
+        no hay razón para un mínimo arbitrario), así que el corte es solo el
+        año 9999, que es el único valor centinela que Azure usa para fechas.
+        """
+        if not isinstance(bruto, str) or not bruto:
+            return None
+        try:
+            valor = datetime.fromisoformat(bruto.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return None if valor.year >= 9999 else valor
 
     async def _detallar_lote(
         self,
@@ -679,6 +728,26 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
         if not guid and not nombre:
             return None
         return Persona(guid=guid, nombre=nombre, url=str(bruto.get("url") or ""))
+
+    @staticmethod
+    def _a_autor_revision(bruto: Any) -> Optional[Persona]:
+        """Traduce el ``revisedBy`` de una revisión al modelo de dominio.
+
+        **No** reutiliza :meth:`_a_persona` a propósito, aunque se parezca. Los
+        dos leen una ``IdentityRef`` pero con nombres de campo distintos: el
+        resto del backlog llega ya con los del dominio (``guid``, ``nombre``) y
+        ``updates`` llega con los de Azure (``id``, ``displayName``). Pasarla por
+        la otra función no da error: da ``None`` en todas las revisiones, y la
+        respuesta sería «0 personas toques» sin una sola queja, que es el peor
+        tipo de fallo — silencioso y plausible.
+        """
+        if not isinstance(bruto, dict):
+            return None
+        guid = str(bruto.get("id") or "").strip()
+        nombre = str(bruto.get("displayName") or "").strip()
+        if not guid and not nombre:
+            return None
+        return Persona(guid=guid, nombre=nombre)
 
     def _a_epica_resumen(self, item: Dict) -> Epic:
         id_ = int(item.get("id", 0))

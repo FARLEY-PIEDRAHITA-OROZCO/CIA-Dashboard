@@ -102,6 +102,15 @@ RELACION_TESTED_BY = "Microsoft.VSTS.Common.TestedBy-Reverse"
 
 TAMANO_LOTE_API = 200
 
+#: Cuántas revisiones se piden por ítem en `historial_work_item`.
+#:
+#: El endpoint es de **un** ítem: no hay forma de pedir el historial de varios, así
+#: que el tope no ahorra red, solo memoria. Una épica grande llega a 254 ítems
+#: (medido), y pedir más de las que existen no cuesta nada porque Azure no las
+#: inventa: el tope solo protege del caso patológico de un ítem con miles de
+#: cambios, donde sin tope la respuesta sería enorme y sin añadir información.
+TOPE_REVISIONES = 200
+
 
 def escapar_wiql(valor: str) -> str:
     """Duplica las comillas simples para incrustar texto en una consulta WIQL.
