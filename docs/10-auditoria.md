@@ -517,6 +517,24 @@ ofrece una proyección con métricas.
    lugar del proxy por etiqueta. Antes hay que medir el coste en memoria.
 6. Vigilar `Índice: items=… duration_ms=…` y medir el comportamiento al escalar
    el proyecto; el índice no tiene cota de tamaño.
+7. Vigilar también `Índice de pruebas: items=… lotes_con_error=… duration_ms=…`.
+   Son 3.932 activos y ~5,5 s en frío: si molesta, el índice ya tiene TTL propio
+   (900 s) y se puede precargar en el lifespan como el de sprints.
+8. Si algún día se activan escrituras sobre activos de prueba, la lista blanca
+   pasa a ser **por tipo** (`Microsoft.VSTS.Common.Priority` en test items y
+   `System.Priority` en Bug; `severidad` solo donde existe) y hay que enmendar
+   ADR-11, que hoy fija tres tipos editables.
+
+### Límites conocidos de la capa de pruebas
+
+| Límite | Consecuencia |
+| ------ | ------------ |
+| La pertenencia de un caso a un plan no es accesible (404 en todas las `api-version`; 0 relaciones en el work item del plan) | No hay «abrir plan» ni pass/fail por plan. `/api/pruebas/planes` solo da sprint y responsable |
+| No hay fechas de sprint (`_apis/iterations` → 401) ni ejecuciones de prueba legibles | Sin burndown ni tendencia de la cobertura |
+| Un lote de relaciones ilegible hace parecer descubiertas historias que sí tienen caso | La respuesta lo declara (`parcial: true`) y el recuento es una cota superior |
+| `TestedBy` entre tipos: una HU (17548) apunta a Tasks del proceso de QA, no a casos | Cuenta como descubierta: 240 con caso frente a 241 enlazadas |
+| `Microsoft.VSTS.TCM.Steps` no se pide (causa los HTTP 500) | La vista no muestra los pasos de un caso; irían en un endpoint de detalle |
+| 98,5 % de los casos no está automatizado | Se presenta como dato, sin tono rojo/verde: es una mide el proceso, no juzga al equipo |
 
 ## 8. Criterios de cierre recomendados
 

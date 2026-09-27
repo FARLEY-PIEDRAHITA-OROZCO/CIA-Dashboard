@@ -25,9 +25,13 @@ Todos los endpoints devuelven **JSON** (`application/json`).
 | GET | `/api/analitica/verificacion` | Señal ① brechas de verificación QA | experimental |
 | GET | `/api/analitica/aging` | Señal ② trabajo estancado | experimental |
 | GET | `/api/analitica/rezago` | Señal ③ rezago entre sprints | experimental |
+| GET | `/api/pruebas/resumen` | Inventario de activos de prueba, brecha, automatización y diseño | experimental |
+| GET | `/api/pruebas/cobertura` | Cobertura de historias con caso, global y por sprint | experimental |
+| GET | `/api/pruebas/sin-cubrir` | Historias sin caso de prueba, paginadas (la lista de trabajo de QA) | experimental |
+| GET | `/api/pruebas/planes` | Los planes como contexto: sprint y responsable | experimental |
 | PATCH | `/api/workitems/{id}` | Escritura QA (opt-in, ADR-11) | experimental |
 | GET | `/api/workitems/{id}/rev` | Revisión actual, para control de concurrencia | experimental |
-| POST | `/api/epics/refresh` | Invalida la caché **y el índice local** | estable |
+| POST | `/api/epics/refresh` | Invalida la caché **y los dos índices locales** | estable |
 
 > No requiere autenticación propia (aplicación local; el secreto vive en el
 > backend). Para exponerla, ver [08-despliegue](08-despliegue.md) y
@@ -42,6 +46,18 @@ trabajo (`User Story`, `Task`, `Bug`, `Issue`) que se construye una vez por TTL
 arquitectura viable: WIQL no devuelve los valores de los campos, la API de
 iteraciones responde 401 con un PAT de lectura y los tags **no** se pueden
 filtrar en el servidor. Ver [05-integracion-azure](05-integracion-azure.md).
+
+`/api/pruebas/*` usa un **segundo índice**, no el mismo ampliado. Los activos de
+prueba son 3.932 ítems (`Test Plan`, `Test Suite`, `Test Case`) que nadie
+consulta al abrir la vista de sprints, así que meterlos en el índice de sprints
+duplicaría su tiempo en frío sin ganar nada. Tiene su propio TTL
+(`INDEX_PRUEBAS_TTL_SEG`, 900 s) y se carga **de forma perezosa**: `#/sprints` no lo
+toca nunca.
+
+La cobertura de pruebas cruza los dos índices: los requisitos a los que apunta
+cada caso (relación `TestedBy-Reverse`) con las historias del índice de trabajo.
+Por eso `/api/pruebas/cobertura` no puede responder si el índice de sprints
+todavía no se ha construido.
 
 ---
 
@@ -575,7 +591,159 @@ catálogo; los anteriores son los históricos.
 
 ---
 
-## 11. Modelo de errores
+## 11. Gestión del proceso de pruebas
+
+Capa de **solo lectura** (la escritura sobre activos de prueba es la Fase 5 del
+plan y no forma parte de este contrato). Responde tres preguntas: cuántas
+historias no tienen ningún caso que las pruebe, en qué sprint, y quién lleva las
+pruebas.
+
+### Qué se puede medir y qué no
+
+La pertenencia de un caso a un plan **no es accesible**: los work items
+`Test Plan` no tienen relaciones de pertenencia y
+`GET …/_apis/testplan/Plans/{id}/TestCaseList` responde **404** en todas las
+versiones probadas. Por eso no hay endpoint para «abrir un plan», y `/planes`
+solo devuelve sprint y responsable.
+
+Lo que sí existe es el vínculo **caso → requisito** (`TestedBy-Reverse`), que
+aparece en 2.014 de 3.431 casos. De ahí sale la cobertura.
+
+### `GET /api/pruebas/resumen`
+
+Inventario, brecha, automatización y diseño de casos.
+
+```json
+{
+  "inventario": { "planes": 44, "suites": 457, "casos": 3431, "total": 3932 },
+  "estados": { "Test Case": { "Design": 1577, "Closed": 1722, "Ready": 132 } },
+  "automatizacion": {
+    "casos": 3431, "automatizados": 0, "planificados": 53,
+    "manuales": 3378, "pct_automatizado": 0.0
+  },
+  "diseno": { "en_diseno": 1577, "sin_mover": 624, "dias": 180 },
+  "brecha": {
+    "historias": 601, "cubiertas": 240, "sin_cubrir": 361,
+    "pct_cubiertas": 39.9, "parcial": false, "requisitos_cubiertos_total": 352
+  },
+  "parcial": false,
+  "generado": "2026-09-27T16:48:34Z"
+}
+```
+
+Tres decisiones que no son obvias:
+
+- **`automatizados` cuenta solo `Automated` exacto.** `Planned` va aparte porque
+  un caso planificado para automatizar **hoy sigue siendo manual**; sumarlo
+  inflaría la métrica.
+- **`automatizacion` es un eje independiente del estado.** Un caso `Closed` puede
+  no estar automatizado y uno `Design` puede estarlo, así que no es un tono de
+  estado.
+- **`diseno` separa trabajo en curso de deuda.** 1.577 casos en `Design` no son
+  todos deuda: `sin_mover` son los que no se tocan desde hace más de `dias`.
+
+### `GET /api/pruebas/cobertura`
+
+Cobertura global y por sprint. `resumen` tiene **la misma forma** que `brecha`
+del endpoint anterior: son el mismo dato y divergirían al primer cambio.
+
+```json
+{
+  "resumen": {
+    "historias": 601, "cubiertas": 240, "sin_cubuir": 361, "pct_cubiertas": 39.9,
+    "requisitos_cubiertos_total": 352, "parcial": false, "lotes_con_error": 0,
+    "generado": "2026-09-27T16:48:34Z"
+  },
+  "sprints": [
+    { "nombre": "Sprint 45", "ruta": "…\\Sprint 45",
+      "historias": 39, "cubiertas": 5, "sin_cubrir": 34, "pct_cubiertas": 12.8 }
+  ]
+}
+```
+
+Una historia cuenta como cubierta si **algún** caso la prueba, sin mirar en qué
+sprint está el caso: el sprint de un caso es dónde se planificó ejecutarlo, no
+dónde está el requisito. La raíz de la iteración se excluye con la misma
+detección que el índice de sprints (la ruta que es prefijo de otras): 46
+historias apuntan a `CIA (Centro de Inteligencia Artificial)` y esa no es un
+sprint.
+
+> **Por qué 240 y no 241.** Una `User Story` (17548) está enlazada por
+> `TestedBy` a cuatro **Tasks** del proceso de QA («Creación de casos de
+> pruebas», «Ejecución», «Evidencias») y a ningún caso. Tiene proceso de QA
+> documentado, no un caso de prueba, así que cuenta como descubierta.
+
+### `GET /api/pruebas/sin-cubrir`
+
+Las historias sin ningún caso: la lista de trabajo de QA, paginada.
+
+| Parámetro | Por defecto | Notas |
+| --------- | ----------- | ----- |
+| `sprint` | — | Ruta completa **o** nombre corto (`Sprint 45`) |
+| `persona` | — | GUID o fragmento del nombre |
+| `limite` | `50` | 1–200 |
+| `offset` | `0` | ≥ 0 |
+
+El orden es por sprint (los que no tienen sprint van primero, porque son la deuda
+más difícil de situar) y luego por id, **estable a propósito**: con un orden
+cambiante el `offset` repetiría o saltaría historias entre páginas.
+
+```json
+{
+  "resumen": {
+    "total": 361, "offset": 0, "limite": 50, "hay_mas": true,
+    "parcial": false, "lotes_con_error": 0
+  },
+  "items": [
+    { "azure_id": 1, "titulo": "…", "estado": "Active",
+      "sprint": "Sprint 45", "persona": "…", "modificado": "2026-02-01T…" }
+  ]
+}
+```
+
+`sprint` vacío significa «no está en ninguna iteración», no «el filtro la ocultó».
+
+### `GET /api/pruebas/planes`
+
+```json
+[
+  { "azure_id": 6776, "titulo": "Auditorias tecnicas", "estado": "Active",
+    "sprint": "Sprint 1", "persona": "…", "modificado": "2026-02-01T…" }
+]
+```
+
+### Cobertura parcial
+
+`parcial: true` significa que **algún lote de relaciones no se pudo leer**. Es
+una límite de la lectura, no un dato de la calidad: los casos ausentes cuentan
+historias cubiertas como descubiertas, así que `sin_cubrir` es una **cota
+superior** — puede haber más, nunca menos.
+
+Se declara en las tres respuestas de cobertura (`resumen.brecha.parcial`,
+`cobertura.resumen.parcial` y `sin-cubrir.resumen.parcial`) y la UI lo dice pegado
+al veredicto. Publicar la cifra como total sería peor que no publicarla: alguien
+decidiría escribir 361 casos cuando hacen falta 400.
+
+La coincidencia entre las dos direcciones del cruce (casos e historias) se exige
+en las pruebas, no en producción: contrastarla allí duplicaría las lecturas. Ver
+`backend/tests/test_indice_pruebas.py::test_cobertura_coincide_en_las_dos_direcciones`.
+
+### Códigos
+
+| Código | Caso |
+| ------ | ---- |
+| `200` | OK, incluso sin datos (listas vacías y ceros) |
+| `409` | Falta organización, proyecto o PAT |
+| `422` | `limite` fuera de 1–200 u `offset` negativo |
+| `502` | Azure falló al construir el índice de pruebas |
+
+La primera llamada tras el arranque o un refresco cuesta **~5,5 s** (18 lotes de
+200 sobre 3.931 activos con `$expand=relations`). Después es de memoria. Ver
+[10-auditoria](10-auditoria.md).
+
+---
+
+## 12. Modelo de errores
 
 Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 `detail` (string, o array de detalles de validación).
@@ -604,7 +772,7 @@ Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 
 ---
 
-## 12. Ejemplos de uso
+## 13. Ejemplos de uso
 
 ### PowerShell
 ```powershell
