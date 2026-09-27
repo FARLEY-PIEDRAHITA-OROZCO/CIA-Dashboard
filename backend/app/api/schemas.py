@@ -5,7 +5,7 @@ listado. Las respuestas jamás contienen credenciales.
 """
 
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -330,6 +330,83 @@ class ActivosPrueba(BaseModel):
     items: List[ActivoDePrueba] = []
     #: Estados observados por tipo, para los selectores de transición.
     estados: Dict[str, List[str]] = {}
+
+
+# ---------------------------------------------------------------------- #
+# Registro local de pruebas (perfiles de rol)
+# ---------------------------------------------------------------------- #
+class PersonaQAOut(BaseModel):
+    """Una persona del proyecto con su papel en el proceso de pruebas.
+
+    `es_qa` y `es_dev` vienen del **registro local**, no de Azure: no existe
+    ningún campo para esto. `forzado` dice si la decisión fue humana o si el
+    campo está sin tocar.
+
+    `dias_laborables` se llama así a propósito y no `horas`: el registro de
+    tiempos de Azure responde 401 y **no hay fuente de horas** en ninguna parte.
+    Contar días desde la asignación es un dato medido; estimar horas sería
+    inventarlas, y un número inventado se usa para decidir.
+    """
+
+    guid: str
+    nombre: str = ""
+    es_qa: bool = False
+    es_dev: bool = False
+    forzado: Optional[bool] = None
+    epicas: int = 0
+    epicas_qa: int = 0
+    epicas_dev: int = 0
+    """Fecha de la asignación más antigua, o `""` si no tiene ninguna."""
+    mas_antigua: str = ""
+    dias_laborables: int = 0
+    #: Carga real del backlog, para contrastar con lo declarado en el registro.
+    items_backlog: int = 0
+    bugs: int = 0
+
+
+class ListaPersonasQA(BaseModel):
+    personas: List[PersonaQAOut] = []
+    total: int = 0
+    #: Quantas tienen el rol de QA marcado en el registro.
+    qa: int = 0
+    dev: int = 0
+    sin_rol: int = 0
+
+
+class RolActualizable(BaseModel):
+    """Cuerpo de `PUT /api/qa/personas/{guid}`. Los tres campos son opcionales.
+
+    Un campo `null` significa "no lo toques"; `false` significa "quítaselo". La
+    diferencia importa: si `es_qa` fuera obligatorio, no se podría quitar el rol
+    sin mandar también el resto.
+    """
+
+    es_qa: Optional[bool] = None
+    es_dev: Optional[bool] = None
+    #: Marca la decisión como humana, para que la sugerencia no la replantee.
+    forzado: Optional[bool] = None
+
+
+class SugerenciaQA(BaseModel):
+    """Personas que más tocan activos de prueba.
+
+    Es una **sugerencia**, y se devuelve como tal: el backend no la guarda
+    sola. Clasificar mal a alguien en el registro es peor que no proponer nada,
+    porque el error queda y nadie lo revisa.
+    """
+
+    guid: str
+    nombre: str = ""
+    activos: int = 0
+    #: `True` si esa persona ya está marcada como QA en el registro.
+    ya_es_qa: bool = False
+
+
+class SugerenciasQA(BaseModel):
+    sugerencias: List[SugerenciaQA] = []
+    #: Umbral aplicado, para que la UI pueda explicar por qué se propone esto.
+    minimo: int = 0
+    nota: str = ""
 
 
 class ResultadoEscritura(BaseModel):

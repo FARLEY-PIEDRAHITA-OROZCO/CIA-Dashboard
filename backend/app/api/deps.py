@@ -6,6 +6,7 @@ from fastapi import Depends, Request
 
 from ..application.indice import IndiceWorkItems
 from ..application.indice_pruebas import IndicePruebas
+from ..application.registro import ServicioRegistro
 from ..application.services import ServicioBacklog
 from ..core.container import Contenedor
 
@@ -28,6 +29,13 @@ def obtener_indice_pruebas(
     return contenedor.indice_pruebas
 
 
+def obtener_registro(
+    contenedor: Annotated[Contenedor, Depends(obtener_contenedor)]
+) -> ServicioRegistro:
+    return contenedor.servicio_registro
+
+
 ServicioDep = Annotated[ServicioBacklog, Depends(obtener_servicio)]
 IndiceDep = Annotated[IndiceWorkItems, Depends(obtener_indice)]
 IndicePruebasDep = Annotated[IndicePruebas, Depends(obtener_indice_pruebas)]
+RegistroDep = Annotated[ServicioRegistro, Depends(obtener_registro)]

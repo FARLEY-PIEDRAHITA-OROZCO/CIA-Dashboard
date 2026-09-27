@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Path, Query
 from ..application.services import ServicioBacklog
 from ..domain.models import Epic
 from ..infrastructure.azure.transport import AzureError
-from .deps import IndiceDep, IndicePruebasDep, ServicioDep
+from .deps import IndiceDep, IndicePruebasDep, RegistroDep, ServicioDep
 from .schemas import (
     ActivosPrueba,
     BrechaVerificacion,
@@ -21,15 +21,20 @@ from .schemas import (
     ListaEpicas,
     ListaItems,
     ListaPersonas,
+    ListaPersonasQA,
     ListaSprints,
     Mensaje,
     PersonaOut,
+    PersonaQAOut,
     PlanDePrueba,
     RezagoEntreSprints,
     ResumenPruebas,
     ResultadoEscritura,
+    RolActualizable,
     SinCubrir,
     SprintOut,
+    SugerenciaQA,
+    SugerenciasQA,
     TrabajoEstancado,
     a_resumen,
 )
@@ -393,6 +398,128 @@ async def api_refrescar(
     return Mensaje(
         ok=True,
         detalle="Caché invalidada. La próxima consulta leerá de Azure.",
+    )
+
+
+# ---------------------------------------------------------------------- #
+# Registro local de pruebas (perfiles de rol)
+# ---------------------------------------------------------------------- #
+QA = "/api/qa"
+
+#: Explicación de por qué esto no son horas. Se devuelve con la respuesta para
+#: que la UI pueda decirlo, en vez de tener el texto metido en el frontend.
+NOTA_SIN_HORAS = (
+    "El tiempo se cuenta en días laborables desde la asignación, no en horas: "
+    "el registro de tiempos de Azure no es accesible con el PAT de lectura "
+    "(HTTP 401), así que no hay ninguna fuente de horas."
+)
+
+
+def _error_registro(exc: Exception) -> HTTPException:
+    """Traduce los fallos del registro al código que corresponde.
+
+    Tres fallos distintos con tres salidas distintas, y confundirlos manda al
+    usuario a la puerta equivocada:
+
+    * :class:`AsignacionInvalida` → **422**: corrige el formulario.
+    * :class:`RegistroModificado` → **409**: recarga y reintenta; no se perdió nada.
+    * :class:`ErrorRegistro` → **500**: el fichero está mal; es del servidor, no
+      de la petición, y no se puede arreglar desde el formulario.
+    """
+    from ..application.registro import AsignacionInvalida
+    from ..infrastructure.registro_json import ErrorRegistro, RegistroModificado
+
+    if isinstance(exc, RegistroModificado):
+        return HTTPException(status_code=409, detail=str(exc))
+    if isinstance(exc, AsignacionInvalida):
+        return HTTPException(status_code=422, detail=str(exc))
+    if isinstance(exc, ErrorRegistro):
+        logger.error("Fallo del registro local de pruebas: %s", exc)
+        return HTTPException(status_code=500, detail=str(exc))
+    raise exc
+
+
+@router.get(f"{QA}/personas", response_model=ListaPersonasQA, tags=["QA"])
+async def api_qa_personas(servicio: ServicioDep, registro: RegistroDep) -> ListaPersonasQA:
+    """Las personas del proyecto con su papel y su carga de pruebas.
+
+    Los roles vienen del **registro local** (`/api/qa/personas` escribe ahí), no
+    de Azure, que no tiene ningún campo para esto. `items_backlog` y `bugs` sí
+    vienen de Azure: sirven para contrastar lo que el registro afirma con lo que
+    el backlog muestra.
+    """
+    _requiere_configuracion(servicio)
+    try:
+        filas = await registro.personas()
+    except Exception as exc:  # noqa: BLE001 - se traduce abajo
+        raise _error_registro(exc) from exc
+    return ListaPersonasQA(
+        personas=[PersonaQAOut(**f) for f in filas],
+        total=len(filas),
+        qa=sum(1 for f in filas if f["es_qa"]),
+        dev=sum(1 for f in filas if f["es_dev"]),
+        sin_rol=sum(1 for f in filas if not f["es_qa"] and not f["es_dev"]),
+    )
+
+
+@router.put(f"{QA}/personas/{{guid}}", response_model=PersonaQAOut, tags=["QA"])
+async def api_qa_marcar_rol(
+    servicio: ServicioDep,
+    registro: RegistroDep,
+    guid: Annotated[str, Path(min_length=1)],
+    cambios: RolActualizable,
+) -> PersonaQAOut:
+    """Fija el papel de una persona: QA, dev o ambos.
+
+    Un campo `null` no se toca, `false` quita el rol. Reenviar el formulario tal
+    cual no borra nada.
+    """
+    _requiere_configuracion(servicio)
+    if cambios.es_qa is None and cambios.es_dev is None and cambios.forzado is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Indica al menos un campo a actualizar (es_qa, es_dev o forzado).",
+        )
+    try:
+        await registro.marcar_rol(
+            guid,
+            es_qa=cambios.es_qa,
+            es_dev=cambios.es_dev,
+            forzado=cambios.forzado,
+        )
+    except Exception as exc:  # noqa: BLE001 - se traduce abajo
+        raise _error_registro(exc) from exc
+    for fila in await registro.personas():
+        if fila["guid"].lower() == guid.lower():
+            return PersonaQAOut(**fila)
+    raise HTTPException(status_code=404, detail=f"No hay ninguna persona con el GUID {guid}.")
+
+
+@router.get(f"{QA}/sugerencia-qa", response_model=SugerenciasQA, tags=["QA"])
+async def api_qa_sugerencia(
+    servicio: ServicioDep,
+    registro: RegistroDep,
+    minimo: Annotated[int, Query(ge=0, le=1000)] = 3,
+) -> SugerenciasQA:
+    """Quién parece hacer QA, según cuántos activos de prueba toca.
+
+    **No guarda nada.** Es una heurística y el backend la devuelve como
+    sugerencia: marcarla es una decisión de la persona, y un umbral equivocado
+    classificaría mal a alguien con un error que queda en el registro sin que
+    nadie lo revise.
+
+    Es el endpoint más caro de la vista: necesita el índice de activos de prueba
+    (~5,5 s en frío), así que se pide solo cuando se abre.
+    """
+    _requiere_configuracion(servicio)
+    try:
+        sugeridas = await registro.sugerencia_qa(minimo=minimo)
+    except Exception as exc:  # noqa: BLE001 - se traduce abajo
+        raise _error_registro(exc) from exc
+    return SugerenciasQA(
+        sugerencias=[SugerenciaQA(**s) for s in sugeridas],
+        minimo=minimo,
+        nota="Heurística por volumen de activos de prueba tocados. Decide tú.",
     )
 
 
