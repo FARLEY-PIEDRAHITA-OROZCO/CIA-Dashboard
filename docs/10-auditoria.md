@@ -37,6 +37,20 @@ por un índice local de work items. Plan completo y trazabilidad en
   cerrados sin verificación QA, 410 historias cerradas sin evidencia, ② 84
   inactivos y 578 en curso, ③ 594 ítems rezagados de 32 de 37 sprints.
 
+**Corrección posterior de la misma fecha.** La primera entrega de la vista de
+sprints tenía tres defectos que solo aparecieron al medir contra el proyecto
+real, no al leer el código:
+
+- El tope de 200 ítems era un **callejón sin salida**: 5.451 de 5.651 (96 %)
+  inalcanzables. Ahora hay paginación real y nada queda fuera de alcance.
+- El filtro de sprint exigía la ruta completa, así que una URL compartida con
+  `?sprint=Sprint 45` devolvía cero en silencio. Ahora acepta el nombre corto.
+- El campo de persona escribía el hash por pulsación. Ahora escribe con retardo.
+
+Los tres están documentados como bugs 7–10 en la tabla siguiente. El patrón que
+los destapó fue medir el alcance real de lo entregado (cuántos ítems son
+alcanzables) en vez de asumir que un tope de resultados cumplía su función.
+
 Riesgos nuevos que quedan abiertos:
 
 - **La carga en frío son ~10 s.** Aceptable en local con TTL de 300 s, pero un
@@ -65,6 +79,10 @@ Bugs reales encontrados y corregidos durante la ejecución (detalle en el plan):
 | 4 | El catálogo no exponía la ruta completa, que es lo que necesita el filtro | Añadir `ruta` al catálogo y a `SprintOut` |
 | 5 | Un helper de prueba usó `{ name }` sin binding local, que resolvía a `window.name` (vacío en jsdom): la búsqueda no fallaba, no encontraba nada | `{ name: nombre }` explícito |
 | 6 | `parsearHash` devolvía `soloAbiertos: false` junto a claves `undefined`, generando claves de caché distintas para el mismo filtro | Normalizar: solo claves activas |
+| 7 | El tope de 200 ítems sin paginación dejaba **5.451 de 5.651 inalcanzables** (96 %). La tabla decía «mostrando 200 de 856» sin forma de ver los otros 656 | `offset`/`limite` en `/api/items` + `hay_mas`; medido: los 856 en 5 hojas, los 5.651 en 29, sin repeticiones |
+| 8 | `?sprint=Sprint 45` devolvía **0** en silencio: solo funcionaba la ruta completa | `filtrar()` acepta también la hoja de la ruta, sin distinguir mayúsculas |
+| 9 | El campo de persona escribía el hash en cada pulsación: 4 teclas = 4 entradas de historial y 4 peticiones a `/api/items` | Efecto con retardo de 300 ms; el `onChange` solo actualiza estado local |
+| 10 | El efecto con retardo se **añadió junto a** la llamada inmediata del `onChange`, sin reemplazarla: el retardo era un no-op | Se quitó la llamada inmediata. Lo detectó la traza de pila de una escritura de hash |
 
 ## Actualización 2026-09-25
 
@@ -181,8 +199,8 @@ run.py → app.main:app
 
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
-| Backend pytest | **165 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
-| Frontend Vitest | **140 passed / 18 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs, sprints, analítica y sanitización. |
+| Backend pytest | **174 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
+| Frontend Vitest | **155 passed / 18 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs, sprints, analítica y sanitización. |
 | Frontend build | **PASS** | `tsc -b` y `vite build`; bundle generado correctamente. |
 | `pip check` | **PASS** | No hay requisitos Python rotos en el entorno auditado. |
 | `pip-audit --local` | **PASS** | Sin vulnerabilidades conocidas en el lockfile instalado. |

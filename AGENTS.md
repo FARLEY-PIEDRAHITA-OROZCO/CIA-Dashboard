@@ -4,7 +4,7 @@
 
 - `backend/` and `frontend/` are separate toolchains in one Git repository; there is no root manifest or task runner. Run commands from the corresponding directory.
 - Entrypoints: `backend/run.py` → `app.main:app`; frontend `frontend/src/main.tsx`.
-- The SPA has no router: valid hashes are `#/dashboard`, `#/epicas/{id}`, `#/epicas/{id}/tareas`, `#/epicas/{id}/bugs`, `#/sprints`, `#/sprints?<filtros>` and `#/analitica`; malformed/extra-segment hashes fall back to the dashboard. Sprint filters live in the hash **query** so a filtered URL is shareable; `parsearHash` normalizes them so the React Query cache key is identical for equivalent filters.
+- The SPA has no router: valid hashes are `#/dashboard`, `#/epicas/{id}`, `#/epicas/{id}/tareas`, `#/epicas/{id}/bugs`, `#/sprints`, `#/sprints?<filtros>&pagina=N` and `#/analitica`; malformed/extra-segment hashes fall back to the dashboard. Sprint filters **and the page** live in the hash **query** so a filtered URL is shareable; `parsearHash` normalizes them so the React Query cache key is identical for equivalent filters. `hoja` is separate from `FiltrosSprint`: it does not count as an active filter and resets to 1 on any filter change. `ITEMS_POR_PAGINA` is the single source of truth for the page size and must stay aligned with the backend's `MAXIMO_ITEMS`.
 - FastAPI serves `frontend/dist` only if it exists when the app is created. Rebuilding or removing `dist` requires restarting the backend. In development run Vite separately.
 - Vite proxies `/api`, `/docs` and `/openapi.json` to the hard-coded `http://127.0.0.1:8000`.
 
@@ -46,6 +46,8 @@ npm.cmd audit --audit-level=high
 - QA writing is a **separate, opt-in capability** (ADR-11). `EscrituraBacklogPort` / `infrastructure/azure/escritura.py` are the only write path; `RepositorioBacklogPort` and `repository.py` stay read-only. Any change to the editable field set must update `ActualizacionQA`, the JSON Patch builder, `api/schemas.py`, `frontend/src/api/tipos.ts`, the `EdicionInline` form and tests together.
 - Editable types are **Bug, User Story and Task**; Epics and Features are deliberately excluded. `Priority`/`Severity` only exist on Bugs, so the story/task forms must keep `mostrarPrioridad`/`mostrarSeveridad` in `false`. All three cards share `useEdicionQA`; do not duplicate the mutation.
 - Sprint/people/analytics views are **read-only and served by the local index** (`application/indice.py` + `ItemIndice`). They are the reason the index exists: WIQL returns no field values, iteration paths cannot be enumerated with a query (the iterations API answers 401 on a read PAT) and tags cannot be filtered server-side. `IndiceWorkItems` must stay `async` (`asyncio.Lock`, not `threading`) and must never know an Azure field name — the repository owns that translation. `filtrar()` must not call the repository after the first load; tests assert the call count.
+- `/api/items` paginates with `offset`/`limite` and returns `hay_mas`. The sort is `(modificado desc, azure_id desc)` and **must stay total and deterministic**: `offset` paging is only coherent if the order never ties ambiguously, otherwise pages repeat or skip items. A cap without paging is a dead end, not a limit.
+- `filtrar(sprint=…)` matches the full iteration path **or** the leaf name, so hand-written and shared URLs work. `IndiceWorkItems.filtrar` compares the leaf locally; do not make it require the exact path again.
 
 ## Operational and security gotchas
 

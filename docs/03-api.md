@@ -391,16 +391,18 @@ etiqueta `verificado-qa`.
 
 ### `GET /api/items`
 
-Proyección plana filtrada. Todos los parámetros son opcionales y se combinan
-con AND.
+Proyección plana filtrada y paginada. Todos los parámetros son opcionales y se
+combinan con AND.
 
-| Parámetro | Tipo | Descripción |
-| --------- | ---- | ----------- |
-| `sprint` | string | **ruta completa** de iteración, tal cual la devuelve `/api/sprints` |
-| `persona` | string | `guid` (exacto) o fragmento del nombre (sin distinguir mayúsculas) |
-| `tipo` | string | `Task`, `User Story`, `Bug`, `Issue` |
-| `etiqueta` | string | etiqueta exacta, sin distinguir mayúsculas |
-| `solo_abiertos` | bool | excluye los estados terminales |
+| Parámetro | Tipo | Default | Descripción |
+| --------- | ---- | ------- | ----------- |
+| `sprint` | string | — | Ruta completa de iteración **o** nombre corto (`Sprint 45`) |
+| `persona` | string | — | `guid` (exacto) o fragmento del nombre (sin distinguir mayúsculas) |
+| `tipo` | string | — | `Task`, `User Story`, `Bug`, `Issue` |
+| `etiqueta` | string | — | etiqueta exacta, sin distinguir mayúsculas |
+| `solo_abiertos` | bool | `false` | excluye los estados terminales |
+| `offset` | int | `0` | desplazamiento de la ventana |
+| `limite` | int | `200` | tamaño de la ventana; se recorta a 200 |
 
 **200 OK**
 ```json
@@ -414,16 +416,29 @@ con AND.
       "modificado": "2026-09-20T10:00:00+00:00",
       "cerrado": false }
   ],
-  "total": 67,
+  "total": 83,
+  "offset": 0,
+  "limite": 200,
+  "hay_mas": false,
   "sprint_actual": "Sprint 45"
 }
 ```
 
-- Se devuelven como máximo **200** ítems, ordenados por `modificado` descendente
-  y por `azure_id` para desempatar. `total` es el **total real antes del tope**,
-  para que la UI pueda decir «mostrando 200 de 594».
+- El tope de **200 por respuesta** existe para no volcar el proyecto entero en
+  el navegador, **no** para ocultar ítems: con `offset`/`limite` nada queda
+  fuera de alcance. `total` es el total real antes de paginar y `hay_mas` indica
+  si queda algo después de la ventana.
+- El orden es `(modificado desc, azure_id desc)`. Esa estabilidad es lo que hace
+  coherente el `offset`: sin un orden total y determinista, paginar repetiría o
+  saltaría ítems entre páginas.
+- `offset` y `limite` se corrigen en servidor: `?offset=-1&limite=5000` devuelve
+  una ventana válida en lugar de un error o el proyecto entero.
 - `cerrado` viene calculado con la lista de estados terminales de
   Scrum/Agile/Basic; `System.State` es texto libre en Azure.
+- `sprint` acepta el nombre corto además de la ruta porque Azure solo acepta la
+  ruta completa en sus filtros, pero una URL compartida o escrita a mano con
+  `?sprint=Sprint 45` debe devolver los ítems y no cero en silencio. La
+  comparación es local y no añade llamadas a Azure.
 
 ---
 
@@ -435,6 +450,22 @@ solo lectura y salen del índice local.
 > `historias_sin_evidencia` significa **sin la etiqueta `verificado-qa`**, no «sin
 > notas». Las notas de QA se agregan a la descripción, que el índice no carga por
 > peso; indexar descripciones es una mejora futura, no un atajo.
+
+### Vista de sprint en el frontend
+
+La página `#/sprints` mantiene filtros y hoja **en el hash**, no en estado
+local, para que la URL sea compartible. Reglas:
+
+- La hoja se serializa como `?pagina=N` y **se omite cuando es la 1**, para no
+  llenar el historial de entradas que no cambian nada.
+- La hoja **no cuenta** como filtro activo (el badge dice «Limpiar N
+  filtros»).
+- Cualquier cambio de filtro **vuelve a la hoja 1**: quedarse en la 7 con un
+  filtro nuevo mostraría una lista vacía sin explicación.
+- El texto libre de persona se escribe en la URL con 300 ms de retardo: una
+  entrada de historial y una petición por palabra, no por pulsación. Los
+  desplegables se aplican al instante, porque elegir es una decisión
+  deliberada.
 
 ### `GET /api/analitica/verificacion` — señal ①
 
@@ -553,6 +584,11 @@ curl -G http://127.0.0.1:8000/api/items \
   --data-urlencode 'sprint=<proyecto>\Sprint 45' \
   --data-urlencode 'persona=Ana' \
   --data-urlencode 'solo_abiertos=true'
+
+# Paginación: recorrer el resultado entero
+curl -G http://127.0.0.1:8000/api/items \
+  --data-urlencode 'sprint=Sprint 45' \
+  --data-urlencode 'offset=200' --data-urlencode 'limite=200'
 ```
 
 ### Swagger / OpenAPI
