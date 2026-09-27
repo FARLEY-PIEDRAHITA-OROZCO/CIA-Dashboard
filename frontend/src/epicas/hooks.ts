@@ -25,6 +25,9 @@ export interface FiltrosItems {
   tipo?: string;
   etiqueta?: string;
   soloAbiertos?: boolean;
+  /** Desplazamiento de la ventana; lo fija la hoja de la vista de sprints. */
+  offset?: number;
+  limite?: number;
 }
 
 export function useSprints() {

@@ -161,8 +161,14 @@ export interface ItemIndice {
 
 export interface ListaItems {
   items: ItemIndice[];
-  /** Total **antes** de aplicar el tope de 200. */
+  /** Total que cumple los filtros, **antes** de paginar. */
   total: number;
+  /** Desplazamiento de la ventana devuelta. */
+  offset: number;
+  /** Tamaño de la ventana devuelta (≤ 200). */
+  limite: number;
+  /** Quedan ítems después de esta ventana. */
+  hay_mas: boolean;
   sprint_actual: string;
 }
 

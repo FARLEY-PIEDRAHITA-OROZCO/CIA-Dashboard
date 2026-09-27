@@ -103,7 +103,8 @@ class IndiceWorkItems:
         """Filtra en memoria. No hace ninguna petición a Azure.
 
         Los filtros se combinan con AND y los vacíos se ignoran. ``persona``
-        acepta el GUID o el nombre, para que la URL sea legible.
+        acepta el GUID o el nombre, para que la URL sea legible. ``sprint``
+        acepta la ruta completa **o** el nombre corto.
         """
         sprint = sprint.strip()
         persona = persona.strip().lower()
@@ -111,7 +112,7 @@ class IndiceWorkItems:
         etiqueta = etiqueta.strip().lower()
         salida: List[ItemIndice] = []
         for item in await self._cargar():
-            if sprint and item.sprint != sprint:
+            if sprint and not _coincide_sprint(item, sprint):
                 continue
             if tipo and item.tipo != tipo:
                 continue
@@ -395,6 +396,26 @@ def _coincide_persona(item: ItemIndice, objetivo: str) -> bool:
     if objetivo == item.persona.guid.lower():
         return True
     return objetivo in item.persona.nombre.lower()
+
+
+def _coincide_sprint(item: ItemIndice, objetivo: str) -> bool:
+    """Compara el sprint por ruta completa o por nombre corto.
+
+    Azure solo acepta la ruta completa en sus filtros, y por eso la UI envía
+    esa. Pero una URL compartida o escrita a mano con `?sprint=Sprint 45` no
+    debe devolver cero resultados en silencio: se acepta también la hoja de la
+    ruta, sin distinguir mayúsculas.
+
+    La comparación es local, sobre la memoria: no añade ninguna llamada a
+    Azure. El coste es que un nombre ambiguo (`Sprint 45` bajo dos raíces
+    distintas) devolvería ambos, pero en este proyecto la jerarquía de
+    iteración tiene una sola raíz, así que no hay ambigüedad.
+    """
+    if not item.sprint:
+        return False
+    if item.sprint == objetivo:
+        return True
+    return nombre_sprint(item.sprint).lower() == objetivo.lower()
 
 
 def _raiz_iteracion(items: List[ItemIndice]) -> str:

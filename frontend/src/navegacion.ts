@@ -9,7 +9,8 @@
  *
  * Los filtros de la vista de sprint viajan **en el hash**, no en estado local:
  * así una URL filtrada se puede compartir o marcar en el navegador, sin
- * depender de las queries guardadas de Azure DevOps.
+ * depender de las queries guardadas de Azure DevOps. La página también viaja,
+ * para que una URL compartida abra en el mismo punto de la lista.
  */
 
 import { useEffect, useReducer } from "react";
@@ -35,8 +36,14 @@ export type Destino =
   | { pagina: "epica"; azureId: number }
   | { pagina: "epicaTareas"; azureId: number }
   | { pagina: "epicaBugs"; azureId: number }
-  | { pagina: "sprints"; filtros: FiltrosSprint }
+  // `hoja` (1-based) va aparte de los filtros: no cuenta como filtro activo y
+  // se reinicia a 1 al cambiar cualquier filtro, que es lo que espera quien
+  // acaba de escribir en el buscador.
+  | { pagina: "sprints"; filtros: FiltrosSprint; hoja: number }
   | { pagina: "analitica" };
+
+/** Tamaño de página de la tabla de ítems (coincide con el tope del backend). */
+export const ITEMS_POR_PAGINA = 200;
 
 /** Lee un parámetro de la query del hash, ignorando los vacíos. */
 function parametro(busca: URLSearchParams, nombre: string): string | undefined {
@@ -69,6 +76,17 @@ function leerFiltros(query: string): FiltrosSprint {
   return filtros;
 }
 
+/**
+ * Lee la página desde la query. Se parte de 1 y cualquier valor no numérico o
+ * menor que 1 cae a 1, para que una URL manipulada a mano no deje la tabla en
+ * un estado imposible.
+ */
+function leerHoja(busca: URLSearchParams): number {
+  const crudo = Number(busca.get("pagina"));
+  if (!Number.isSafeInteger(crudo) || crudo < 1) return 1;
+  return crudo;
+}
+
 export function parsearHash(hash: string): Destino {
   // La query del hash va tras «?»; se separa antes de trocear los segmentos
   // para que `sprint=Sprint 1` no se confunda con un segmento de ruta.
@@ -80,7 +98,12 @@ export function parsearHash(hash: string): Destino {
     return { pagina: "analitica" };
   }
   if (raiz === "sprints" && partes.length === 1) {
-    return { pagina: "sprints", filtros: leerFiltros(query) };
+    const busca = new URLSearchParams(query);
+    return {
+      pagina: "sprints",
+      filtros: leerFiltros(query),
+      hoja: leerHoja(busca),
+    };
   }
   if (partes[0]?.toLowerCase() === "epicas" && partes[1]) {
     const idTexto = partes[1];
@@ -104,21 +127,35 @@ export function parsearHash(hash: string): Destino {
   return { pagina: "dashboard" };
 }
 
-/** Serializa filtros a query del hash, omitiendo los vacíos. */
-export function filtrosAQuery(filtros: FiltrosSprint): string {
+/** Cuántos filtros hay activos, para el badge «N filtros». La página no cuenta. */
+export function contarFiltros(filtros: FiltrosSprint): number {
+  return Object.values(filtros).filter((v) => v !== undefined && v !== "" && v !== false)
+    .length;
+}
+
+/** Índice de desplazamiento de una hoja (1-based) al parámetro `offset`. */
+export function hojaAOffset(hoja: number): number {
+  return (Math.max(1, Math.floor(hoja)) - 1) * ITEMS_POR_PAGINA;
+}
+
+/** Cuántas hojas hacen falta para `total` ítems. */
+export function totalHojas(total: number): number {
+  if (total <= 0) return 1;
+  return Math.max(1, Math.ceil(total / ITEMS_POR_PAGINA));
+}
+
+/** Serializa filtros **y** página a la query del hash, omitiendo lo vacío. */
+export function filtrosAQuery(filtros: FiltrosSprint, hoja = 1): string {
   const busca = new URLSearchParams();
   if (filtros.sprint) busca.set("sprint", filtros.sprint);
   if (filtros.persona) busca.set("persona", filtros.persona);
   if (filtros.tipo) busca.set("tipo", filtros.tipo);
   if (filtros.etiqueta) busca.set("etiqueta", filtros.etiqueta);
   if (filtros.soloAbiertos) busca.set("soloAbiertos", "1");
+  // La hoja 1 es la que se obtiene sin parámetros: omitirla mantiene las URLs
+  // cortas y evita entradas de historial que no cambian nada.
+  if (hoja > 1) busca.set("pagina", String(hoja));
   return busca.toString();
-}
-
-/** Cuántos filtros hay activos, para el badge «N filtros». */
-export function contarFiltros(filtros: FiltrosSprint): number {
-  return Object.values(filtros).filter((v) => v !== undefined && v !== "" && v !== false)
-    .length;
 }
 
 function aRuta(destino: Destino): string {
@@ -130,7 +167,7 @@ function aRuta(destino: Destino): string {
     case "epicaBugs":
       return `#/epicas/${destino.azureId}/bugs`;
     case "sprints": {
-      const query = filtrosAQuery(destino.filtros);
+      const query = filtrosAQuery(destino.filtros, destino.hoja);
       return query === "" ? "#/sprints" : `#/sprints?${query}`;
     }
     case "analitica":

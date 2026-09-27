@@ -1,46 +1,97 @@
 /** Vista de sprints (`#/sprints`): catálogo + filtros combinables.
  *
- * Los filtros viven en el hash (ver `navegacion.ts`), no en estado local: una
- * URL filtrada se puede compartir sin recurrir a las queries guardadas de
- * Azure DevOps. Cada cambio reescribe el hash, así que el botón atrás del
- * navegador recorre los filtros.
+ * Los filtros y la hoja viven en el hash (ver `navegacion.ts`), no en estado
+ * local: una URL filtrada se puede compartir sin recurrir a las queries
+ * guardadas de Azure DevOps. Cada cambio reescribe el hash, así que el botón
+ * atrás del navegador recorre filtros y páginas.
  *
  * Todos los datos salen del índice local del backend: cambiar un filtro **no**
  * genera peticiones a Azure DevOps.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Kpi } from "../componentes/Kpi";
 import { CajaVacia, Cargando, ErrorAlerta } from "../componentes/retroalimentacion";
 import { useItems, usePersonas, useSprints } from "../epicas/hooks";
-import { contarFiltros, irA, TIPOS_INDICE } from "../navegacion";
+import {
+  contarFiltros,
+  hojaAOffset,
+  irA,
+  ITEMS_POR_PAGINA,
+  totalHojas,
+  TIPOS_INDICE,
+} from "../navegacion";
 import type { FiltrosSprint } from "../navegacion";
+import { Paginacion } from "./Paginacion";
 import { TablaItems } from "./TablaItems";
 import { TablaSprints } from "./TablaSprints";
 import { antiguedadLegible, resumenFiltros } from "./fechas";
 
-export function PaginaSprints({ filtros }: { filtros: FiltrosSprint }) {
+/** Espera antes de escribir el texto de persona en la URL. */
+const ESPERA_ESCRITURA_MS = 300;
+
+export function PaginaSprints({
+  filtros,
+  hoja = 1,
+  esperaMs = ESPERA_ESCRITURA_MS,
+}: {
+  filtros: FiltrosSprint;
+  /** Hoja 1-based leída del hash. */
+  hoja?: number;
+  /**
+   * Retardo de escritura del texto libre. Es inyectable porque es un parámetro
+   * de temporización: las pruebas necesitan controlarlo para comprobar que no
+   * hay una escritura por pulsación sin depender de cuánto tarde en renderizar
+   * la página.
+   */
+  esperaMs?: number;
+}) {
   const sprints = useSprints();
   const personas = usePersonas();
-  const items = useItems(filtros);
+  const items = useItems({ ...filtros, offset: hojaAOffset(hoja), limite: ITEMS_POR_PAGINA });
 
   const [textoPersona, setTextoPersona] = useState(filtros.persona ?? "");
-  // El texto libre se sincroniza con la URL: al escribir cambia el hash, el
-  // hash vuelve a renderizar y el campo queda coherente con lo compartido.
-  useEffect(() => setTextoPersona(filtros.persona ?? ""), [filtros.persona]);
 
-  const cambiar = (parcial: Partial<FiltrosSprint>) => {
-    const siguiente: FiltrosSprint = { ...filtros };
-    for (const [clave, valor] of Object.entries(parcial)) {
-      if (valor === "" || valor === undefined || valor === false) {
-        delete siguiente[clave as keyof FiltrosSprint];
-      } else {
-        (siguiente as Record<string, unknown>)[clave] = valor;
+  const cambiar = useCallback(
+    (parcial: Partial<FiltrosSprint>) => {
+      const siguiente: FiltrosSprint = { ...filtros };
+      for (const [clave, valor] of Object.entries(parcial)) {
+        if (valor === "" || valor === undefined || valor === false) {
+          delete siguiente[clave as keyof FiltrosSprint];
+        } else {
+          (siguiente as Record<string, unknown>)[clave] = valor;
+        }
       }
+      // Cambiar un filtro vuelve a la primera hoja: quedarse en la 7 con un
+      // filtro nuevo mostraría una lista vacía sin explicación.
+      irA({ pagina: "sprints", filtros: siguiente, hoja: 1 });
+    },
+    [filtros],
+  );
+
+  // El texto libre se sincroniza con la URL cuando cambia desde fuera (limpiar,
+  // el desplegable o una URL compartida), pero no mientras se escribe.
+  useEffect(() => {
+    if ((filtros.persona ?? "") !== textoPersona) {
+      setTextoPersona(filtros.persona ?? "");
     }
-    irA({ pagina: "sprints", filtros: siguiente });
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtros.persona]);
+
+  // Se escribe en la URL **con retardo**: una entrada de historial y una
+  // petición por palabra, no por pulsación. Sin esto, teclear «Luis» serían
+  // cinco cambios de hash, cinco peticiones a `/api/items` y cinco pasos hacia
+  // atrás para deshacer una palabra.
+  //
+  // El retardo no garantiza una sola escritura por palabra: si el render tarda
+  // más que el retardo entre dos teclas, se escribe una vez y se sigue con el
+  // valor completo. Es el comportamiento correcto de un debounce.
+  useEffect(() => {
+    if (textoPersona === (filtros.persona ?? "")) return;
+    const temporizador = setTimeout(() => cambiar({ persona: textoPersona }), esperaMs);
+    return () => clearTimeout(temporizador);
+  }, [textoPersona, filtros.persona, cambiar, esperaMs]);
 
   const nombresPersona: Record<string, string> = {};
   for (const persona of personas.data?.personas ?? []) {
@@ -49,7 +100,7 @@ export function PaginaSprints({ filtros }: { filtros: FiltrosSprint }) {
 
   const cat = sprints.data;
   const activo = filtros.sprint
-    ? cat?.sprints.find((s) => s.ruta === filtros.sprint)
+    ? cat?.sprints.find((s) => s.ruta === filtros.sprint || s.nombre === filtros.sprint)
     : undefined;
   const nFiltros = contarFiltros(filtros);
   const cargandoInicial = sprints.isPending && !cat;
@@ -140,10 +191,11 @@ export function PaginaSprints({ filtros }: { filtros: FiltrosSprint }) {
                   type="search"
                   placeholder="nombre o GUID…"
                   value={textoPersona}
-                  onChange={(e) => {
-                    setTextoPersona(e.target.value);
-                    cambiar({ persona: e.target.value });
-                  }}
+                  // Solo actualiza el estado local: la URL se escribe en el
+                  // efecto con retardo. Llamar a `cambiar` aquí además dejaría
+                  // una escritura por pulsación, que es justo lo que el retardo
+                  // evita.
+                  onChange={(e) => setTextoPersona(e.target.value)}
                 />
               </label>
 
@@ -187,7 +239,7 @@ export function PaginaSprints({ filtros }: { filtros: FiltrosSprint }) {
                 <button
                   type="button"
                   className="btn secundario small chip-limpiar"
-                  onClick={() => irA({ pagina: "sprints", filtros: {} })}
+                  onClick={() => irA({ pagina: "sprints", filtros: {}, hoja: 1 })}
                 >
                   Limpiar {nFiltros} filtro{nFiltros === 1 ? "" : "s"}
                 </button>
@@ -219,9 +271,31 @@ export function PaginaSprints({ filtros }: { filtros: FiltrosSprint }) {
                 }`}
               />
             ) : !items.data || items.data.items.length === 0 ? (
-              <CajaVacia mensaje="Ningún ítem cumple los filtros indicados." />
+              <CajaVacia
+                mensaje={
+                  items.data && items.data.total === 0
+                    ? "Ningún ítem cumple los filtros indicados."
+                    : `No hay ítems en la hoja ${hoja} de ${totalHojas(
+                        items.data?.total ?? 0,
+                      )}. Vuelve a la primera.`
+                }
+              />
             ) : (
-              <TablaItems items={items.data.items} total={items.data.total} />
+              <>
+                <TablaItems
+                  items={items.data.items}
+                  total={items.data.total}
+                  offset={items.data.offset}
+                />
+                <Paginacion
+                  hoja={hoja}
+                  total={items.data.total}
+                  hayMas={items.data.hay_mas}
+                  onCambiar={(nueva) =>
+                    irA({ pagina: "sprints", filtros, hoja: nueva })
+                  }
+                />
+              </>
             )}
           </section>
         </>

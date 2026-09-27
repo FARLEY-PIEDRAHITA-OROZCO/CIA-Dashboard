@@ -1009,6 +1009,17 @@ code {
   outline-offset: 2px;
 }
 
+/* Paginación de la tabla de ítems: los controles en los extremos y el estado
+   en el centro, para que se lea «dónde estoy» antes de «hacia dónde voy». */
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
 /* La fila de sprint activa se resalta en la tabla del catálogo. */
 .tabla tbody tr[data-activo="true"] td,
 .tabla tbody tr[data-activo="true"] th {

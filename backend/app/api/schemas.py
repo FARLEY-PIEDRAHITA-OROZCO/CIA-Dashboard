@@ -64,7 +64,14 @@ class ItemIndiceOut(BaseModel):
 
 class ListaItems(BaseModel):
     items: List[ItemIndiceOut]
+    #: Total de ítems que cumplen los filtros, **antes** de paginar.
     total: int
+    #: Desplazamiento de la ventana devuelta.
+    offset: int = 0
+    #: Tamaño de la ventana devuelta (≤ 200).
+    limite: int = 200
+    #: Quedan ítems después de esta ventana.
+    hay_mas: bool = False
     sprint_actual: str = ""
 
 

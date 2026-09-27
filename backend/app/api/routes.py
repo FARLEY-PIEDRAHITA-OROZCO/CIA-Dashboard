@@ -165,9 +165,18 @@ async def api_items(
     tipo: str = "",
     etiqueta: str = "",
     solo_abiertos: bool = False,
+    offset: int = 0,
+    limite: int = MAXIMO_ITEMS,
 ) -> ListaItems:
-    """Ítems filtrados del índice local. No genera peticiones a Azure."""
+    """Ítems filtrados del índice local. No genera peticiones a Azure.
+
+    ``offset`` y ``limite`` paginan el resultado. El tope de 200 por página
+    existe para no volcar el proyecto entero en el navegador, **no** para
+    ocultar ítems: con paginación nada queda fuera de alcance.
+    """
     _requiere_configuracion(servicio)
+    pagina = max(0, offset)
+    paso = max(1, min(limite, MAXIMO_ITEMS))
     encontrados = await indice.filtrar(
         sprint=sprint,
         persona=persona,
@@ -176,14 +185,20 @@ async def api_items(
         solo_abiertos=solo_abiertos,
     )
     # Orden estable: primero los más recientes, luego por id para desempatar.
+    # La estabilidad importa: sin ella, `offset` dejaría de ser coherente entre
+    # páginas y la paginación se saltaría o repetiría ítems.
     ordenados = sorted(
         encontrados,
         key=lambda i: (i.modificado is not None, i.modificado or i.creado, i.azure_id),
         reverse=True,
     )
+    ventana = ordenados[pagina : pagina + paso]
     return ListaItems(
-        items=[ItemIndiceOut(**i.model_dump()) for i in ordenados[:MAXIMO_ITEMS]],
+        items=[ItemIndiceOut(**i.model_dump()) for i in ventana],
         total=len(ordenados),
+        offset=pagina,
+        limite=paso,
+        hay_mas=pagina + len(ventana) < len(ordenados),
         sprint_actual=await indice.sprint_actual() or "",
     )
 

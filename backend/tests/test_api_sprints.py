@@ -213,6 +213,85 @@ def test_items_limita_el_tope_de_resultados():
 
     assert cuerpo["total"] == 500
     assert len(cuerpo["items"]) == 200
+    assert cuerpo["hay_mas"] is True
+
+
+# --------------------------------------------------------------------- #
+# Paginación
+# --------------------------------------------------------------------- #
+def test_la_paginacion_reparte_todos_los_items_sin_repetir_ni_saltar():
+    """El tope de 200 no puede dejar ítems inalcanzables."""
+    muchos = [item(100 + i, sprint=f"{RAIZ}\\Sprint 1") for i in range(500)]
+    cliente, _ = cliente_con(muchos)
+
+    vistos: list[int] = []
+    for offset in range(0, 500, 200):
+        cuerpo = cliente.get(f"/api/items?offset={offset}").json()
+        assert cuerpo["offset"] == offset
+        assert cuerpo["hay_mas"] is (offset + 200 < 500)
+        vistos.extend(i["azure_id"] for i in cuerpo["items"])
+
+    assert len(vistos) == 500
+    assert len(set(vistos)) == 500
+
+
+def test_la_ultima_pagina_no_pide_de_mas():
+    cliente, _ = cliente_con()
+
+    cuerpo = cliente.get(f"/api/items?sprint={RAIZ}\\Sprint 1&offset=4").json()
+
+    assert cuerpo["items"] == []
+    assert cuerpo["total"] == 2
+    assert cuerpo["hay_mas"] is False
+
+
+def test_el_limite_se_puede_reducir_pero_no_superar_el_tope():
+    cliente, _ = cliente_con()
+
+    assert len(cliente.get("/api/items?limite=1").json()["items"]) == 1
+    # 5.000 es inválido: se recorta al tope en vez de volcar el proyecto.
+    cuerpo = cliente.get("/api/items?limite=5000").json()
+    assert cuerpo["limite"] == 200
+    assert len(cuerpo["items"]) == 6
+
+
+def test_offset_y_limite_negativos_se_corregen():
+    """Un `?offset=-1` a mano no debe romper la consulta ni cortar en silencio."""
+    cliente, _ = cliente_con()
+
+    cuerpo = cliente.get("/api/items?offset=-1&limite=0").json()
+
+    assert cuerpo["offset"] == 0
+    assert cuerpo["limite"] == 1
+
+
+def test_el_orden_es_estable_entre_paginas():
+    """Sin orden determinista, `offset` repetiría o saltaría ítems."""
+    cliente, _ = cliente_con()
+
+    primera = cliente.get("/api/items?limite=3").json()["items"]
+    segunda = cliente.get("/api/items?limite=3&offset=3").json()["items"]
+
+    ids_primera = [i["azure_id"] for i in primera]
+    ids_segunda = [i["azure_id"] for i in segunda]
+    assert not set(ids_primera) & set(ids_segunda)
+    # Repetir la misma consulta devuelve exactamente lo mismo.
+    repetida = cliente.get("/api/items?limite=3").json()["items"]
+    assert [i["azure_id"] for i in repetida] == ids_primera
+
+
+# --------------------------------------------------------------------- #
+# Tolerancia del filtro de sprint
+# --------------------------------------------------------------------- #
+def test_items_acepta_el_nombre_corto_del_sprint():
+    """URL compartida o escrita a mano con el nombre, no con la ruta."""
+    cliente, _ = cliente_con()
+
+    por_nombre = cliente.get("/api/items?sprint=Sprint 2").json()
+    por_ruta = cliente.get(f"/api/items?sprint={RAIZ}\\Sprint 2").json()
+
+    assert por_nombre["total"] == por_ruta["total"] == 1
+    assert por_nombre["items"][0]["azure_id"] == 4
 
 
 # --------------------------------------------------------------------- #

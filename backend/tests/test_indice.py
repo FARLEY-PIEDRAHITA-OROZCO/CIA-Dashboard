@@ -129,6 +129,40 @@ async def test_filtra_por_sprint():
 
 
 @pytest.mark.asyncio
+async def test_filtra_por_sprint_acepta_el_nombre_corto():
+    """Una URL compartida con `?sprint=Sprint 1` no debe devolver cero en silencio."""
+    idx, _, _ = indice(
+        [
+            item(1, sprint="Proyecto de ejemplo\\Sprint 1"),
+            item(2, sprint="Proyecto de ejemplo\\Sprint 10"),
+        ]
+    )
+
+    assert [i.azure_id for i in await idx.filtrar(sprint="Sprint 1")] == [1]
+    assert [i.azure_id for i in await idx.filtrar(sprint="Sprint 10")] == [2]
+
+
+@pytest.mark.asyncio
+async def test_el_nombre_corto_del_sprint_ignora_mayusculas():
+    idx, _, _ = indice([item(1, sprint="P\\Sprint 45")])
+
+    assert len(await idx.filtrar(sprint="sprint 45")) == 1
+
+
+@pytest.mark.asyncio
+async def test_un_nombre_corto_inexistente_no_trae_la_raiz():
+    """`Sprint 1` no debe arrastrar los ítems en la raíz de iteración."""
+    idx, _, _ = indice(
+        [
+            item(1, sprint="Proyecto de ejemplo"),
+            item(2, sprint="Proyecto de ejemplo\\Sprint 1"),
+        ]
+    )
+
+    assert [i.azure_id for i in await idx.filtrar(sprint="Sprint 1")] == [2]
+
+
+@pytest.mark.asyncio
 async def test_filtra_por_persona_por_guid_o_por_nombre():
     idx, _, _ = indice(
         [

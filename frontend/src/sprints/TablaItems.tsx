@@ -22,18 +22,20 @@ function tagsDe(item: ItemIndice): string[] {
 export function TablaItems({
   items,
   total,
+  offset = 0,
   etiquetaConteo = "ítems",
 }: {
   items: ItemIndice[];
-  /** Total real antes del tope del backend (200). */
+  /** Total real antes de paginar. */
   total: number;
+  /** Desplazamiento de esta ventana, para numerar los rangos con verdad. */
+  offset?: number;
   etiquetaConteo?: string;
 }) {
   return (
     <>
       <p className="texto-suave small" role="status">
-        Mostrando {items.length} de {total} {etiquetaConteo}
-        {total > items.length && " (el backend limita a 200 por respuesta)"}
+        Mostrando {offset + 1}–{offset + items.length} de {total} {etiquetaConteo}
       </p>
       <div className="tabla-scroll">
         <table className="tabla">

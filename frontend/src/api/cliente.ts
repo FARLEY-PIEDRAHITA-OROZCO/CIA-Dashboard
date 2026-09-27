@@ -316,6 +316,9 @@ function validarListaItems(valor: unknown): ListaItems {
   return {
     items: lista(item.items, "items", validarItemIndice),
     total: numero(item.total, "items.total"),
+    offset: item.offset === undefined ? 0 : numero(item.offset, "items.offset"),
+    limite: item.limite === undefined ? 200 : numero(item.limite, "items.limite"),
+    hay_mas: item.hay_mas === undefined ? false : booleano(item.hay_mas, "items.hay_mas"),
     sprint_actual: texto(item.sprint_actual ?? "", "items.sprint_actual"),
   };
 }
@@ -506,7 +509,7 @@ export const api = {
   personas: async (signal?: AbortSignal) =>
     validarListaPersonas(await peticion<unknown>("/personas", { signal })),
 
-  /** Ítems del índice local, filtrados en el servidor (que no llama a Azure). */
+  /** Ítems del índice local, filtrados y paginados (no llama a Azure). */
   items: async (
     filtros: {
       sprint?: string;
@@ -514,6 +517,8 @@ export const api = {
       tipo?: string;
       etiqueta?: string;
       soloAbiertos?: boolean;
+      offset?: number;
+      limite?: number;
     } = {},
     signal?: AbortSignal,
   ) => {
@@ -523,6 +528,8 @@ export const api = {
     if (filtros.tipo) query.set("tipo", filtros.tipo);
     if (filtros.etiqueta) query.set("etiqueta", filtros.etiqueta);
     if (filtros.soloAbiertos) query.set("solo_abiertos", "true");
+    if (filtros.offset) query.set("offset", String(filtros.offset));
+    if (filtros.limite) query.set("limite", String(filtros.limite));
     const sufijo = query.toString() ? `?${query.toString()}` : "";
     return validarListaItems(await peticion<unknown>(`/items${sufijo}`, { signal }));
   },
