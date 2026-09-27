@@ -518,8 +518,11 @@ ofrece una proyección con métricas.
 6. Vigilar `Índice: items=… duration_ms=…` y medir el comportamiento al escalar
    el proyecto; el índice no tiene cota de tamaño.
 7. Vigilar también `Índice de pruebas: items=… lotes_con_error=… duration_ms=…`.
-   Son 3.932 activos y ~5,5 s en frío: si molesta, el índice ya tiene TTL propio
-   (900 s) y se puede precargar en el lifespan como el de sprints.
+   La cobertura necesita **los dos** índices: abrir `#/pruebas` en frío cuesta
+   **~15 s** (10,4 s del índice de trabajo + 5,4 s del de pruebas), no 5 s. Los
+   5,4 s son el precio de `$expand=relations`, sin el cual no hay cobertura. Si
+   molesta, el índice de pruebas ya tiene TTL propio (900 s) y se puede precargar
+   en el lifespan como el de sprints.
 8. Si algún día se activan escrituras sobre activos de prueba, la lista blanca
    pasa a ser **por tipo** (`Microsoft.VSTS.Common.Priority` en test items y
    `System.Priority` en Bug; `severidad` solo donde existe) y hay que enmendar

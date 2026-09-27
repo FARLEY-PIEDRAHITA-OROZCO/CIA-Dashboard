@@ -737,9 +737,18 @@ en las pruebas, no en producción: contrastarla allí duplicaría las lecturas. 
 | `422` | `limite` fuera de 1–200 u `offset` negativo |
 | `502` | Azure falló al construir el índice de pruebas |
 
-La primera llamada tras el arranque o un refresco cuesta **~5,5 s** (18 lotes de
-200 sobre 3.931 activos con `$expand=relations`). Después es de memoria. Ver
-[10-auditoria](10-auditoria.md).
+La primera llamada tras el arranque o un refresco cuesta **~15 s**, no 5: la
+cobertura necesita **los dos índices**. Medido en frío, contra el proyecto real:
+
+| Paso | Coste |
+| ---- | ----- |
+| Índice de trabajo (5.651 ítems) — lo necesitan las historias | **~10,4 s** |
+| Índice de pruebas (3.932 activos, `$expand=relations`, 18 lotes) | **~5,4 s** |
+| Consultas posteriores | 9–22 ms |
+
+Los 5,4 s del segundo índice son el precio de `$expand=relations`; sin él no hay
+cobertura. La primera vez que se abre `#/pruebas` tras un arranque hay que
+esperar. Ver [10-auditoria](10-auditoria.md).
 
 ---
 

@@ -154,7 +154,7 @@ export function PaginaPruebas({
       </header>
 
       {cargando ? (
-        <Cargando texto="Leyendo los activos de prueba y cruzando su cobertura…" />
+        <Cargando texto="Leyendo los activos de prueba y cruzando su cobertura. La primera vez tras arrancar el backend tarda unos 15 segundos: necesita los dos índices." />
       ) : error ? (
         <ErrorAlerta
           mensaje={`No se pudo cargar la cobertura: ${
