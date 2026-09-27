@@ -228,13 +228,15 @@ class ResumenPruebas(BaseModel):
     generado: str = ""
 
 
-class ResumenCobertura(BaseModel):
-    historias: int = 0
-    historias_cubiertas: int = 0
-    historias_sin_cubrir: int = 0
-    pct_cubiertas: float = 0.0
-    requisitos_cubiertos_total: int = 0
-    parcial: bool = False
+class ResumenCobertura(BrechaCobertura):
+    """Cobertura global. Comparte forma con `BrechaCobertura` a propósito.
+
+    Hereda en vez de repetir los campos: el mismo objeto (`brecha` en
+    `/resumen`, `resumen` en `/cobertura`) tiene que ser **el mismo tipo** en los
+    dos endpoints. Con dos literales paralelos, cambiar uno y olvidar el otro
+    rompe el frontend con «no es numérico» en un campo que sí existe en el otro.
+    """
+
     lotes_con_error: int = 0
     generado: str = ""
 

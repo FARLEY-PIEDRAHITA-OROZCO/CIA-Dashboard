@@ -89,6 +89,10 @@ def test_cobertura_agrupa_por_sprint(cliente_basico):
     assert r.status_code == 200
     datos = r.json()
     assert datos["resumen"]["historias"] == 3
+    # El resumen de `/cobertura` y la brecha de `/resumen` son el mismo tipo:
+    # si divergieran, el frontend leería un campo inexistente en uno de los dos.
+    assert datos["resumen"]["cubiertas"] == 2
+    assert datos["resumen"]["sin_cubrir"] == 1
     assert datos["resumen"]["parcial"] is False
     fila = datos["sprints"][0]
     assert fila["nombre"] == "Sprint 1"

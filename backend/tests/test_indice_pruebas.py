@@ -166,8 +166,8 @@ async def test_cobertura_cruza_casos_con_historias():
     )
     resumen = (await indice.cobertura())["resumen"]
     assert resumen["historias"] == 3
-    assert resumen["historias_cubiertas"] == 2
-    assert resumen["historias_sin_cubrir"] == 1
+    assert resumen["cubiertas"] == 2
+    assert resumen["sin_cubrir"] == 1
     assert resumen["pct_cubiertas"] == 66.7
     assert resumen["parcial"] is False
 
@@ -194,7 +194,7 @@ async def test_cobertura_coincide_en_las_dos_direcciones():
     _, indice = armar(historias, activos)
 
     # Lado A: el que ve la UI, desde los casos del índice de pruebas.
-    desde_casos = (await indice.cobertura())["resumen"]["historias_cubiertas"]
+    desde_casos = (await indice.cobertura())["resumen"]["cubiertas"]
     # Lado B: el independiente, contando los requisitos desde las historias.
     cubierto, _ = _requisitos_cubiertos(activos)
     desde_historias = sum(1 for h in historias if h.azure_id in cubierto)
@@ -208,8 +208,8 @@ async def test_cobertura_coincide_en_las_dos_direcciones():
 async def test_un_requisito_inexistente_no_inventa_historias():
     _, indice = armar([historia(1)], [caso(100, requisitos=(7777,))])
     resumen = (await indice.cobertura())["resumen"]
-    assert resumen["historias_cubiertas"] == 0
-    assert resumen["historias_sin_cubrir"] == 1
+    assert resumen["cubiertas"] == 0
+    assert resumen["sin_cubrir"] == 1
     # Sí se declara como requisito cubierto: el dato existe aunque no sea historia.
     assert resumen["requisitos_cubiertos_total"] == 1
 

@@ -213,16 +213,12 @@ class IndicePruebas:
         historias = await self._historias()
         cubierto, total_req = _requisitos_cubiertos(carga.items)
         conteo = await self._cobertura_por_sprint(historias, cubierto)
-        brecha = _brecha(historias, cubierto, carga.parcial)
-        brecha["requisitos_cubiertos_total"] = total_req
+        # `_brecha` devuelve **la misma forma** que usa `/resumen`, a propósito:
+        # son el mismo dato en dos endpoints y divergirían al primer cambio.
         return {
             "resumen": {
-                "historias": len(historias),
-                "historias_cubiertas": brecha["cubiertas"],
-                "historias_sin_cubrir": brecha["sin_cubrir"],
-                "pct_cubiertas": _pct(brecha["cubiertas"], len(historias)),
+                **_brecha(historias, cubierto, carga.parcial),
                 "requisitos_cubiertos_total": total_req,
-                "parcial": carga.parcial,
                 "lotes_con_error": carga.lotes_con_error,
                 "generado": datetime.now(timezone.utc).isoformat(),
             },
