@@ -4,12 +4,12 @@ Reutiliza los modelos de dominio (ya son Pydantic) y añade envoltorios de
 listado. Las respuestas jamás contienen credenciales.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
-from ..domain.models import Bug, Epic, EstadoIntegracion, MetricasBug, Persona
+from ..domain.models import ROLES, Bug, Epic, EstadoIntegracion, MetricasBug, Persona
 
 
 class EpicaResumen(BaseModel):
@@ -407,6 +407,65 @@ class SugerenciasQA(BaseModel):
     #: Umbral aplicado, para que la UI pueda explicar por qué se propone esto.
     minimo: int = 0
     nota: str = ""
+
+
+class AsignacionActualizable(BaseModel):
+    """Cuerpo de `PUT /api/qa/asignaciones`. Es un *upsert* idempotente.
+
+    Reenviar la misma pareja (épica, persona, rol) actualiza fecha y nota en vez
+    de duplicar. Duplicar rompería «cuántas épicas lleva esta persona», que es
+    justo el número que la vista quiere enseñar.
+    """
+
+    epica: int = Field(gt=0)
+    persona: str = Field(min_length=1)
+    rol: str = "qa"
+    #: Opcional: si no viene, se usa hoy. No puede estar en el futuro.
+    desde: Optional[date] = None
+    nota: str = ""
+
+    @field_validator("rol")
+    @classmethod
+    def _rol_conocido(cls, valor: str) -> str:
+        if valor not in ROLES:
+            raise ValueError(f"Rol desconocido: {valor!r}. Admitidos: {', '.join(ROLES)}.")
+        return valor
+
+
+class AsignacionOut(BaseModel):
+    epica: int
+    titulo: str = ""
+    #: `False` si la épica ya no está en Azure. La asignación sigue existiendo,
+    #: así que se muestra igual: ocultarla sería perderla de la vista sin aviso.
+    titulo_conocido: bool = False
+    persona: str
+    nombre_persona: str = ""
+    rol: str = "qa"
+    desde: str = ""
+    dias_laborables: int = 0
+    nota: str = ""
+
+
+class ListaAsignaciones(BaseModel):
+    asignaciones: List[AsignacionOut] = []
+    total: int = 0
+    #: Épicas del registro que ya no existen en Azure. Se declaran en vez de
+    #: ocultarlas: son trabajo registrado que alguien tiene que limpiar.
+    epicas_desconocidas: int = 0
+
+
+class AsignacionDePersona(BaseModel):
+    guid: str
+    nombre: str = ""
+    es_qa: bool = False
+    es_dev: bool = False
+    epicas: int = 0
+    #: Días de la asignación más antigua. **No son horas**: el registro de
+    #: tiempos de Azure responde 401 y no hay fuente de horas.
+    dias_laborables: int = 0
+    desde: str = ""
+    items_backlog: int = 0
+    asignaciones: List[AsignacionOut] = []
 
 
 class ResultadoEscritura(BaseModel):

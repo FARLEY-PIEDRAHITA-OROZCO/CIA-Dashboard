@@ -1,7 +1,7 @@
 """Rutas HTTP del dashboard de épicas de Azure DevOps."""
 
 import logging
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, HTTPException, Path, Query
 
@@ -11,6 +11,9 @@ from ..infrastructure.azure.transport import AzureError
 from .deps import IndiceDep, IndicePruebasDep, RegistroDep, ServicioDep
 from .schemas import (
     ActivosPrueba,
+    AsignacionActualizable,
+    AsignacionDePersona,
+    AsignacionOut,
     BrechaVerificacion,
     CoberturaPruebas,
     DetalleBugs,
@@ -18,6 +21,7 @@ from .schemas import (
     EstadoAzure,
     Health,
     ItemIndiceOut,
+    ListaAsignaciones,
     ListaEpicas,
     ListaItems,
     ListaPersonas,
@@ -38,6 +42,8 @@ from .schemas import (
     TrabajoEstancado,
     a_resumen,
 )
+from ..application.registro import dias_laborables
+from ..domain.models import ROLES, Asignacion
 from ..domain.models import ActualizacionQA
 from ..application.services import EscrituraNoHabilitadaError
 from ..infrastructure.azure.escritura import ErrorValidacionEscritura
@@ -521,6 +527,185 @@ async def api_qa_sugerencia(
         minimo=minimo,
         nota="Heurística por volumen de activos de prueba tocados. Decide tú.",
     )
+
+
+# ---------------------------------------------------------------------- #
+# Asignaciones de épicas
+# ---------------------------------------------------------------------- #
+async def _contexto_de_epicas(servicio: ServicioBacklog) -> Dict[int, str]:
+    """Mapa de id de épica → título, leído del backlog (con caché).
+
+    El registro solo guarda el id, y «épica 5324» no le dice nada a nadie. El
+    título sale de la lista de épicas, que ya está cacheada: no son 132
+    peticiones, es una.
+
+    Una épica que ya no está en Azure simplemente no aparece en el mapa, y quien
+    llama lo marca con `titulo_conocido: false`. **No se descarta su
+    asignación**: borrarla del registro sin que nadie lo decida sería perder
+    trabajo, y esconderla sería perderla de la vista.
+    """
+    try:
+        epicas = await servicio.listar_epicas(incluir_cerradas=True)
+    except AzureError as exc:
+        logger.warning("No se pudieron resolver los títulos de épica: %s", exc)
+        return {}
+    return {e.azure_id: e.titulo for e in epicas}
+
+
+def _a_salida(
+    asignacion: "Asignacion",
+    *,
+    titulos: Dict[int, str],
+    nombres: Dict[str, str],
+) -> AsignacionOut:
+    """Proyecta una asignación con su título de épica y el nombre de su persona.
+
+    Único punto donde se construye :class:`AsignacionOut`. Lo usan las cuatro
+    rutas, para que el mismo dato no aparezca con dos formas distintas según por
+    dónde se pida.
+    """
+    return AsignacionOut(
+        epica=asignacion.epica,
+        titulo=titulos.get(asignacion.epica, ""),
+        titulo_conocido=asignacion.epica in titulos,
+        persona=asignacion.persona,
+        nombre_persona=nombres.get(asignacion.persona, ""),
+        rol=asignacion.rol,
+        desde=asignacion.desde.isoformat(),
+        dias_laborables=dias_laborables(asignacion.desde),
+        nota=asignacion.nota,
+    )
+
+
+@router.get(f"{QA}/asignaciones", response_model=ListaAsignaciones, tags=["QA"])
+async def api_qa_asignaciones(
+    servicio: ServicioDep,
+    registro: RegistroDep,
+    epica: Annotated[Optional[int], Query(gt=0)] = None,
+    persona: Optional[str] = None,
+    rol: Optional[str] = None,
+) -> ListaAsignaciones:
+    """Las asignaciones, opcionalmente filtradas por épica, persona o rol.
+
+    Con `?epica=` responde lo que lleva esa épica: es lo que necesita la ficha de
+    una épica, y por eso va en un endpoint aparte y no dentro del árbol.
+    """
+    _requiere_configuracion(servicio)
+    if rol is not None and rol not in ROLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Rol desconocido: {rol!r}. Admitidos: {', '.join(ROLES)}.",
+        )
+    try:
+        asignaciones = await registro.asignaciones(epica=epica, persona=persona, rol=rol)
+        titulos = await _contexto_de_epicas(servicio)
+        nombres = {p["guid"]: p["nombre"] for p in await registro.personas()}
+    except Exception as exc:  # noqa: BLE001 - se traduce abajo
+        raise _error_registro(exc) from exc
+    salida = [
+        _a_salida(a, titulos=titulos, nombres=nombres) for a in asignaciones
+    ]
+    return ListaAsignaciones(
+        asignaciones=salida,
+        total=len(salida),
+        epicas_desconocidas=sum(1 for a in salida if not a.titulo_conocido),
+    )
+
+
+@router.put(f"{QA}/asignaciones", response_model=AsignacionOut, tags=["QA"])
+async def api_qa_asignar(
+    servicio: ServicioDep,
+    registro: RegistroDep,
+    cambios: AsignacionActualizable,
+) -> AsignacionOut:
+    """Asigna una épica a una persona, o actualiza esa asignación. Idempotente.
+
+    Reenviar la misma pareja (épica, persona, rol) no duplica nada: cambia la
+    fecha y la nota. Duplicar rompería el recuento de épicas por persona, que es
+    el número que la vista enseña.
+    """
+    _requiere_configuracion(servicio)
+    try:
+        instantanea = await registro.asignar(
+            cambios.epica,
+            cambios.persona,
+            cambios.rol,
+            desde=cambios.desde,
+            nota=cambios.nota,
+        )
+        titulos = await _contexto_de_epicas(servicio)
+        nombres = {p["guid"]: p["nombre"] for p in await registro.personas()}
+    except Exception as exc:  # noqa: BLE001 - se traduce abajo
+        raise _error_registro(exc) from exc
+    guardada = next(
+        a
+        for a in instantanea.asignaciones
+        if a.epica == cambios.epica and a.persona == cambios.persona and a.rol == cambios.rol
+    )
+    return _a_salida(guardada, titulos=titulos, nombres=nombres)
+
+
+@router.delete(
+    f"{QA}/asignaciones/{{epica}}/{{persona}}/{{rol}}",
+    response_model=Mensaje,
+    tags=["QA"],
+)
+async def api_qa_quitar_asignacion(
+    servicio: ServicioDep,
+    registro: RegistroDep,
+    epica: Annotated[int, Path(gt=0)],
+    persona: Annotated[str, Path(min_length=1)],
+    rol: Annotated[str, Path(min_length=1)],
+) -> Mensaje:
+    """Quita una asignación. Idempotente: si no estaba, tampoco es un error.
+
+    No valida que la persona siga en el proyecto a propósito: hay que poder
+    borrar la asignación de alguien que **se ha ido**, que es justo cuando más
+    urge quitarla.
+    """
+    _requiere_configuracion(servicio)
+    if rol not in ROLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Rol desconocido: {rol!r}. Admitidos: {', '.join(ROLES)}.",
+        )
+    try:
+        await registro.quitar(epica, persona, rol)
+    except Exception as exc:  # noqa: BLE001 - se traduce abajo
+        raise _error_registro(exc) from exc
+    return Mensaje(ok=True, detalle="Asignación quitada.")
+
+
+@router.get(f"{QA}/carga", response_model=List[AsignacionDePersona], tags=["QA"])
+async def api_qa_carga(servicio: ServicioDep, registro: RegistroDep) -> List[AsignacionDePersona]:
+    """Quién lleva qué épicas, con los días de la más antigua.
+
+    Es la lectura que responde «en qué está trabajando cada QA». Solo cuenta
+    épicas del registro y **días laborables**: no estima horas, porque el
+    registro de tiempos de Azure responde 401 y no hay ninguna fuente.
+    """
+    _requiere_configuracion(servicio)
+    try:
+        detalle = await registro.carga_por_persona(
+            titulos=await _contexto_de_epicas(servicio)
+        )
+    except Exception as exc:  # noqa: BLE001 - se traduce abajo
+        raise _error_registro(exc) from exc
+    nombres = {p["guid"]: p["nombre"] for p in await registro.personas()}
+    return [
+        AsignacionDePersona(
+            **{
+                key: value
+                for key, value in fila.items()
+                if key not in ("asignaciones", "titulos")
+            },
+            asignaciones=[
+                _a_salida(a, titulos=fila["titulos"], nombres=nombres)
+                for a in fila["asignaciones"]
+            ],
+        )
+        for fila in detalle
+    ]
 
 
 # ---------------------------------------------------------------------- #

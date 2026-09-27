@@ -200,6 +200,51 @@ class ServicioRegistro:
         sugeridas.sort(key=lambda s: (-s["activos"], s["nombre"].lower()))
         return sugeridas
 
+    async def carga_por_persona(
+        self,
+        *,
+        titulos: Optional[Dict[int, str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Qué épicas lleva cada persona, con los días de cada una.
+
+        `asignaciones` van como modelos :class:`Asignacion` enteros, no como
+        dicts proyectados: el mapeo a la respuesta lo hace la API en un solo
+        sitio. Proyectar aquí y volver a envolver en la ruta es duplicar el
+        mapeo, y dos copias de un mapeo divergen.
+
+        `titulos` es el mapa de id → nombre que resuelve la capa de aplicación
+        desde Azure. Va como parámetro y no se pide aquí a propósito: **el
+        registro no sabe qué es una épica**. Si una épica se borró de Azure, su
+        asignación sigue aquí y hay que poder mostrarla, aunque no se pueda
+        resolver su nombre.
+        """
+        nombres = titulos or {}
+        hoy = date.today()
+        por_persona: Dict[str, List[Asignacion]] = {}
+        for a in await self.asignaciones():
+            por_persona.setdefault(a.persona, []).append(a)
+        filas = {f["guid"]: f for f in await self.personas()}
+        salida: List[Dict[str, Any]] = []
+        for guid, propias in por_persona.items():
+            perfil = filas.get(guid, {"nombre": "", "items_backlog": 0})
+            propias.sort(key=lambda a: (a.desde, a.epica))
+            salida.append(
+                {
+                    "guid": guid,
+                    "nombre": perfil.get("nombre", ""),
+                    "es_qa": perfil.get("es_qa", False),
+                    "es_dev": perfil.get("es_dev", False),
+                    "epicas": len({a.epica for a in propias}),
+                    "dias_laborables": max(dias_laborables(a.desde, hoy) for a in propias),
+                    "desde": propias[0].desde.isoformat(),
+                    "items_backlog": perfil.get("items_backlog", 0),
+                    "asignaciones": propias,
+                    "titulos": nombres,
+                }
+            )
+        salida.sort(key=lambda f: (-f["epicas"], f["nombre"].lower()))
+        return salida
+
     # ------------------------------------------------------------------ #
     # Escritura
     # ------------------------------------------------------------------ #
