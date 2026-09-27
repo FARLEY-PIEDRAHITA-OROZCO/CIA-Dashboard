@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ..application.indice import IndiceWorkItems
+from ..application.indice_pruebas import IndicePruebas
 from ..application.services import ServicioBacklog
 from ..config import Settings, obtener_settings
 from ..domain.ports import (
@@ -36,6 +37,7 @@ class Contenedor:
     cache: CachePort
     servicio: ServicioBacklog
     indice: IndiceWorkItems
+    indice_pruebas: IndicePruebas
     escritura: Optional[EscrituraBacklogPort] = None
     transporte_escritura: Optional[TransportePort] = None
 
@@ -58,6 +60,17 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
     # escribe en Azure, y las búsquedas del usuario no generan peticiones
     # remotas (ver `test_filtrar_no_llama_a_azure`).
     indice = IndiceWorkItems(repositorio, cache, ttl_seg=cfg.index_ttl_seg)
+
+    # --- Índice local de activos de prueba (segundo índice) --------------- #
+    # No amplía el anterior: son 3.932 ítems que nadie consulta al abrir la
+    # vista de sprints. Recibe el `indice` porque la cobertura se cruza con las
+    # historias, y esas ya están en memoria. Solo lectura, como el resto.
+    indice_pruebas = IndicePruebas(
+        repositorio,
+        cache,
+        indice,
+        ttl_seg=cfg.index_pruebas_ttl_seg,
+    )
 
     # --- Escritura (opt-in, ADR-11) ------------------------------------- #
     # Solo se construye si está habilitada y hay PAT dedicado. El adaptador
@@ -100,6 +113,7 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
         cache=cache,
         servicio=servicio,
         indice=indice,
+        indice_pruebas=indice_pruebas,
         escritura=escritura,
         transporte_escritura=transporte_escritura,
     )

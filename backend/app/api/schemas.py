@@ -5,7 +5,7 @@ listado. Las respuestas jamás contienen credenciales.
 """
 
 from datetime import datetime
-from typing import List
+from typing import Dict, List
 
 from pydantic import BaseModel
 
@@ -173,6 +173,123 @@ class ResumenRezago(BaseModel):
 class RezagoEntreSprints(BaseModel):
     resumen: ResumenRezago
     sprints: List[RezagoDeSprint] = []
+
+
+# ---------------------------------------------------------------------- #
+# Gestión del proceso de pruebas (solo lectura)
+# ---------------------------------------------------------------------- #
+class InventarioPruebas(BaseModel):
+    planes: int = 0
+    suites: int = 0
+    casos: int = 0
+    total: int = 0
+
+
+class AutomatizacionPruebas(BaseModel):
+    """Eje **independiente** del estado: un caso `Closed` puede no estar
+    automatizado, y uno `Design` puede estarlo. Por eso no es un tono de estado.
+    """
+
+    casos: int = 0
+    automatizados: int = 0
+    planificados: int = 0
+    manuales: int = 0
+    pct_automatizado: float = 0.0
+
+
+class DisenoPruebas(BaseModel):
+    """Casos en `Design`, separados entre trabajo reciente y caso abandonado.
+
+    La separación importa: 1.577 casos en diseño no son todos deuda. Los que no
+    se tocan desde hace más de `dias` no son trabajo en curso, son otra cosa.
+    """
+
+    en_diseno: int = 0
+    sin_mover: int = 0
+    dias: int = 0
+
+
+class BrechaCobertura(BaseModel):
+    historias: int = 0
+    cubiertas: int = 0
+    sin_cubrir: int = 0
+    pct_cubiertas: float = 0.0
+    parcial: bool = False
+    requisitos_cubiertos_total: int = 0
+
+
+class ResumenPruebas(BaseModel):
+    inventario: InventarioPruebas
+    estados: Dict[str, Dict[str, int]] = {}
+    automatizacion: AutomatizacionPruebas
+    diseno: DisenoPruebas
+    brecha: BrechaCobertura
+    parcial: bool = False
+    generado: str = ""
+
+
+class ResumenCobertura(BaseModel):
+    historias: int = 0
+    historias_cubiertas: int = 0
+    historias_sin_cubrir: int = 0
+    pct_cubiertas: float = 0.0
+    requisitos_cubiertos_total: int = 0
+    parcial: bool = False
+    lotes_con_error: int = 0
+    generado: str = ""
+
+
+class CoberturaDeSprint(BaseModel):
+    nombre: str
+    ruta: str = ""
+    historias: int = 0
+    cubiertas: int = 0
+    sin_cubrir: int = 0
+    pct_cubiertas: float = 0.0
+
+
+class CoberturaPruebas(BaseModel):
+    resumen: ResumenCobertura
+    sprints: List[CoberturaDeSprint] = []
+
+
+class PlanDePrueba(BaseModel):
+    azure_id: int
+    titulo: str = ""
+    estado: str = ""
+    sprint: str = ""
+    persona: str = ""
+    modificado: str = ""
+
+
+class ResumenSinCubrir(BaseModel):
+    total: int = 0
+    offset: int = 0
+    limite: int = 0
+    hay_mas: bool = False
+    parcial: bool = False
+    lotes_con_error: int = 0
+
+
+class HistoriaSinCubrir(BaseModel):
+    """Historia sin caso de prueba.
+
+    Modelo propio y no `MuestraItem`: reutilizar el de los ítems del índice
+    obligaría a rellenar `tipo` con un valor inventado o a dejar el campo vacío,
+    y un `tipo` en blanco en una lista de historias es un dato que no existe.
+    """
+
+    azure_id: int
+    titulo: str = ""
+    estado: str = ""
+    sprint: str = ""
+    persona: str = ""
+    modificado: str = ""
+
+
+class SinCubrir(BaseModel):
+    resumen: ResumenSinCubrir
+    items: List[HistoriaSinCubrir] = []
 
 
 class ResultadoEscritura(BaseModel):

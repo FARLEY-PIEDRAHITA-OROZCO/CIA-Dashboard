@@ -1,16 +1,17 @@
 """Rutas HTTP del dashboard de épicas de Azure DevOps."""
 
 import logging
-from typing import Annotated
+from typing import Annotated, List
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from ..application.services import ServicioBacklog
 from ..domain.models import Epic
 from ..infrastructure.azure.transport import AzureError
-from .deps import IndiceDep, ServicioDep
+from .deps import IndiceDep, IndicePruebasDep, ServicioDep
 from .schemas import (
     BrechaVerificacion,
+    CoberturaPruebas,
     DetalleBugs,
     EpicaResumen,
     EstadoAzure,
@@ -22,8 +23,11 @@ from .schemas import (
     ListaSprints,
     Mensaje,
     PersonaOut,
+    PlanDePrueba,
     RezagoEntreSprints,
+    ResumenPruebas,
     ResultadoEscritura,
+    SinCubrir,
     SprintOut,
     TrabajoEstancado,
     a_resumen,
@@ -266,15 +270,94 @@ async def api_analitica_rezago(
     return RezagoEntreSprints(**await indice.rezago_entre_sprints())
 
 
+# ---------------------------------------------------------------------- #
+# Gestión del proceso de pruebas (solo lectura)
+# ---------------------------------------------------------------------- #
+#: Prefijo común. Todas son de solo lectura: no amplían la superficie de
+#: escritura, que sigue siendo la de ADR-11 (los campos de QA).
+PRUEBAS = "/api/pruebas"
+
+
+@router.get(f"{PRUEBAS}/resumen", response_model=ResumenPruebas, tags=["Pruebas"])
+async def api_pruebas_resumen(
+    servicio: ServicioDep, indice: IndicePruebasDep
+) -> ResumenPruebas:
+    """Inventario de activos, brecha de cobertura, automatización y diseño.
+
+    La primera llamada tras el arranque cuesta ~5,5 s: son 3.932 activos y
+    `$expand=relations` sobre 3.431 casos. Después la respuesta es de memoria.
+    """
+    _requiere_configuracion(servicio)
+    return ResumenPruebas(**await indice.resumen())
+
+
+@router.get(f"{PRUEBAS}/cobertura", response_model=CoberturaPruebas, tags=["Pruebas"])
+async def api_pruebas_cobertura(
+    servicio: ServicioDep, indice: IndicePruebasDep
+) -> CoberturaPruebas:
+    """Cobertura de historias con caso de prueba, global y por sprint.
+
+    `resumen.parcial` es `True` si algún lote de relaciones no se pudo leer: en
+    ese caso las historias sin caso son **como máximo** las que se indican, y la
+    UI lo dice en vez de presentar una cifra completa.
+    """
+    _requiere_configuracion(servicio)
+    return CoberturaPruebas(**await indice.cobertura())
+
+
+@router.get(f"{PRUEBAS}/sin-cubrir", response_model=SinCubrir, tags=["Pruebas"])
+async def api_pruebas_sin_cubrir(
+    servicio: ServicioDep,
+    indice: IndicePruebasDep,
+    sprint: str = "",
+    persona: str = "",
+    limite: Annotated[int, Query(ge=1, le=MAXIMO_ITEMS)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> SinCubrir:
+    """Las historias sin ningún caso: la lista de trabajo de QA, paginada.
+
+    El orden es por sprint y luego por id, estable a propósito: con un orden
+    cambiante el `offset` repetiría o saltaría historias entre páginas.
+    """
+    _requiere_configuracion(servicio)
+    return SinCubrir(
+        **await indice.sin_cubrir(
+            persona=persona, sprint=sprint, limite=limite, offset=offset
+        )
+    )
+
+
+@router.get(
+    f"{PRUEBAS}/planes", response_model=List[PlanDePrueba], tags=["Pruebas"]
+)
+async def api_pruebas_planes(
+    servicio: ServicioDep, indice: IndicePruebasDep
+) -> List[PlanDePrueba]:
+    """Los planes como contexto: sprint y responsable de las pruebas de cada uno.
+
+    Deliberadamente **no** es la vista principal. La pertenencia de un caso a un
+    plan no es accesible por la API, así que un plan no se puede abrir: solo
+    cuenta quién lo lleva y en qué sprint.
+    """
+    _requiere_configuracion(servicio)
+    return [PlanDePrueba(**p) for p in await indice.planes()]
+
+
 @router.post("/api/epics/refresh", response_model=Mensaje, tags=["Epicas"])
-async def api_refrescar(servicio: ServicioDep, indice: IndiceDep) -> Mensaje:
+async def api_refrescar(
+    servicio: ServicioDep,
+    indice: IndiceDep,
+    indice_pruebas: IndicePruebasDep,
+) -> Mensaje:
     """Invalida la caché para leer datos frescos de Azure en la próxima llamada.
 
-    También invalida el **índice** local: sin esto, los recuentos de sprints y
-    personas seguirían mostrando los números anteriores al refresco.
+    También invalida los **dos índices** locales: sin esto, los recuentos de
+    sprints, personas y cobertura seguirían mostrando los números anteriores al
+    refresco. Son cachés distintas con TTL distintos (300 s y 900 s).
     """
     servicio.refrescar()
     indice.invalidar()
+    indice_pruebas.invalidar()
     return Mensaje(
         ok=True,
         detalle="Caché invalidada. La próxima consulta leerá de Azure.",
@@ -292,6 +375,7 @@ async def api_refrescar(servicio: ServicioDep, indice: IndiceDep) -> Mensaje:
 async def api_actualizar_work_item(
     servicio: ServicioDep,
     indice: IndiceDep,
+    indice_pruebas: IndicePruebasDep,
     work_item_id: Annotated[int, Path(gt=0)],
     cambios: ActualizacionQA,
     validar: bool = False,
@@ -321,8 +405,12 @@ async def api_actualizar_work_item(
         detalle = exc.detalle or "Azure rechazó el cambio."
         raise HTTPException(status_code=409, detail=detalle)
     if not validar:
-        # El índice local mostraría el valor anterior del ítem recién escrito.
+        # Los índices locales mostrarían el valor anterior del ítem recién
+        # escrito. Los dos, no solo el de sprints: los activos de prueba son
+        # editables en la Fase 5 y, si no, la cobertura seguiría mostrando
+        # números previos a la edición.
         indice.invalidar()
+        indice_pruebas.invalidar()
     return ResultadoEscritura(**resultado.model_dump())
 
 

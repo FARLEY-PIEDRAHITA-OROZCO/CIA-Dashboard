@@ -6,10 +6,21 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.application.indice import IndiceWorkItems
+from app.application.indice_pruebas import IndicePruebas
 from app.application.services import ServicioBacklog
 from app.config import Settings
 from app.core.container import Contenedor
-from app.domain.models import Bug, Epic, Feature, ItemIndice, Task, UserStory
+from app.domain.models import (
+    Bug,
+    CargaPruebas,
+    Epic,
+    Feature,
+    ItemIndice,
+    ItemPrueba,
+    Persona,
+    Task,
+    UserStory,
+)
 from app.main import crear_app
 
 
@@ -173,11 +184,18 @@ class FakeRepositorio:
         epicas: Optional[List[Epic]] = None,
         arbol: Optional[Epic] = None,
         items_indice: Optional[List["ItemIndice"]] = None,
+        activos_prueba: Optional[List["ItemPrueba"]] = None,
+        lotes_prueba_con_error: int = 0,
+        lotes_prueba_totales: int = 0,
     ) -> None:
         self.epicas = epicas or []
         self.arbol = arbol
         self.items_indice = items_indice or []
+        self.activos_prueba = activos_prueba or []
+        self.lotes_prueba_con_error = lotes_prueba_con_error
+        self.lotes_prueba_totales = lotes_prueba_totales
         self.llamadas_indice = 0
+        self.llamadas_indice_pruebas = 0
         self.sintoma = None  # excepción opcional para simular fallos
 
     async def verificar_proyecto(self) -> Dict[str, str]:
@@ -203,6 +221,22 @@ class FakeRepositorio:
             raise self.sintoma
         self.llamadas_indice += 1
         return list(self.items_indice)
+
+    async def listar_activos_prueba(self, tipos=None) -> "CargaPruebas":
+        """Activos de prueba; cuenta llamadas y puede simular lotes fallidos.
+
+        `lotes_prueba_con_error` permite probar que la cobertura se declara
+        **parcial** cuando un lote no se pudo leer, en vez de publicar una cifra
+        completa que en realidad cuenta huecos como si fueran ceros.
+        """
+        if self.sintoma:
+            raise self.sintoma
+        self.llamadas_indice_pruebas += 1
+        return CargaPruebas(
+            items=list(self.activos_prueba),
+            lotes_con_error=self.lotes_prueba_con_error,
+            lotes_totales=self.lotes_prueba_totales or 1,
+        )
 
 
 class FakeEscritura:
@@ -273,13 +307,15 @@ def contenedor_con(
         proyecto=settings.azure_proyecto,
         area_path=settings.area_path_efectivo,
     )
+    indice = IndiceWorkItems(repo, cache)
     return Contenedor(
         settings=settings,
         transporte=SabanaTransporte([], []),
         repositorio=repo,
         cache=cache,
         servicio=servicio,
-        indice=IndiceWorkItems(repo, cache),
+        indice=indice,
+        indice_pruebas=IndicePruebas(repo, cache, indice),
         escritura=escritura,
     )
 
