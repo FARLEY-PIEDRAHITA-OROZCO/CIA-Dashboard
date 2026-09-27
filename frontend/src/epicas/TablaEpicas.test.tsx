@@ -76,6 +76,21 @@ beforeEach(() => {
           headers: encabezados,
         });
       }
+      // La fila expandida monta además el panel de responsables, que lee el
+      // registro local. Un stub que solo responde al árbol devuelve un 404 a
+      // esas rutas y la prueba acaba comprobando otra cosa.
+      if (url.includes("/api/qa/personas")) {
+        return new Response(
+          JSON.stringify({ personas: [], total: 0, qa: 0, dev: 0, sin_rol: 0 }),
+          { status: 200, headers: encabezados },
+        );
+      }
+      if (url.includes("/api/qa/asignaciones")) {
+        return new Response(
+          JSON.stringify({ asignaciones: [], total: 0, epicas_desconocidas: 0 }),
+          { status: 200, headers: encabezados },
+        );
+      }
       return new Response('{"detail":"no encontrado"}', {
         status: 404,
         headers: encabezados,
@@ -83,6 +98,17 @@ beforeEach(() => {
     }),
   );
 });
+
+/** Peticiones al árbol de Azure, que es lo que esta prueba vigila.
+ *
+ * No se cuenta el total de `fetch`: la fila expandida carga además el registro
+ * local, y eso es lo correcto. Lo que no debe pasar es que expandir pida el
+ * árbol más de una vez.
+ */
+function peticionesArbol(): number {
+  const mock = fetch as unknown as { mock: { calls: unknown[][] } };
+  return mock.mock.calls.filter((c) => String(c[0]).includes("/arbol")).length;
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -106,7 +132,8 @@ describe("TablaEpicas", () => {
     expect(
       screen.getByRole("button", { name: /ver historias de usuario \(1\)/i }),
     ).toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalled();
+    expect(peticionesArbol()).toBe(1);
   });
 
   it("contrae una épica expandida", async () => {

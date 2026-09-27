@@ -1825,6 +1825,55 @@ code {
   padding-left: 8px;
 }
 
+/* ------------------------------------------------------------------ *
+ * Panel de asignación de responsables
+ * ------------------------------------------------------------------ */
+.asignacion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--borde);
+}
+
+.lista-asignados {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.asignado {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+
+/* Los controles se reparten en una rejilla y no con inline-block: cinco campos
+   con `<input>` sin ancho fijo se desbordan en pantallas estrechas, y un
+   formulario que se sale de la pantalla no se puede usar. */
+.formulario-asignacion {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) minmax(120px, 1fr) minmax(140px, 1fr) 2fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.formulario-asignacion .campo.ancho {
+  grid-column: span 1;
+}
+
+@media (max-width: 900px) {
+  .formulario-asignacion {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Lista de activos editables: el título es un botón que despliega el formulario
    debajo. Sin un botón «Editar» por fila, que con 50 filas sería 50 botones
    compitiendo con el título. */

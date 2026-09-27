@@ -3,6 +3,8 @@ import { ContenidoRico } from "../componentes/ContenidoRico";
 import { EstadoTrabajo } from "../componentes/EstadoTrabajo";
 import { CajaVacia, Cargando, ErrorAlerta } from "../componentes/retroalimentacion";
 import { enlaceA } from "../navegacion";
+import { PanelActividad } from "../qa/PanelActividad";
+import { PanelAsignacion } from "../qa/PanelAsignacion";
 import { useArbolEpica, useEstadoAzure } from "./hooks";
 import { aplanarHistorias, TableroHistorias } from "./TableroHistorias";
 import { aplanarTareas } from "./TableroTareas";
@@ -93,6 +95,12 @@ export function PaginaEpica({ azureId }: { azureId: number }) {
               ) : (
                 <CajaVacia mensaje="Esta épica no tiene historias de usuario todavía." />
               )}
+
+              {/* Quién prueba esta épica y su actividad van en la página
+                  dedicada, no solo en la fila expandida: esta es donde se viene
+                  a trabajar con una épica concreta. */}
+              <PanelAsignacion epica={epica.azure_id} titulo={epica.titulo} />
+              <PanelActividad epica={epica.azure_id} titulo={epica.titulo} />
             </>
           );
         })()

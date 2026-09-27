@@ -3,6 +3,7 @@ import { ContenidoRico } from "../componentes/ContenidoRico";
 import { EstadoTrabajo } from "../componentes/EstadoTrabajo";
 import { irA } from "../navegacion";
 import { PanelActividad } from "../qa/PanelActividad";
+import { PanelAsignacion } from "../qa/PanelAsignacion";
 import { aplanarTareas } from "./TableroTareas";
 
 /** Total de historias de usuario de la épica (directas + las de las Features). */
@@ -81,9 +82,11 @@ export function DetalleEpica({ epica }: { epica: Epic }) {
         </a>
       )}
 
-      {/* Al final y cerrado por defecto: la actividad es la lectura más cara de
-          la aplicación (una llamada a Azure por ítem del árbol) y no tiene nada
-          que ver con la estructura que se acaba de mostrar. */}
+      {/* Los dos paneles de pruebas van juntos y al final. La actividad es la
+          lectura más cara de la aplicación (una llamada a Azure por ítem) y va
+          cerrada; la asignación se carga con la épica, porque responder quién
+          prueba esto es parte de mirar la épica, no un extra. */}
+      <PanelAsignacion epica={epica.azure_id} titulo={epica.titulo} />
       <PanelActividad epica={epica.azure_id} titulo={epica.titulo} />
     </div>
   );
