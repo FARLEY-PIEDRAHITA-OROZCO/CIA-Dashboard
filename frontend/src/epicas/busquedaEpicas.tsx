@@ -51,6 +51,15 @@ function escaparRegExp(texto: string): string {
  * El resaltado es literal y sin distinguir mayúsculas, mientras que el
  * filtrado sí tolera acentos. Se mantiene así a propósito: resaltar sobre el
  * texto normalizado rompería los índices al cambiar la longitud de la cadena.
+ *
+ * `clave` es una base que distingue el resultado de esta llamada de otra que se
+ * dibuje en el mismo padre. **Cada elemento lleva además su índice**: con
+ * `split` y un grupo de captura los índices impares son las coincidencias y los
+ * pares el texto normal, así que usar solo `clave` para los impares y
+ * `clave + indice` para los pares colisionaba en el índice 0, que daba
+ * `clave + 0 === clave`. React avisaba de claves duplicadas y podía reutilizar
+ * el nodo equivocado al cambiar la búsqueda, dejando el resaltado pegado donde ya
+ * no correspondía.
  */
 export function resaltar(texto: string, consulta: string, clave: number): ReactNode {
   const limpio = consulta.trim();
@@ -59,9 +68,9 @@ export function resaltar(texto: string, consulta: string, clave: number): ReactN
   const patron = new RegExp(`(${escaparRegExp(limpio)})`, "ig");
   return texto.split(patron).map((parte, indice) =>
     indice % 2 === 1 ? (
-      <mark key={clave}>{parte}</mark>
+      <mark key={`${clave}-${indice}`}>{parte}</mark>
     ) : (
-      <span key={clave + indice}>{parte}</span>
+      <span key={`${clave}-${indice}`}>{parte}</span>
     ),
   );
 }

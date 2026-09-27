@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { EpicResumen } from "../api/tipos";
 import { coincideEpica, filtrarEpicas, normalizar, resaltar } from "./busquedaEpicas";
@@ -96,5 +96,86 @@ describe("resaltar", () => {
   it("respeta el caso del texto original", () => {
     render(<span>{resaltar("Inteligencia Artificial", "inteligencia", 1)}</span>);
     expect(screen.getByText("Inteligencia").tagName).toBe("MARK");
+  });
+
+  /**
+   * React avisa por consola cuando dos hermanos comparten clave. Comprobar el
+   * contenido dibujado no lo detecta: el resaltado se veía correcto y las claves
+   * seguían repetidas, así que la suite entera quedó verde con el bug dentro.
+   */
+  describe("claves únicas", () => {
+    /** Captura los avisos de React sin dejar que ensucien la salida. */
+    function espiarConsola() {
+      const errores: unknown[][] = [];
+      const espia = vi
+        .spyOn(console, "error")
+        .mockImplementation((...argumentos: unknown[]) => {
+          errores.push(argumentos);
+        });
+      return {
+        errores,
+        avisosDeClave: () =>
+          errores.filter((e) => String(e[0]).includes("same key")),
+        restaurar: () => espia.mockRestore(),
+      };
+    }
+
+    it("no repite clave con una coincidencia", () => {
+      const consola = espiarConsola();
+      try {
+        render(<span>{resaltar("Epic- IA Mundial Express", "IA", 2)}</span>);
+        expect(consola.avisosDeClave()).toEqual([]);
+      } finally {
+        consola.restaurar();
+      }
+    });
+
+    it("no repite clave con varias coincidencias en el mismo texto", () => {
+      // Aquí el fallo era mayor: 5 fragmentos producían 3 nodos con la misma
+      // clave, porque los índices 0, 1 y 3 caían todos en `clave`.
+      const consola = espiarConsola();
+      try {
+        render(<span>{resaltar("IA de IA para IA", "IA", 2)}</span>);
+        expect(consola.avisosDeClave()).toEqual([]);
+      } finally {
+        consola.restaurar();
+      }
+    });
+
+    it("no repite clave entre las dos celdas de la misma fila", () => {
+      // Es el caso real del aviso: la celda del ID usa clave 1 y la del título
+      // usa 2, y ambas se renderizan como hijas del mismo <tr>.
+      const consola = espiarConsola();
+      try {
+        render(
+          <table>
+            <tbody>
+              <tr>
+                <td>{resaltar("5586", "55", 1)}</td>
+                <td>{resaltar("Epic- IA Mundial", "IA", 2)}</td>
+              </tr>
+            </tbody>
+          </table>,
+        );
+        expect(consola.avisosDeClave()).toEqual([]);
+      } finally {
+        consola.restaurar();
+      }
+    });
+
+    it("distingue el resultado de dos llamadas con la misma base", () => {
+      const consola = espiarConsola();
+      try {
+        render(
+          <div>
+            <span>{resaltar("IA", "IA", 1)}</span>
+            <span>{resaltar("IA", "IA", 1)}</span>
+          </div>,
+        );
+        expect(consola.avisosDeClave()).toEqual([]);
+      } finally {
+        consola.restaurar();
+      }
+    });
   });
 });

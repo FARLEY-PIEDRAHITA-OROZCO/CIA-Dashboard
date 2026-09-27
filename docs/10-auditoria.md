@@ -123,6 +123,39 @@ barras y una frase.
 
 | 14 | `TablaItems` duplicaba el mapeo de estado → tono y la copia se contradecía: «Removed» salía verde como cerrado y «Testing» gris como sin empezar | Usa `EstadoTrabajo`, la regla única; regresión que la fija |
 | 15 | El relleno verde de la cinta iba con `opacity: 0.55`, que sobre fondo claro se mezclaba a `rgb(122,200,153)` — un verde que se lee gris | Rellenos sólidos por tono; el sprint actual conserva el azul por tono, no por una regla de opacidad aparte |
+| 16 | `resaltar()` generaba **claves de React duplicadas** al partir el texto: usaba `clave` en los índices impares y `clave + indice` en los pares, así que el índice 0 daba `clave + 0 === clave` | Clave por índice: `${clave}-${indice}`. Aviso de React «Encountered two children with the same key» al buscar una épica |
+
+### El bug de claves duplicadas, y por qué la suite no lo vio
+
+Avisó el usuario al usar el buscador de épicas. `resaltar()` divide el texto con
+una captura, así que los índices impares son las coincidencias y los pares el
+texto normal. Las claves se calculaban así:
+
+```tsx
+indice % 2 === 1 ? <mark key={clave}>       //  → clave
+                 : <span key={clave + indice}>  //  → clave + 0 = clave   ← colisión
+```
+
+Con una coincidencia (`"Epic- IA Mundial Express"`, consulta `IA`) el array es
+`["Epic- ", "IA", " Mundial Express"]` y las claves `[2, 2, 4]`: dos nodos con
+clave `2`. Con dos coincidencias eran `[2, 2, 4, 2, 6]`, tres nodos con la misma.
+
+**Por qué no lo detectaron las pruebas:** las tres que cubrían `resaltar`
+comprobaban *qué* se dibujaba (`<mark>` presente, no fallar con metacaracteres,
+respetar el caso). El resaltado se veía correcto y las claves seguían
+repetidas: una suite entera puede quedar verde con el bug dentro si solo mira el
+contenido. La regresión ahora espía `console.error` y falla ante cualquier aviso
+de «same key», con cuatro casos: una coincidencia, varias, las dos celdas de
+una misma fila y dos llamadas con la misma base.
+
+Se comprobó que los cuatro casos **fallan** revirtiendo el arreglo, para
+asegurarse de que la prueba guarda algo y no pasa por casualidad.
+
+**Alcance:** es el único sitio de la app que calcula una clave con aritmética;
+las demás usan valores de dominio (`azure_id`, `ruta`, `clave`). No afectaba a
+Azure ni a los datos: era un defecto de reconciliación, con el riesgo de que el
+resaltado quedara pegado donde ya no correspondía y con React declarando que
+ese comportamiento no está soportado.
 
 ### Tonos de estado: `verificacion` y `bloqueado` (2026-09-26)
 
@@ -279,7 +312,7 @@ run.py → app.main:app
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
 | Backend pytest | **175 passed** | Sin red; aparece un warning de deprecación de Starlette/httpx en `TestClient`. |
-| Frontend Vitest | **211 passed / 20 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs, cinta de sprints, analítica, tonos de estado y sanitización. |
+| Frontend Vitest | **215 passed / 20 files** | Incluye regresiones de Dashboard, API, rutas, navegación global, tareas, bugs, cinta de sprints, analítica, tonos de estado, claves de React y sanitización. |
 | Frontend build | **PASS** | `tsc -b` y `vite build`; bundle generado correctamente. |
 | `pip check` | **PASS** | No hay requisitos Python rotos en el entorno auditado. |
 | `pip-audit --local` | **PASS** | Sin vulnerabilidades conocidas en el lockfile instalado. |
