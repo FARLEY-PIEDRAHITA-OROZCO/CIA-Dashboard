@@ -1,5 +1,6 @@
 /** Rutas del frontend (navegación por hash, sin dependencias):
  * - `#/dashboard`              → lista de épicas (KPIs + tabla)
+ * - `#/dashboard?qa=<guid>`    → solo las épicas asignadas a esa persona
  * - `#/epicas/{id}`            → página dedicada a las historias de la épica
  * - `#/epicas/{id}/tareas`     → tareas de la épica
  * - `#/epicas/{id}/bugs`       → bugs y métricas de la épica
@@ -37,7 +38,7 @@ export const FILTROS_VACIOS: FiltrosSprint = {};
 export const TIPOS_INDICE = ["Task", "User Story", "Bug", "Issue"] as const;
 
 export type Destino =
-  | { pagina: "dashboard" }
+  | { pagina: "dashboard"; filtro: FiltrosDashboard }
   | { pagina: "epica"; azureId: number }
   | { pagina: "epicaTareas"; azureId: number }
   | { pagina: "epicaBugs"; azureId: number }
@@ -61,6 +62,18 @@ export type Destino =
  * la vista de sprints, es revelado progresivo y no una tabla siempre visible.
  */
 export type FiltrosPruebas = Pick<FiltrosSprint, "sprint" | "persona">;
+
+/**
+ * Filtros del dashboard de épicas.
+ *
+ * `qa` es un **GUID**, no un nombre: la asignación vive en el registro local y
+ * una persona puede renombrarse sin que sus asignaciones cambien de sitio.
+ * Opcional, y con él vacío el registro no se descarga: son ~264 asignaciones
+ * que nadie consulta al abrir el backlog.
+ */
+export interface FiltrosDashboard {
+  qa?: string;
+}
 
 /** Tamaño de página de la tabla de ítems (coincide con el tope del backend). */
 export const ITEMS_POR_PAGINA = 200;
@@ -133,6 +146,13 @@ export function parsearHash(hash: string): Destino {
   if (raiz === "analitica" && partes.length === 1) {
     return { pagina: "analitica" };
   }
+  // El dashboard no tiene segmentos: `#/dashboard` y `#/dashboard?qa=…` son
+  // ambos válidos, y los segmentos de más degradan al igual que en las demás
+  // rutas. Ojo: aquí `partes.length` es 1, no 0 — 0 es el hash vacío, que se
+  // resuelve más abajo.
+  if (raiz === "dashboard" && partes.length === 1) {
+    return { pagina: "dashboard", filtro: leerFiltrosDashboard(query) };
+  }
   if (raiz === "sprints" && partes.length === 1) {
     const busca = new URLSearchParams(query);
     return {
@@ -150,14 +170,17 @@ export function parsearHash(hash: string): Destino {
       hoja: leerHoja(busca),
     };
   }
+  if (partes.length === 0) {
+    return { pagina: "dashboard", filtro: {} };
+  }
   if (partes[0]?.toLowerCase() === "epicas" && partes[1]) {
     const idTexto = partes[1];
     if (!/^\d+$/.test(idTexto)) {
-      return { pagina: "dashboard" };
+      return { pagina: "dashboard", filtro: {} };
     }
     const azureId = Number(idTexto);
     if (!Number.isSafeInteger(azureId) || azureId <= 0) {
-      return { pagina: "dashboard" };
+      return { pagina: "dashboard", filtro: {} };
     }
     if (partes.length === 3 && partes[2].toLowerCase() === "tareas") {
       return { pagina: "epicaTareas", azureId };
@@ -169,7 +192,7 @@ export function parsearHash(hash: string): Destino {
       return { pagina: "epica", azureId };
     }
   }
-  return { pagina: "dashboard" };
+  return { pagina: "dashboard", filtro: {} };
 }
 
 /**
@@ -187,6 +210,22 @@ function leerFiltrosPruebas(query: string): FiltrosPruebas {
   if (sprint) filtros.sprint = sprint;
   if (persona) filtros.persona = persona;
   return filtros;
+}
+
+/** Normaliza los filtros del dashboard leídos del hash. */
+function leerFiltrosDashboard(query: string): FiltrosDashboard {
+  const busca = new URLSearchParams(query);
+  const filtros: FiltrosDashboard = {};
+  const qa = parametro(busca, "qa");
+  if (qa) filtros.qa = qa;
+  return filtros;
+}
+
+/** Serializa el filtro del dashboard. Vacío → cadena vacía, como las demás. */
+export function filtrosDashboardAQuery(filtros: FiltrosDashboard): string {
+  const busca = new URLSearchParams();
+  if (filtros.qa) busca.set("qa", filtros.qa);
+  return busca.toString();
 }
 
 /** Cuántos filtros hay activos, para el badge «N filtros». La página no cuenta. */
@@ -262,6 +301,10 @@ export function filtrosPruebasAQuery(filtros: FiltrosPruebas, hoja = 1): string 
 
 function aRuta(destino: Destino): string {
   switch (destino.pagina) {
+    case "dashboard": {
+      const query = filtrosDashboardAQuery(destino.filtro);
+      return query === "" ? "#/dashboard" : `#/dashboard?${query}`;
+    }
     case "epica":
       return `#/epicas/${destino.azureId}`;
     case "epicaTareas":

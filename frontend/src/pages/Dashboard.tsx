@@ -4,6 +4,10 @@ import { EstadoTrabajo, tonoEstado } from "../componentes/EstadoTrabajo";
 import { Kpi } from "../componentes/Kpi";
 import { CajaVacia, Cargando, ErrorAlerta } from "../componentes/retroalimentacion";
 import { BuscadorEpicas, filtrarEpicas, TablaEpicas, useEpicas, useEstadoAzure } from "../epicas";
+import { irA } from "../navegacion";
+import type { FiltrosDashboard } from "../navegacion";
+import { FiltroQA } from "../qa/FiltroQA";
+import { useAsignaciones, usePersonasQA } from "../qa/hooks";
 
 const ORDEN_ESTADOS = [
   "in progress",
@@ -31,7 +35,7 @@ function resumenPorEstado(epicas: Array<{ estado: string }>): Array<[string, num
   });
 }
 
-export default function Dashboard() {
+export default function Dashboard({ filtro = {} }: { filtro?: FiltrosDashboard }) {
   const estadoIntegracion = useEstadoAzure();
   const configurado = Boolean(estadoIntegracion.data?.configurada);
   const [incluirCerradas, setIncluirCerradas] = useState(false);
@@ -40,7 +44,46 @@ export default function Dashboard() {
 
   const [expandidas, setExpandidas] = useState<ReadonlySet<number>>(new Set());
 
-  const epicas = epicasQ.data?.epicas ?? [];
+  // El registro se carga **completo** al abrir el dashboard, sin filtro. Son
+  // ~264 asignaciones: no es «miles de filas», y hace falta para dos cosas —
+  // poder activar el filtro y poder mostrar quién lleva cada épica, que es
+  // justo para lo que sirve la función. El coste real es una petición pequeña
+  // sobre el índice ya en memoria, no una llamada a Azure.
+  const hayFiltroQA = Boolean(filtro.qa);
+  const personasQA = usePersonasQA(configurado);
+  const asignaciones = useAsignaciones({}, configurado);
+
+  const todas = epicasQ.data?.epicas ?? [];
+
+  /** Épica → personas asignadas, para mostrarlas en la fila. */
+  const porEpica = useMemo(() => {
+    const mapa = new Map<number, { nombre: string; rol: string }[]>();
+    for (const a of asignaciones.data?.asignaciones ?? []) {
+      const lista = mapa.get(a.epica) ?? [];
+      lista.push({ nombre: a.nombre_persona, rol: a.rol });
+      mapa.set(a.epica, lista);
+    }
+    return mapa;
+  }, [asignaciones.data]);
+
+  const epicas = useMemo(() => {
+    if (!hayFiltroQA) return todas;
+    // El filtro es **por persona**, no sobre el conjunto entero: se cargan todas
+    // las asignaciones para poder mostrar quién lleva cada épica, así que el
+    // conjunto de épicas tiene que salir de las de *esta* persona. Con todas,
+    // el filtro no filtraría nada.
+    const objetivo = (filtro.qa ?? "").toLowerCase();
+    const propias = new Set(
+      (asignaciones.data?.asignaciones ?? [])
+        .filter((a) => a.persona.toLowerCase() === objetivo)
+        .map((a) => a.epica),
+    );
+    // Se aplica sobre la lista **completa** que ya está en memoria. No depende
+    // de `incluirCerradas`: buscar «las épicas de Ana» tiene que encontrar las
+    // suyas aunque estén cerradas, o parecería que no tiene ninguna.
+    return todas.filter((e) => propias.has(e.azure_id));
+  }, [todas, hayFiltroQA, filtro.qa, asignaciones.data]);
+
   // El filtrado es local: la lista ya está en memoria, así que buscar no
   // genera peticiones a Azure.
   const epicasFiltradas = useMemo(() => filtrarEpicas(epicas, consulta), [epicas, consulta]);
@@ -54,6 +97,14 @@ export default function Dashboard() {
   const terminadas = useMemo(
     () => epicas.filter((epica) => tonoEstado(epica.estado) === "terminado").length,
     [epicas],
+  );
+
+  const cambiarQA = (guid: string) => {
+    irA({ pagina: "dashboard", filtro: guid ? { qa: guid } : {} });
+  };
+
+  const personaSeleccionada = personasQA.data?.personas.find(
+    (p) => p.guid.toLowerCase() === (filtro.qa ?? "").toLowerCase(),
   );
 
   const alternar = (azureId: number) => {
@@ -82,6 +133,12 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="acciones">
+          <FiltroQA
+            personas={personasQA.data?.personas ?? []}
+            seleccionado={filtro.qa ?? ""}
+            cargando={personasQA.isPending}
+            onCambiar={cambiarQA}
+          />
           <label className="control-filtro" title="Incluye en el conteo y la tabla las épicas con estado Closed">
             <input
               type="checkbox"
@@ -115,7 +172,13 @@ export default function Dashboard() {
       {epicas.length > 0 && (
         <div className="kpis">
           <Kpi
-            etiqueta={incluirCerradas ? "Épicas totales" : "Épicas activas"}
+            etiqueta={
+              hayFiltroQA
+                ? `Épicas de ${personaSeleccionada?.nombre ?? "la persona"}`
+                : incluirCerradas
+                  ? "Épicas totales"
+                  : "Épicas activas"
+            }
             valor={epicas.length}
             tono="acento"
           />
@@ -170,6 +233,7 @@ export default function Dashboard() {
                 expandidas={expandidas}
                 onAlternar={alternar}
                 consulta={consulta}
+                responsablesPorEpica={porEpica}
               />
             </div>
           )}

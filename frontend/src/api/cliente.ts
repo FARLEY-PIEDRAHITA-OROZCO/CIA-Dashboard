@@ -6,6 +6,15 @@ import type {
   ActivosPrueba,
   AutomatizacionPruebas,
   CampoEditable,
+  CargaQA,
+  FiltrosAsignaciones,
+  ListaAsignaciones,
+  ListaPersonasQA,
+  PersonaQA,
+  RolActualizable,
+  SugerenciaQA,
+  SugerenciasQA,
+  AsignacionQA,
   BrechaCobertura,
   BrechaVerificacion,
   Bug,
@@ -640,6 +649,113 @@ function validarActivosPrueba(valor: unknown): ActivosPrueba {
   };
 }
 
+function validarPersonaQA(valor: unknown): PersonaQA {
+  const item = objeto(valor, "persona de QA");
+  return {
+    guid: texto(item.guid, "personaQA.guid"),
+    nombre: texto(item.nombre ?? "", "personaQA.nombre"),
+    es_qa: booleano(item.es_qa, "personaQA.es_qa"),
+    es_dev: booleano(item.es_dev, "personaQA.es_dev"),
+    forzado: item.forzado === undefined || item.forzado === null ? null : booleano(item.forzado, "personaQA.forzado"),
+    epicas: numero(item.epicas ?? 0, "personaQA.epicas"),
+    epicas_qa: numero(item.epicas_qa ?? 0, "personaQA.epicas_qa"),
+    epicas_dev: numero(item.epicas_dev ?? 0, "personaQA.epicas_dev"),
+    mas_antigua: texto(item.mas_antigua ?? "", "personaQA.mas_antigua"),
+    dias_laborables: numero(item.dias_laborables ?? 0, "personaQA.dias_laborables"),
+    items_backlog: numero(item.items_backlog ?? 0, "personaQA.items_backlog"),
+    bugs: numero(item.bugs ?? 0, "personaQA.bugs"),
+  };
+}
+
+function validarListaPersonasQA(valor: unknown): ListaPersonasQA {
+  const item = objeto(valor, "lista de personas de QA");
+  return {
+    personas: lista(item.personas, "qa.personas", validarPersonaQA),
+    total: numero(item.total ?? 0, "qa.total"),
+    qa: numero(item.qa ?? 0, "qa.qa"),
+    dev: numero(item.dev ?? 0, "qa.dev"),
+    sin_rol: numero(item.sin_rol ?? 0, "qa.sin_rol"),
+  };
+}
+
+function validarSugerenciaQA(valor: unknown): SugerenciaQA {
+  const item = objeto(valor, "sugerencia de QA");
+  return {
+    guid: texto(item.guid, "sugerencia.guid"),
+    nombre: texto(item.nombre ?? "", "sugerencia.nombre"),
+    activos: numero(item.activos ?? 0, "sugerencia.activos"),
+    ya_es_qa: booleano(item.ya_es_qa, "sugerencia.ya_es_qa"),
+  };
+}
+
+function validarSugerenciasQA(valor: unknown): SugerenciasQA {
+  const item = objeto(valor, "sugerencias de QA");
+  return {
+    sugerencias: lista(item.sugerencias, "qa.sugerencias", validarSugerenciaQA),
+    minimo: numero(item.minimo ?? 0, "qa.minimo"),
+    nota: texto(item.nota ?? "", "qa.nota"),
+  };
+}
+
+function validarAsignacionQA(valor: unknown): AsignacionQA {
+  const item = objeto(valor, "asignación de QA");
+  const rol = texto(item.rol ?? "", "asignacion.rol");
+  // El backend solo admite `qa` y `dev`. Un rol desconocido se degrada a `qa` en
+  // vez de colarse: escribir contra la lista blanca es responsabilidad suya.
+  return {
+    epica: numero(item.epica, "asignacion.epica"),
+    titulo: texto(item.titulo ?? "", "asignacion.titulo"),
+    titulo_conocido: booleano(item.titulo_conocido, "asignacion.titulo_conocido"),
+    persona: texto(item.persona, "asignacion.persona"),
+    nombre_persona: texto(item.nombre_persona ?? "", "asignacion.nombre_persona"),
+    rol: rol === "dev" ? "dev" : "qa",
+    desde: texto(item.desde ?? "", "asignacion.desde"),
+    dias_laborables: numero(item.dias_laborables ?? 0, "asignacion.dias_laborables"),
+    nota: texto(item.nota ?? "", "asignacion.nota"),
+  };
+}
+
+function validarListaAsignaciones(valor: unknown): ListaAsignaciones {
+  const item = objeto(valor, "lista de asignaciones");
+  return {
+    asignaciones: lista(item.asignaciones, "qa.asignaciones", validarAsignacionQA),
+    total: numero(item.total ?? 0, "qa.total"),
+    epicas_desconocidas: numero(item.epicas_desconocidas ?? 0, "qa.epicas_desconocidas"),
+  };
+}
+
+function validarCargaQA(valor: unknown): CargaQA {
+  const item = objeto(valor, "carga de QA");
+  return {
+    guid: texto(item.guid, "carga.guid"),
+    nombre: texto(item.nombre ?? "", "carga.nombre"),
+    es_qa: booleano(item.es_qa, "carga.es_qa"),
+    es_dev: booleano(item.es_dev, "carga.es_dev"),
+    epicas: numero(item.epicas ?? 0, "carga.epicas"),
+    dias_laborables: numero(item.dias_laborables ?? 0, "carga.dias_laborables"),
+    desde: texto(item.desde ?? "", "carga.desde"),
+    items_backlog: numero(item.items_backlog ?? 0, "carga.items_backlog"),
+    asignaciones: lista(item.asignaciones, "carga.asignaciones", validarAsignacionQA),
+  };
+}
+
+/**
+ * Quita los campos `null` del cuerpo de rol.
+ *
+ * El backend distingue `null` («no lo toques») de `false` («quítaselo»), y esa
+ * diferencia es justo lo que impide que reenviar un formulario borre el rol que
+ * no se quería cambiar. Mandar `null` explícito lo borraría igual, porque JSON no
+ * distingue «ausente» de «nulo» una vez serializado.
+ */
+function limpiarRol(cambios: RolActualizable): Record<string, boolean> {
+  const salida: Record<string, boolean> = {};
+  for (const clave of ["es_qa", "es_dev", "forzado"] as const) {
+    const valor = cambios[clave];
+    if (valor === true || valor === false) salida[clave] = valor;
+  }
+  return salida;
+}
+
 function validarAccion(valor: unknown): RespuestaAccion {
   const item = objeto(valor, "respuesta de acción");
   const detalle = opcionalTexto(item.detalle, "accion.detalle");
@@ -814,6 +930,70 @@ export const api = {
       await peticion<unknown>(`/pruebas/activos${sufijo}`, { signal }),
     );
   },
+
+  // ------------------------------------------------------------------ //
+  // Registro local de pruebas
+  //
+  // Todo aquí es local: no escribe en Azure, ni lee, ni depende de él para
+  // guardar. Solo usa el índice de Azure para resolver nombres.
+  // ------------------------------------------------------------------ //
+  qaPersonas: async (signal?: AbortSignal) =>
+    validarListaPersonasQA(await peticion<unknown>("/qa/personas", { signal })),
+
+  qaSugerencias: async (minimo = 3, signal?: AbortSignal) =>
+    validarSugerenciasQA(
+      await peticion<unknown>(`/qa/sugerencia-qa?minimo=${minimo}`, { signal }),
+    ),
+
+  qaAsignaciones: async (
+    filtros: FiltrosAsignaciones = {},
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams();
+    if (filtros.epica) query.set("epica", String(filtros.epica));
+    if (filtros.persona) query.set("persona", filtros.persona);
+    if (filtros.rol) query.set("rol", filtros.rol);
+    const sufijo = query.toString() ? `?${query.toString()}` : "";
+    return validarListaAsignaciones(
+      await peticion<unknown>(`/qa/asignaciones${sufijo}`, { signal }),
+    );
+  },
+
+  qaCarga: async (signal?: AbortSignal) =>
+    lista(await peticion<unknown>("/qa/carga", { signal }), "carga", validarCargaQA),
+
+  qaMarcarRol: async (
+    guid: string,
+    cambios: RolActualizable,
+  ) =>
+    validarPersonaQA(
+      await peticion<unknown>(`/qa/personas/${encodeURIComponent(guid)}`, {
+        method: "PUT",
+        body: JSON.stringify(limpiarRol(cambios)),
+      }),
+    ),
+
+  qaAsignar: async (cambios: {
+    epica: number;
+    persona: string;
+    rol: "qa" | "dev";
+    desde?: string;
+    nota?: string;
+  }) =>
+    validarAsignacionQA(
+      await peticion<unknown>("/qa/asignaciones", {
+        method: "PUT",
+        body: JSON.stringify(cambios),
+      }),
+    ),
+
+  qaQuitarAsignacion: async (epica: number, persona: string, rol: string) =>
+    validarAccion(
+      await peticion<unknown>(
+        `/qa/asignaciones/${epica}/${encodeURIComponent(persona)}/${rol}`,
+        { method: "DELETE" },
+      ),
+    ),
 
   /**
    * Aplica (o valida en seco) una actualización de QA sobre un work item.

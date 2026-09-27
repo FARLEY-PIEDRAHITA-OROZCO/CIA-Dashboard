@@ -64,7 +64,7 @@ export function PaginaEpica({ azureId }: { azureId: number }) {
   return (
     <div className="pagina">
       <nav className="migas" aria-label="Navegación">
-        <a className="enlace-externo small" href={enlaceA({ pagina: "dashboard" })}>
+        <a className="enlace-externo small" href={enlaceA({ pagina: "dashboard", filtro: {} })}>
           ← Volver al backlog
         </a>
       </nav>

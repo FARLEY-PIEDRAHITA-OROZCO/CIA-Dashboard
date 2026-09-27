@@ -25,7 +25,13 @@ const EPICAS = {
 function stubApi() {
   const mock = vi.fn(async (entrada: RequestInfo | URL) => {
     const url = String(entrada);
-    const cuerpo = url.includes("/epics") ? EPICAS : ESTADO;
+    // El dashboard también carga el registro local de pruebas. Un stub que solo
+    // responde a las rutas de Azure devuelve el cuerpo equivocado para esas y la
+    // prueba pasaría por un motivo equivocado.
+    let cuerpo: unknown = ESTADO;
+    if (url.includes("/api/epics")) cuerpo = EPICAS;
+    else if (url.includes("/api/qa/personas")) cuerpo = { personas: [], total: 0, qa: 0, dev: 0, sin_rol: 0 };
+    else if (url.includes("/api/qa/asignaciones")) cuerpo = { asignaciones: [], total: 0, epicas_desconocidas: 0 };
     return new Response(JSON.stringify(cuerpo), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -33,6 +39,11 @@ function stubApi() {
   });
   vi.stubGlobal("fetch", mock);
   return mock;
+}
+
+/** Peticiones al backlog de Azure, que son las que el buscador no debe añadir. */
+function peticionesAzure(mock: ReturnType<typeof stubApi>): number {
+  return mock.mock.calls.filter((c) => String(c[0]).includes("/api/epics")).length;
 }
 
 function renderDashboard() {
@@ -108,8 +119,10 @@ describe("Buscador de épicas", () => {
     expect(screen.getByText("Tres")).toBeInTheDocument();
     expect(screen.queryByText("Una")).not.toBeInTheDocument();
     expect(screen.queryByText("Dos")).not.toBeInTheDocument();
-    // El filtrado es local: ninguna petición adicional.
-    expect(mock).toHaveBeenCalledTimes(2);
+    // El filtrado es local: el backlog se pidió una vez y escribir no añade
+    // ninguna llamada. Se cuentan solo las de épicas, no el total, porque el
+    // registro local se carga aparte y no es lo que esta prueba vigila.
+    expect(peticionesAzure(mock)).toBe(1);
   });
 
   it("busca por ID de Azure", async () => {

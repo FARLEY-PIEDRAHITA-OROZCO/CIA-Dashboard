@@ -39,7 +39,7 @@ export function NavegacionGlobal({
   const enlaces: EnlaceGlobal[] = [
     {
       etiqueta: "Épicas",
-      destino: { pagina: "dashboard" },
+      destino: { pagina: "dashboard", filtro: {} },
       activo: vista.pagina === "dashboard",
     },
     {
@@ -83,7 +83,7 @@ export function NavegacionGlobal({
   return (
     <header className="barra-superior">
       <div className="barra-superior-fila">
-        <a className="marca" href={enlaceA({ pagina: "dashboard" })}>
+        <a className="marca" href={enlaceA({ pagina: "dashboard", filtro: {} })}>
           <span aria-hidden="true">▶</span> CIA · Dashboard de Épicas
         </a>
 

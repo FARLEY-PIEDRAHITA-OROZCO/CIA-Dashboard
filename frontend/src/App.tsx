@@ -40,7 +40,9 @@ export default function App() {
         onRefrescar={() => refrescar.mutate()}
       />
       <main className="contenido">
-        {vista.pagina === "epica" ? (
+        {vista.pagina === "dashboard" ? (
+          <Dashboard filtro={vista.filtro} />
+        ) : vista.pagina === "epica" ? (
           <PaginaEpica key={vista.azureId} azureId={vista.azureId} />
         ) : vista.pagina === "epicaTareas" ? (
           <PaginaTareas key={vista.azureId} azureId={vista.azureId} />

@@ -41,20 +41,40 @@ describe("parsearHash", () => {
   });
 
   it("degrada a dashboard para rutas vacías o inválidas", () => {
-    expect(parsearHash("")).toEqual({ pagina: "dashboard" });
-    expect(parsearHash("#/dashboard")).toEqual({ pagina: "dashboard" });
-    expect(parsearHash("#/epicas/abc")).toEqual({ pagina: "dashboard" });
-    expect(parsearHash("#/epicas/1e3")).toEqual({ pagina: "dashboard" });
-    expect(parsearHash("#/epicas/1/extra")).toEqual({ pagina: "dashboard" });
-    expect(parsearHash("#/epicas/0")).toEqual({ pagina: "dashboard" });
+    expect(parsearHash("")).toEqual({ pagina: "dashboard", filtro: {} });
+    expect(parsearHash("#/dashboard")).toEqual({ pagina: "dashboard", filtro: {} });
+    expect(parsearHash("#/epicas/abc")).toEqual({ pagina: "dashboard", filtro: {} });
+    expect(parsearHash("#/epicas/1e3")).toEqual({ pagina: "dashboard", filtro: {} });
+    expect(parsearHash("#/epicas/1/extra")).toEqual({ pagina: "dashboard", filtro: {} });
+    expect(parsearHash("#/epicas/0")).toEqual({ pagina: "dashboard", filtro: {} });
   });
 
   it("mapea las páginas de sprints y analítica", () => {
     expect(parsearHash("#/sprints")).toEqual({ pagina: "sprints", filtros: {}, hoja: 1, desplegado: false });
     expect(parsearHash("#/analitica")).toEqual({ pagina: "analitica" });
     // Segmentos de más degradan: no se inventa una ruta.
-    expect(parsearHash("#/sprints/45")).toEqual({ pagina: "dashboard" });
-    expect(parsearHash("#/analitica/verificacion")).toEqual({ pagina: "dashboard" });
+    expect(parsearHash("#/sprints/45")).toEqual({ pagina: "dashboard", filtro: {} });
+    expect(parsearHash("#/analitica/verificacion")).toEqual({ pagina: "dashboard", filtro: {} });
+  });
+
+  it("lee el filtro de QA del dashboard desde el hash", () => {
+    // El filtro es un GUID, no un nombre: la asignación vive en el registro local
+    // y una persona puede renombrarse sin que sus asignaciones cambien de sitio.
+    expect(parsearHash("#/dashboard?qa=g-ana")).toEqual({
+      pagina: "dashboard",
+      filtro: { qa: "g-ana" },
+    });
+    expect(parsearHash("#/dashboard")).toEqual({ pagina: "dashboard", filtro: {} });
+    // El hash vacío es el dashboard: es donde cae quien no ha elegido nada.
+    expect(parsearHash("")).toEqual({ pagina: "dashboard", filtro: {} });
+    // Un segmento de más degrada, como en las demás rutas.
+    expect(parsearHash("#/dashboard/extra")).toEqual({ pagina: "dashboard", filtro: {} });
+  });
+
+  it("el filtro de QA hace el viaje completo sin pérdida", () => {
+    const destino = { pagina: "dashboard" as const, filtro: { qa: "g-ana" } };
+    expect(enlaceA(destino)).toBe("#/dashboard?qa=g-ana");
+    expect(parsearHash(enlaceA(destino))).toEqual(destino);
   });
 
   it("mapea la página de pruebas, sin filtros y con ellos", () => {
@@ -65,7 +85,7 @@ describe("parsearHash", () => {
       hoja: 3,
     });
     // Misma regla que el resto: un segmento de más degrada al dashboard.
-    expect(parsearHash("#/pruebas/cobertura")).toEqual({ pagina: "dashboard" });
+    expect(parsearHash("#/pruebas/cobertura")).toEqual({ pagina: "dashboard", filtro: {} });
   });
 
   it("ignora los filtros que la vista de pruebas no tiene", () => {
@@ -247,7 +267,7 @@ describe("revelado progresivo del detalle", () => {
 
 describe("enlaceA", () => {
   it("genera hrefs coherentes", () => {
-    expect(enlaceA({ pagina: "dashboard" })).toBe("#/dashboard");
+    expect(enlaceA({ pagina: "dashboard", filtro: {} })).toBe("#/dashboard");
     expect(enlaceA({ pagina: "epica", azureId: 100 })).toBe("#/epicas/100");
     expect(enlaceA({ pagina: "epicaTareas", azureId: 100 })).toBe("#/epicas/100/tareas");
     expect(enlaceA({ pagina: "epicaBugs", azureId: 100 })).toBe("#/epicas/100/bugs");
@@ -266,7 +286,7 @@ describe("useVista", () => {
     expect(screen.getByTestId("vista").textContent).toBe("epica:7");
 
     act(() => {
-      irA({ pagina: "dashboard" });
+      irA({ pagina: "dashboard", filtro: {} });
       window.dispatchEvent(new Event("hashchange"));
     });
     expect(screen.getByTestId("vista").textContent).toBe("dashboard");

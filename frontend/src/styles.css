@@ -1663,6 +1663,44 @@ code {
   color: var(--texto);
 }
 
+/* ------------------------------------------------------------------ *
+ * Filtro y etiquetas de rol de pruebas
+ * ------------------------------------------------------------------ */
+.filtro-qa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Etiqueta de responsable en la tabla de épicas. `data-rol` distingue QA de dev
+   sin inventar un color nuevo: el tono lo pone el rol, que es información, no
+   un juicio sobre el trabajo. */
+.etiquetas-rol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip-rol {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
+  background: var(--fondo);
+}
+
+.chip-rol[data-rol="qa"] {
+  border-color: var(--acento);
+  color: var(--acento);
+  font-weight: 600;
+}
+
 /* Lista de activos editables: el título es un botón que despliega el formulario
    debajo. Sin un botón «Editar» por fila, que con 50 filas sería 50 botones
    compitiendo con el título. */

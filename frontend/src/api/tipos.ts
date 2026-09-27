@@ -370,6 +370,109 @@ export interface SinCubrir {
   items: HistoriaSinCubrir[];
 }
 
+// ------------------------------------------------------------------ //
+// Registro local de pruebas (API /api/qa/*)
+//
+// Azure no tiene dónde anotar a quién le corresponde probar una épica: las
+// épicas no las crea el equipo de QA. Esta información solo existe en el
+// registro local, así que es irrecuperable si se pierde.
+// ------------------------------------------------------------------ //
+
+/** Persona del proyecto con su papel en el proceso de pruebas. */
+export interface PersonaQA {
+  guid: string;
+  nombre: string;
+  es_qa: boolean;
+  es_dev: boolean;
+  /** `true` si la decisión fue humana y no el valor por defecto. */
+  forzado: boolean | null;
+  epicas: number;
+  epicas_qa: number;
+  epicas_dev: number;
+  mas_antigua: string;
+  /**
+   * Días laborables desde la asignación más antigua.
+   *
+   * **No son horas.** El registro de tiempos de Azure responde 401 y no hay
+   * ninguna fuente de horas; un campo llamado `horas` sería un número que el
+   * sistema no tiene.
+   */
+  dias_laborables: number;
+  /** Carga real del backlog, para contrastar con lo declarado en el registro. */
+  items_backlog: number;
+  bugs: number;
+}
+
+export interface ListaPersonasQA {
+  personas: PersonaQA[];
+  total: number;
+  qa: number;
+  dev: number;
+  sin_rol: number;
+}
+
+export interface SugerenciaQA {
+  guid: string;
+  nombre: string;
+  activos: number;
+  /** `true` si ya está marcada como QA: la UI no debe repetir la sugerencia. */
+  ya_es_qa: boolean;
+}
+
+export interface SugerenciasQA {
+  sugerencias: SugerenciaQA[];
+  minimo: number;
+  nota: string;
+}
+
+/** Rol que se puede marcar. `null` = no lo toques, `false` = quítaselo. */
+export interface RolActualizable {
+  es_qa?: boolean | null;
+  es_dev?: boolean | null;
+  forzado?: boolean | null;
+}
+
+export interface AsignacionQA {
+  epica: number;
+  titulo: string;
+  /**
+   * `false` si la épica ya no está en Azure. La asignación sigue existiendo, así
+   * que se muestra: ocultarla sería perderla de la vista sin aviso.
+   */
+  titulo_conocido: boolean;
+  persona: string;
+  nombre_persona: string;
+  rol: "qa" | "dev";
+  desde: string;
+  dias_laborables: number;
+  nota: string;
+}
+
+export interface FiltrosAsignaciones {
+  epica?: number;
+  persona?: string;
+  rol?: "qa" | "dev";
+}
+
+export interface ListaAsignaciones {
+  asignaciones: AsignacionQA[];
+  total: number;
+  /** Asignaciones cuya épica ya no existe en Azure. Se declaran para limpiarlas. */
+  epicas_desconocidas: number;
+}
+
+export interface CargaQA {
+  guid: string;
+  nombre: string;
+  es_qa: boolean;
+  es_dev: boolean;
+  epicas: number;
+  dias_laborables: number;
+  desde: string;
+  items_backlog: number;
+  asignaciones: AsignacionQA[];
+}
+
 /** Campos de QA que admite un tipo de work item. */
 export type CampoEditable = "estado" | "prioridad" | "severidad" | "tags" | "notas_qa";
 

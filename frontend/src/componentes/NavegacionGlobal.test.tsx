@@ -7,7 +7,7 @@ function renderizar(props: Partial<Parameters<typeof NavegacionGlobal>[0]> = {})
   const onRefrescar = vi.fn();
   render(
     <NavegacionGlobal
-      vista={{ pagina: "dashboard" }}
+      vista={{ pagina: "dashboard", filtro: {} }}
       configurado
       refrescando={false}
       onRefrescar={onRefrescar}
