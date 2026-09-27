@@ -2,7 +2,10 @@
 
 import type {
   ActualizacionQA,
+  ActivoDePrueba,
+  ActivosPrueba,
   AutomatizacionPruebas,
+  CampoEditable,
   BrechaCobertura,
   BrechaVerificacion,
   Bug,
@@ -584,6 +587,59 @@ function validarSinCubrir(valor: unknown): SinCubrir {
   };
 }
 
+const CAMPOS_EDITABLES = ["estado", "prioridad", "severidad", "tags", "notas_qa"] as const;
+
+function validarCamposEditables(valor: unknown, nombre: string): CampoEditable[] {
+  if (valor === undefined || valor === null) return [];
+  const campos: string[] = lista(valor, nombre, (v) => texto(v, `${nombre}.campo`));
+  // Un campo desconocido se descarta en lugar de pasarlo: escribiría contra la
+  // lista blanca del backend, que es quien manda.
+  return campos.filter((c): c is CampoEditable =>
+    (CAMPOS_EDITABLES as readonly string[]).includes(c),
+  );
+}
+
+function validarActivoDePrueba(valor: unknown): ActivoDePrueba {
+  const item = objeto(valor, "activo de prueba");
+  return {
+    azure_id: numero(item.azure_id, "activo.azure_id"),
+    tipo: texto(item.tipo ?? "", "activo.tipo"),
+    titulo: texto(item.titulo ?? "", "activo.titulo"),
+    estado: texto(item.estado ?? "", "activo.estado"),
+    sprint: texto(item.sprint ?? "", "activo.sprint"),
+    persona: texto(item.persona ?? "", "activo.persona"),
+    tags: texto(item.tags ?? "", "activo.tags"),
+    prioridad: texto(item.prioridad ?? "", "activo.prioridad"),
+    automatizacion: texto(item.automatizacion ?? "", "activo.automatizacion"),
+    modificado: texto(item.modificado ?? "", "activo.modificado"),
+    campos_editables: validarCamposEditables(item.campos_editables, "activo.campos_editables"),
+  };
+}
+
+function validarActivosPrueba(valor: unknown): ActivosPrueba {
+  const item = objeto(valor, "activos de prueba");
+  const resumen = objeto(item.resumen, "activos.resumen");
+  return {
+    resumen: {
+      total: numero(resumen.total ?? 0, "activos.total"),
+      offset: numero(resumen.offset ?? 0, "activos.offset"),
+      limite: numero(resumen.limite ?? 0, "activos.limite"),
+      hay_mas:
+        resumen.hay_mas === undefined ? false : booleano(resumen.hay_mas, "activos.hay_mas"),
+      parcial:
+        resumen.parcial === undefined ? false : booleano(resumen.parcial, "activos.parcial"),
+      lotes_con_error: numero(resumen.lotes_con_error ?? 0, "activos.lotes_con_error"),
+    },
+    items: lista(item.items, "activos.items", validarActivoDePrueba),
+    estados: Object.fromEntries(
+      Object.entries(objeto(item.estados ?? {}, "activos.estados")).map(([tipo, valores]) => [
+        tipo,
+        lista(valores, `activos.estados.${tipo}`, (v) => texto(v, `activos.estados.${tipo}.estado`)),
+      ]),
+    ),
+  };
+}
+
 function validarAccion(valor: unknown): RespuestaAccion {
   const item = objeto(valor, "respuesta de acción");
   const detalle = opcionalTexto(item.detalle, "accion.detalle");
@@ -729,6 +785,35 @@ export const api = {
       "planes",
       validarPlanDePrueba,
     ),
+
+  /**
+   * Activos de prueba filtrados y paginados, con los campos que QA puede
+   * editar en cada tipo. Es lo que alimenta el formulario: la lista de campos
+   * editables viene del backend, no de una suposición del frontend.
+   */
+  pruebasActivos: async (
+    filtros: {
+      tipo?: string;
+      estado?: string;
+      persona?: string;
+      sprint?: string;
+      offset?: number;
+      limite?: number;
+    } = {},
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams();
+    if (filtros.tipo) query.set("tipo", filtros.tipo);
+    if (filtros.estado) query.set("estado", filtros.estado);
+    if (filtros.persona) query.set("persona", filtros.persona);
+    if (filtros.sprint) query.set("sprint", filtros.sprint);
+    if (filtros.offset) query.set("offset", String(filtros.offset));
+    if (filtros.limite) query.set("limite", String(filtros.limite));
+    const sufijo = query.toString() ? `?${query.toString()}` : "";
+    return validarActivosPrueba(
+      await peticion<unknown>(`/pruebas/activos${sufijo}`, { signal }),
+    );
+  },
 
   /**
    * Aplica (o valida en seco) una actualización de QA sobre un work item.

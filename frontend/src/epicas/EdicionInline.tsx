@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { ActualizacionQA } from "../api/tipos";
+import type { ActualizacionQA, CampoEditable } from "../api/tipos";
 
 /** Tags sugeridos para el flujo de QA (vocalabulario inicial, ADR-11). */
 export const TAGS_QA = [
@@ -32,6 +32,18 @@ export interface PropsEdicion {
   mostrarPrioridad?: boolean;
   mostrarSeveridad?: boolean;
   mostrarTags?: boolean;
+  mostrarNotas?: boolean;
+  /**
+   * Campos que admite el tipo, tal y como los declara el backend. **Si viene
+   * informado, manda sobre los `mostrar*`**: es la lista blanca del adaptador de
+   * escritura, y por eso no puede haber dos copias que se contradigan.
+   *
+   * Hace falta porque Azure **no** avisa cuando se escribe un campo que el tipo
+   * no tiene: lo acepta en silencio (comprobado con `validateOnly`). Un `Test
+   * Plan` de este proyecto no tiene ni tags ni descripción, así que ofrecerlos
+   * crearía campos huérfanos que nadie lee.
+   */
+  camposEditables?: readonly CampoEditable[];
   /** `false` deshabilita la escritura (aviso visible, sin botón de guardar). */
   habilitado?: boolean;
   /** Texto legible del elemento, para el `aria-label` del formulario. */
@@ -63,6 +75,8 @@ export function EdicionInline({
   mostrarPrioridad = true,
   mostrarSeveridad = true,
   mostrarTags = true,
+  mostrarNotas = true,
+  camposEditables,
   habilitado = true,
   titulo,
   onGuardar,
@@ -71,24 +85,36 @@ export function EdicionInline({
   error = "",
   onCerrar,
 }: PropsEdicion) {
+  // La lista del backend, si viene, es la autoridad; los `mostrar*` son el
+  // respaldo para las pantallas antiguas que no la reciben.
+  const admite = (campo: CampoEditable, porDefecto: boolean): boolean =>
+    camposEditables ? camposEditables.includes(campo) : porDefecto;
+  const conPrioridad = admite("prioridad", mostrarPrioridad);
+  const conSeveridad = admite("severidad", mostrarSeveridad);
+  const conTags = admite("tags", mostrarTags);
+  const conNotas = admite("notas_qa", mostrarNotas);
+  const conEstado = admite("estado", true);
+
   const [estado, setEstado] = useState(estadoActual);
   const [prioridad, setPrioridad] = useState(prioridadActual);
   const [severidad, setSeveridad] = useState(severidadActual);
   const [tags, setTags] = useState(tagsActuales);
   const [notas, setNotas] = useState("");
 
-  /** Devuelve solo los campos distintos de su valor original. */
+  /** Devuelve solo los campos distintos de su valor original y admitidos. */
   const cambios = (): ActualizacionQA => {
     const salida: ActualizacionQA = {};
-    if (estado.trim() && estado.trim() !== estadoActual.trim()) salida.estado = estado.trim();
-    if (mostrarPrioridad && prioridad && prioridad !== prioridadActual) {
+    if (conEstado && estado.trim() && estado.trim() !== estadoActual.trim()) {
+      salida.estado = estado.trim();
+    }
+    if (conPrioridad && prioridad && prioridad !== prioridadActual) {
       salida.prioridad = prioridad;
     }
-    if (mostrarSeveridad && severidad && severidad !== severidadActual) {
+    if (conSeveridad && severidad && severidad !== severidadActual) {
       salida.severidad = severidad;
     }
-    if (mostrarTags && tags.trim() !== tagsActuales.trim()) salida.tags = tags.trim();
-    if (notas.trim()) salida.notas_qa = notas.trim();
+    if (conTags && tags.trim() !== tagsActuales.trim()) salida.tags = tags.trim();
+    if (conNotas && notas.trim()) salida.notas_qa = notas.trim();
     return salida;
   };
 
@@ -138,33 +164,40 @@ export function EdicionInline({
         )}
       </div>
 
-      {estadosDisponibles && estadosDisponibles.length > 0 ? (
-        <label className="campo">
-          <span>Estado</span>
-          <select value={estado} onChange={(e) => setEstado(e.target.value)}>
-            <option value="">— sin cambios —</option>
-            {estadosDisponibles.map((valor) => (
-              <option key={valor} value={valor}>
-                {valor}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : (
-        <label className="campo">
-          <span>Estado</span>
-          <input
-            type="text"
-            value={estado}
-            placeholder="Sin cambios"
-            onChange={(e) => setEstado(e.target.value)}
-          />
-        </label>
+      {!conEstado && (
+        <p className="texto-suave small">
+          Este tipo no tiene estado editable: no hay nada que cambiar aquí.
+        </p>
       )}
 
-      {(mostrarPrioridad || mostrarSeveridad) && (
+      {conEstado &&
+        (estadosDisponibles && estadosDisponibles.length > 0 ? (
+          <label className="campo">
+            <span>Estado</span>
+            <select value={estado} onChange={(e) => setEstado(e.target.value)}>
+              <option value="">— sin cambios —</option>
+              {estadosDisponibles.map((valor) => (
+                <option key={valor} value={valor}>
+                  {valor}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <label className="campo">
+            <span>Estado</span>
+            <input
+              type="text"
+              value={estado}
+              placeholder="Sin cambios"
+              onChange={(e) => setEstado(e.target.value)}
+            />
+          </label>
+        ))}
+
+      {(conPrioridad || conSeveridad) && (
         <div className="edicion-par">
-          {mostrarPrioridad && (
+          {conPrioridad && (
             <label className="campo">
               <span>Prioridad</span>
               <select value={prioridad} onChange={(e) => setPrioridad(e.target.value)}>
@@ -177,7 +210,7 @@ export function EdicionInline({
               </select>
             </label>
           )}
-          {mostrarSeveridad && (
+          {conSeveridad && (
             <label className="campo">
               <span>Severidad</span>
               <select value={severidad} onChange={(e) => setSeveridad(e.target.value)}>
@@ -193,7 +226,7 @@ export function EdicionInline({
         </div>
       )}
 
-      {mostrarTags && (
+      {conTags && (
         <>
           <label className="campo">
             <span>Tags</span>
@@ -225,16 +258,18 @@ export function EdicionInline({
         </>
       )}
 
-      <label className="campo">
-        <span>Notas QA (se agregan al final; no reemplazan la descripción)</span>
-        <textarea
-          value={notas}
-          rows={3}
-          maxLength={2000}
-          placeholder="Reproducido en Chrome 141 / Windows 11…"
-          onChange={(e) => setNotas(e.target.value)}
-        />
-      </label>
+      {conNotas && (
+        <label className="campo">
+          <span>Notas QA (se agregan al final; no reemplazan la descripción)</span>
+          <textarea
+            value={notas}
+            rows={3}
+            maxLength={2000}
+            placeholder="Reproducido en Chrome 141 / Windows 11…"
+            onChange={(e) => setNotas(e.target.value)}
+          />
+        </label>
+      )}
 
       {error && (
         <p className="aviso aviso-error small" role="alert">

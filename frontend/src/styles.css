@@ -1662,3 +1662,63 @@ code {
 .plan-titulo {
   color: var(--texto);
 }
+
+/* Lista de activos editables: el título es un botón que despliega el formulario
+   debajo. Sin un botón «Editar» por fila, que con 50 filas sería 50 botones
+   compitiendo con el título. */
+.lista-activos {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.activo-fila {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.activo-fila:last-child {
+  border-bottom: none;
+}
+
+.activo-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.activo-titulo {
+  flex: 1 1 240px;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--texto);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--borde);
+  text-underline-offset: 3px;
+}
+
+.activo-titulo:hover {
+  text-decoration-color: var(--acento);
+}
+
+.activo-titulo::before {
+  content: "▸ ";
+  color: var(--texto-suave);
+}
+
+.activo-titulo[aria-expanded="true"]::before {
+  content: "▾ ";
+  color: var(--acento);
+}

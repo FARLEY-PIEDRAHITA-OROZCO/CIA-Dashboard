@@ -369,3 +369,47 @@ export interface SinCubrir {
   };
   items: HistoriaSinCubrir[];
 }
+
+/** Campos de QA que admite un tipo de work item. */
+export type CampoEditable = "estado" | "prioridad" | "severidad" | "tags" | "notas_qa";
+
+/**
+ * Activo de prueba en la lista editable.
+ *
+ * `campos_editables` lo envía el backend desde su tabla de lista blanca, que es
+ * la misma que aplica el adaptador de escritura. El frontend **no** decide qué
+ * controles ofrecer: si lo hiciera, bastaría con que las dos copias se
+ * equivocaran para ofrecer un campo que el tipo no tiene, y Azure lo aceptaría
+ * en silencio (comprobado con `validateOnly`).
+ */
+export interface ActivoDePrueba {
+  azure_id: number;
+  tipo: string;
+  titulo: string;
+  estado: string;
+  sprint: string;
+  persona: string;
+  tags: string;
+  prioridad: string;
+  automatizacion: string;
+  modificado: string;
+  campos_editables: CampoEditable[];
+}
+
+export interface ActivosPrueba {
+  resumen: {
+    total: number;
+    offset: number;
+    limite: number;
+    hay_mas: boolean;
+    parcial: boolean;
+    lotes_con_error: number;
+  };
+  items: ActivoDePrueba[];
+  /**
+   * Estados observados por tipo, no el catálogo de la plantilla: Azure rechaza
+   * con HTTP 400 un estado que no existe en el tipo, así que ofrecer el
+   * catálogo completo sería ofrecer transiciones que siempre fallan.
+   */
+  estados: Record<string, string[]>;
+}

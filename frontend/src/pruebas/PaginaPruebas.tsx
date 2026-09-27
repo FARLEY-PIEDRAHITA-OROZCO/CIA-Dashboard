@@ -28,7 +28,6 @@ import { EstadoTrabajo } from "../componentes/EstadoTrabajo";
 import {
   usePersonas,
   usePruebasCobertura,
-  usePruebasPlanes,
   usePruebasResumen,
   usePruebasSinCubrir,
 } from "../epicas/hooks";
@@ -46,6 +45,7 @@ import {
 import type { FiltrosPruebas } from "../navegacion";
 import { CintaCobertura } from "./CintaCobertura";
 import { construirColumnas, veredictoBrecha, veredictoSprint } from "./cobertura";
+import { ListaActivos } from "./ListaActivos";
 
 /** Espera antes de escribir el texto de persona en la URL. */
 const ESPERA_ESCRITURA_MS = 300;
@@ -63,7 +63,6 @@ export function PaginaPruebas({
 }) {
   const resumen = usePruebasResumen();
   const cobertura = usePruebasCobertura();
-  const planes = usePruebasPlanes();
   const personas = usePersonas();
 
   const hayFiltros = contarFiltros(filtro) > 0;
@@ -75,7 +74,7 @@ export function PaginaPruebas({
   );
 
   const [textoPersona, setTextoPersona] = useState(filtro.persona ?? "");
-  const [verPlanes, setVerPlanes] = useState(false);
+  const [verActivos, setVerActivos] = useState(false);
 
   const cambiar = useCallback(
     (parcial: Partial<FiltrosPruebas>) => {
@@ -377,38 +376,27 @@ export function PaginaPruebas({
             )}
           </section>
 
-          {/* ---------------- Nivel 3: planes como contexto ---------------- */}
-          <section className="panel" aria-label="Planes de prueba">
+          {/* ---------------- Nivel 3: activos editables ---------------- */}
+          <section className="panel" aria-label="Activos de prueba editables">
             <div className="banda-filtros">
               <button
                 type="button"
                 className="btn secundario small"
-                onClick={() => setVerPlanes((v) => !v)}
-                aria-expanded={verPlanes}
+                onClick={() => setVerActivos((v) => !v)}
+                aria-expanded={verActivos}
               >
-                {verPlanes ? "Ocultar" : "Ver"} los {planes.data?.length ?? 0} planes
+                {verActivos ? "Ocultar" : "Editar"} casos, suites y planes
               </button>
               <span className="texto-suave small">
-                Un plan no se puede abrir: la pertenencia de un caso a un plan no es
-                accesible. Solo sirven para saber quién lleva las pruebas de cada
-                sprint.
+                {resumen.data
+                  ? `${resumen.data.inventario.casos} casos · ${resumen.data.inventario.suites} suites · ${resumen.data.inventario.planes} planes`
+                  : ""}{" "}
+                La escritura está disponible si el backend la habilitó; si no, el
+                aviso sale dentro de cada formulario.
               </span>
             </div>
-            {verPlanes && (
-              <ul className="lista-planes">
-                {(planes.data ?? []).map((plan) => (
-                  <li key={plan.azure_id} className="plan-fila">
-                    <span className="plan-titulo">{plan.titulo}</span>
-                    <span className="hu-meta">
-                      <EstadoTrabajo estado={plan.estado} />
-                      <span className="hu-persona">{plan.persona || "sin responsable"}</span>
-                      <span className="hu-sprint" data-sin-sprint={!plan.sprint ? "true" : undefined}>
-                        {plan.sprint || "sin sprint"}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            {verActivos && (
+              <ListaActivos abierto={verActivos} sprint={columnaActiva?.nombre ?? ""} />
             )}
           </section>
         </>

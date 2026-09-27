@@ -157,6 +157,32 @@ export function usePruebasPlanes(activo = true) {
   });
 }
 
+/** Filtros de la lista de activos de prueba editables. */
+export interface FiltrosActivos {
+  tipo?: string;
+  estado?: string;
+  persona?: string;
+  sprint?: string;
+  offset?: number;
+  limite?: number;
+}
+
+/**
+ * Activos de prueba para editar, con los campos que su tipo admite.
+ *
+ * `activo=false` es el valor por defecto a propósito: son 3.931 activos y la
+ * lista no se pide hasta que alguien elige un tipo. El índice de pruebas ya
+ * está cargado para el veredicto, así que no cuesta una lectura nueva.
+ */
+export function usePruebasActivos(filtros: FiltrosActivos, activo = false) {
+  return useQuery({
+    queryKey: [...CLAVES_QUERY.pruebas("activos"), filtros],
+    queryFn: ({ signal }) => api.pruebasActivos(filtros, signal),
+    enabled: activo,
+    staleTime: 300_000,
+  });
+}
+
 export function useEstadoAzure() {
   return useQuery({
     queryKey: CLAVES_QUERY.estado,

@@ -15,6 +15,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  ActivosPrueba,
   CoberturaPruebas,
   PlanDePrueba,
   ResumenPruebas,
@@ -84,6 +85,33 @@ const PLANOS: PlanDePrueba[] = [
   },
 ];
 
+const ACTIVOS: ActivosPrueba = {
+  resumen: {
+    total: 3431,
+    offset: 0,
+    limite: 50,
+    hay_mas: true,
+    parcial: false,
+    lotes_con_error: 0,
+  },
+  items: [
+    {
+      azure_id: 5733,
+      tipo: "Test Case",
+      titulo: "Caso de ejemplo",
+      estado: "Design",
+      sprint: "Sprint 45",
+      persona: "Ana Diaz",
+      tags: "smoke",
+      prioridad: "2",
+      automatizacion: "Not Automated",
+      modificado: "2026-02-01T00:00:00Z",
+      campos_editables: ["estado", "notas_qa", "prioridad", "tags"],
+    },
+  ],
+  estados: { "Test Case": ["Design", "Ready", "Closed"] },
+};
+
 function cobertura(extra: Partial<CoberturaPruebas> = {}): CoberturaPruebas {
   const base = coberturaBase();
   return { ...base, ...extra, resumen: { ...base.resumen, ...(extra.resumen ?? {}) } };
@@ -142,6 +170,7 @@ function montar(overrides: {
   resumen?: ResumenPruebas;
   cobertura?: CoberturaPruebas;
   planes?: PlanDePrueba[];
+  activos?: ActivosPrueba;
   sinCubrir?: SinCubrir;
   fallo?: string;
   /** Hash inicial; por defecto la vista de pruebas sin filtros. */
@@ -156,6 +185,7 @@ function montar(overrides: {
     if (url.includes("/pruebas/resumen")) return overrides.resumen ?? RESUMEN;
     if (url.includes("/pruebas/cobertura")) return overrides.cobertura ?? cobertura();
     if (url.includes("/pruebas/planes")) return overrides.planes ?? PLANOS;
+    if (url.includes("/pruebas/activos")) return overrides.activos ?? ACTIVOS;
     if (url.includes("/pruebas/sin-cubrir")) return overrides.sinCubrir ?? SIN_CUBRIR;
     if (url.includes("/personas")) {
       return {
@@ -322,26 +352,35 @@ describe("cobertura parcial", () => {
   });
 });
 
-describe("planes como contexto", () => {
-  it("no se muestran hasta que se piden", async () => {
+describe("activos editables", () => {
+  it("no se piden hasta que se abre el panel", async () => {
     montar();
     await esperarVeredicto();
-    // Se piden al backend (son 44 filas, no un inventario) pero no se renderizan:
-    // la lista de historias sin caso es el segundo nivel y no compite con esto.
-    expect(screen.queryByText("Auditorias tecnicas")).toBeNull();
+    // 3.931 activos: la lista no se descarga porque sí.
+    expect(pedidas.some((r) => r.includes("/pruebas/activos"))).toBe(false);
   });
 
-  it("explica que un plan no se puede abrir", async () => {
+  it("el panel se abre bajo demanda y trae los casos", async () => {
     montar();
     await esperarVeredicto();
-    // Sin esta explicación, un plan que no abre parece un fallo de la aplicación.
-    expect(
-      screen.getByText(/la pertenencia de un caso a un plan no es accesible/),
-    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Editar casos, suites y planes/ }));
 
-    fireEvent.click(screen.getByRole("button", { name: /los 2 planes/ }));
-    expect(await screen.findByText("Auditorias tecnicas")).toBeTruthy();
-    expect(screen.getByText("Plan sin sprint")).toBeTruthy();
+    await waitFor(() => {
+      expect(pedidas.some((r) => r.includes("/pruebas/activos"))).toBe(true);
+    });
+    expect(await screen.findByText("Caso de ejemplo")).toBeTruthy();
+  });
+
+  it("explica que un plan no se puede abrir, en su pestaña", async () => {
+    montar();
+    await esperarVeredicto();
+    fireEvent.click(screen.getByRole("button", { name: /Editar casos, suites y planes/ }));
+    await screen.findByText("Caso de ejemplo");
+
+    fireEvent.click(screen.getByRole("button", { name: "Planes" }));
+    // Sin esta explicación, un plan que no abre parece un fallo de la aplicación.
+    expect(await screen.findByText(/no tiene tags, descripción ni prioridad/)).toBeTruthy();
+    expect(screen.getByText(/no es accesible por la API/)).toBeTruthy();
   });
 });
 
