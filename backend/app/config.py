@@ -113,10 +113,27 @@ class Settings(BaseSettings):
         Un vacío se devuelve como vacío y no como la raíz del backend: si
         «sin copia» se convirtiera en «copiar a /backend», el respaldo escribiría
         encima de sí mismo y nadie se enteraría.
+
+        Además **rechaza los caracteres de control**, y no por pulcritud: con
+        comillas dobles en el `.env`, python-dotenv procesa escapes, así que
+        `C:\\Users\\frlpi\\...` llega como `C:\\Users` + salto de formulario +
+        `rlpi\\...`, y `\\a` se come la letra. Una ruta así no puede existir jamás,
+        y sin este chequeo la aplicación avisaría eternamente de «la carpeta no
+        existe» sin decir por qué. La causa real (comillas dobles) se nombra en
+        el mensaje, porque es lo que hay que arreglar.
         """
         crudo = str(valor or "").strip()
         if not crudo:
             return ""
+        if any(ord(c) < 32 for c in crudo):
+            raise ValueError(
+                f"REGISTRO_COPIA_RUTA contiene caracteres de control: {crudo!r}. "
+                "Eso pasa si la ruta va entre comillas DOBLES en el .env, porque "
+                "se interpretan escapes y '\\f' se vuelve un salto de línea. "
+                "Ponla entre comillas SIMPLES: REGISTRO_COPIA_RUTA='"
+                + crudo.replace("\n", "").replace("\r", "")
+                + "'"
+            )
         ruta = Path(crudo).expanduser()
         if not ruta.is_absolute():
             ruta = RAIZ_BACKEND / ruta

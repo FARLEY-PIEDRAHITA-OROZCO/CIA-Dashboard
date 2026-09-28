@@ -309,3 +309,103 @@ class TestEndpointEstado:
         assert repo.llamadas_indice == 0
         assert repo.llamadas_indice_pruebas == 0
         assert repo.llamadas_historial == []
+
+
+# ---------------------------------------------------------------------- #
+# La trampa de las comillas dobles en el .env
+# ---------------------------------------------------------------------- #
+class TestRutaConCaracteresDeControl:
+    """Descubierto usándolo, no pensándolo.
+
+    Con comillas dobles en el `.env`, python-dotenv interpreta escapes de Python:
+    `C:\\Users\\frlpi\\...` llega como `C:\\Users` + 0x0C + `rlpi\\...`, y `\\a` se
+    come la letra. La ruta resultante **no puede existir jamás**, así que sin un
+    chequeo la aplicación avisaría eternamente de «la carpeta no existe» sin
+    decir por qué. Es un fallo invisible salvo que seorgescribas los caracteres.
+
+    `\f`, `\a`, `\t`, `\r`, `\n`, `\b`, `\v` son las secuencias que lo disparan, y
+    ninguna es exótica: `formularios`, `artefactos`, `tablas`, `riesgos`,
+    `nuevo`, `base`, `varios`.
+    """
+
+    def _settings(self, valor: str):
+        from pydantic import ValidationError
+
+        from app.config import Settings
+
+        with pytest.raises(ValidationError) as exc:
+            Settings(_env_file=None, registro_copia_ruta=valor)
+        return str(exc.value)
+
+    def test_rechaza_el_salto_de_formulario(self):
+        error = self._settings("C:\\Users\x0crlpi\\asig.json")
+        assert "caracteres de control" in error
+        # El mensaje tiene que NOMBRAR la causa, no solo el síntoma.
+        assert "SIMPLES" in error
+        assert "DOBLES" in error
+
+    def test_rechaza_todas_las_secuencias_de_escape_de_python(self):
+        # `\a` (artefactos), `\t` (tablas), `\r` (riesgos), `\n` (nuevo),
+        # `\b` (base), `\v` (varios): ninguna es exótica.
+        for etiqueta, caracter in (
+            ("pitido", "\x07"),
+            ("tabulador", "\x09"),
+            ("nueva linea", "\x0a"),
+            ("retorno", "\x0d"),
+            ("retroceso", "\x08"),
+            ("vertical", "\x0b"),
+        ):
+            error = self._settings(f"C:\\ruta{caracter}x\\asig.json")
+            assert "caracteres de control" in error, etiqueta
+
+    def test_la_cadena_entera_falla_con_comillas_dobles_y_pasa_con_simples(self):
+        """La prueba de verdad: el `.env` real, no el valor ya parseado.
+
+        Al pasar la ruta por código no hay escapes, así que una prueba que solo
+        llame a `Settings(...)` no reproduce el fallo. Hay que pasar por el
+        parseador de `.env` para ver cómo `\f` se convierte en 0x0C.
+        """
+        import io
+
+        import dotenv
+        from pydantic import ValidationError
+
+        from app.config import Settings
+
+        ruta = "C:\\Users\\frlpi\\OneDrive\\asig.json"
+        con_dobles = f'REGISTRO_COPIA_RUTA="{ruta}"\n'
+        con_simples = f"REGISTRO_COPIA_RUTA='{ruta}'\n"
+
+        # Con dobles: el parser destroza la ruta y la validación la rechaza
+        # nombrando la causa, en vez de avisar eternamente de «no existe».
+        destrozada = dotenv.dotenv_values(stream=io.StringIO(con_dobles))[
+            "REGISTRO_COPIA_RUTA"
+        ]
+        assert any(ord(c) < 32 for c in destrozada), "el fixture no reproduce el fallo"
+        with pytest.raises(ValidationError) as exc:
+            Settings(_env_file=None, registro_copia_ruta=destrozada)
+        assert "SIMPLES" in str(exc.value)
+
+        # Con simples: intacta.
+        intacta = dotenv.dotenv_values(stream=io.StringIO(con_simples))["REGISTRO_COPIA_RUTA"]
+        assert intacta == ruta
+        assert Settings(_env_file=None, registro_copia_ruta=intacta).registro_copia_ruta == ruta
+
+    def test_una_ruta_limpia_pasa(self):
+        from app.config import Settings
+
+        s = Settings(_env_file=None, registro_copia_ruta="C:\\ruta\\normal\\asig.json")
+        assert s.registro_copia_ruta == "C:\\ruta\\normal\\asig.json"
+
+    def test_una_ruta_con_espacios_y_guiones_pasa(self):
+        # El caso real: «OneDrive - Mundial de Seguros S.A» lleva espacio y punto.
+        from app.config import Settings
+
+        cruda = "C:\\Users\\frlpi\\OneDrive - Mundial de Seguros S.A\\1. Iniciativas Azure\\x.json"
+        s = Settings(_env_file=None, registro_copia_ruta=cruda)
+        assert s.registro_copia_ruta == cruda
+
+    def test_vacia_se_queda_vacia(self):
+        from app.config import Settings
+
+        assert Settings(_env_file=None, registro_copia_ruta="").registro_copia_ruta == ""
