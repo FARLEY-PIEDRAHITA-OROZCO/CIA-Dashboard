@@ -83,6 +83,8 @@ router; soporta botón atrás, enlace directo y recarga):
 | Hash | Página | Contenido |
 | ---- | ------ | --------- |
 | `#/dashboard` | `Dashboard` | KPIs + cinturones de épicas + tabla explorable |
+| `#/dashboard?qa=<guid>` | `Dashboard` | lo mismo, filtrado por responsable de pruebas |
+| `#/qa` | `PaginaQA` | quién prueba qué, con qué rol, y sugerencia de QA |
 | `#/epicas/{id}` | `PaginaEpica` | página dedicada: features + tablero completo de historias |
 | `#/epicas/{id}/tareas` | `PaginaTareas` | página dedicada: tablero de tareas del backlog |
 | `#/epicas/{id}/bugs` | `PaginaBugs` | página dedicada: KPIs, filtros y tablero de bugs |
@@ -91,7 +93,8 @@ API mínima:
 
 ```ts
 type Destino =
-  | { pagina: "dashboard" }
+  | { pagina: "dashboard"; filtro: FiltrosDashboard }
+  | { pagina: "qa" }
   | { pagina: "epica"; azureId: number }
   | { pagina: "epicaTareas"; azureId: number }
   | { pagina: "epicaBugs"; azureId: number };
@@ -99,6 +102,9 @@ irA(destino);                 // navegar programáticamente
 enlaceA(destino);             // href para <a> normal (back/forward funcionan)
 useVista(): Destino;          // hash reactivo (escucha hashchange)
 ```
+
+`#/qa` no admite filtros a propósito: la lista de personas son 35 filas en una
+sola lectura, y un desplegable escondería a 30 de ellas sin ganar nada.
 
 `App.tsx` solo decide la página y conecta la barra global; el `QueryClient` es
 global y la navegación reutiliza sus entradas cacheadas (el árbol de la épica
@@ -112,6 +118,8 @@ main.tsx
         ├── componentes/NavegacionGlobal  ← barra global (presente en todas las páginas)
         │   ├── marca → #/dashboard
         │   ├── «Épicas» → #/dashboard
+        │   ├── «Sprints» → #/sprints · «Pruebas» → #/pruebas
+        │   ├── «Equipo QA» → #/qa
         │   ├── contexto de épica (solo en vistas de detalle):
         │   │   «Historias» → #/epicas/{id}
         │   │   «Tareas»    → #/epicas/{id}/tareas
@@ -129,6 +137,7 @@ main.tsx
         │   └── TablaEpicas
         │       └── FilaEpica × n
         │           ├── EstadoTrabajo (badge)
+        │           ├── columna «Pruebas»: chips de responsables, o «sin asignar»
         │           ├── botón «Historias ↗» (va a #/epicas/{id})
         │           ├── botón «Explorar / Contraer»
         │           └── (expandida) useArbolEpica(azure_id)
@@ -137,7 +146,18 @@ main.tsx
         │                   ├── contador features · historias · tareas
         │                   ├── lista de Features (id, badge, título, descripción, nº historias)
         │                   ├── botón «Ver historias de usuario (N) ↗» -> #/epicas/{id}
-        │                   └── botón «Ver tareas de usuario (N) ↗» -> #/epicas/{id}/tareas
+        │                   ├── botón «Ver tareas de usuario (N) ↗» -> #/epicas/{id}/tareas
+        │                   ├── qa/PanelAsignacion  (asignar / quitar responsables)
+        │                   └── qa/PanelActividad   (cerrado; 1 llamada a Azure por ítem)
+        │
+        ├── #/qa -> qa/PaginaQA
+        │   ├── Kpi × 4 (personas · con rol · con épicas · sin rol)
+        │   ├── sugerencias de QA (heurística, se aceptan una a una con forzado: true)
+        │   ├── filtros por rol (chips con conteo)
+        │   └── tabla de personas: nombre · rol · épicas · días laborables · ítems
+        │       ├── interruptores QA / dev (null = no lo toques, false = quítaselo)
+        │       ├── botón «Ver épicas» -> useAsignaciones({ persona }) bajo demanda
+        │       └── qa/AsignacionesDePersona (lista, con las obsoletas marcadas)
         │
         ├── #/epicas/{id} -> epicas/PaginaEpica
         │   ├── «← Volver al backlog» (#/dashboard)

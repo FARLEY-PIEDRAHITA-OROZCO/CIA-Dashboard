@@ -1874,6 +1874,83 @@ code {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * Vista de equipo QA
+ * ------------------------------------------------------------------ */
+.panel-sugerencias {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--fondo);
+}
+
+.lista-sugerencias {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sugerencia {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.sugerencia-nombre {
+  min-width: 160px;
+  font-weight: 600;
+}
+
+.filtros-personas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.filtro-chip {
+  padding: 3px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: var(--fondo);
+  color: var(--texto-suave);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filtro-chip[aria-pressed="true"] {
+  border-color: var(--acento);
+  color: var(--acento);
+  font-weight: 600;
+}
+
+.panel-asignaciones-persona {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+}
+
+/* Una épica que ya no está en Azure. Tono apagado a propósito: el dato está
+   viejo, no estropeado, y no debe competir con las asignaciones vivas. */
+.titulo-obsoleto {
+  color: var(--texto-suave);
+  text-decoration: line-through;
+  font-size: 13px;
+}
+
 /* Lista de activos editables: el título es un botón que despliega el formulario
    debajo. Sin un botón «Editar» por fila, que con 50 filas sería 50 botones
    compitiendo con el título. */

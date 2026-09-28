@@ -1,6 +1,7 @@
 /** Rutas del frontend (navegación por hash, sin dependencias):
  * - `#/dashboard`              → lista de épicas (KPIs + tabla)
  * - `#/dashboard?qa=<guid>`    → solo las épicas asignadas a esa persona
+ * - `#/qa`                     → quién prueba qué, y con qué rol
  * - `#/epicas/{id}`            → página dedicada a las historias de la épica
  * - `#/epicas/{id}/tareas`     → tareas de la épica
  * - `#/epicas/{id}/bugs`       → bugs y métricas de la épica
@@ -48,7 +49,11 @@ export type Destino =
   // controla el revelado progresivo de la tabla de ítems.
   | { pagina: "sprints"; filtros: FiltrosSprint; hoja: number; desplegado: boolean }
   | { pagina: "pruebas"; filtro: FiltrosPruebas; hoja: number }
-  | { pagina: "analitica" };
+  | { pagina: "analitica" }
+  // La gestión del proceso de pruebas: quién prueba qué y con qué rol. Sin
+  // filtros: la lista de personas son 35 filas, una sola lectura, y filtrarla
+  // sería esconder 30 personas detrás de un desplegable sin ganar nada.
+  | { pagina: "qa" };
 
 /**
  * Filtros de la vista de pruebas.
@@ -152,6 +157,9 @@ export function parsearHash(hash: string): Destino {
   // resuelve más abajo.
   if (raiz === "dashboard" && partes.length === 1) {
     return { pagina: "dashboard", filtro: leerFiltrosDashboard(query) };
+  }
+  if (raiz === "qa" && partes.length === 1) {
+    return { pagina: "qa" };
   }
   if (raiz === "sprints" && partes.length === 1) {
     const busca = new URLSearchParams(query);
@@ -301,6 +309,8 @@ export function filtrosPruebasAQuery(filtros: FiltrosPruebas, hoja = 1): string 
 
 function aRuta(destino: Destino): string {
   switch (destino.pagina) {
+    case "qa":
+      return "#/qa";
     case "dashboard": {
       const query = filtrosDashboardAQuery(destino.filtro);
       return query === "" ? "#/dashboard" : `#/dashboard?${query}`;

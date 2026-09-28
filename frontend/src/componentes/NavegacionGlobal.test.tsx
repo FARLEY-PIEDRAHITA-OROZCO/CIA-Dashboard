@@ -79,4 +79,23 @@ describe("NavegacionGlobal", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("No se pudo actualizar: Error de red");
     expect(screen.getByRole("link", { name: "Épicas" })).toBeInTheDocument();
   });
+
+  it("ofrece el equipo QA siempre, y lo marca activo solo en su vista", () => {
+    renderizar({ vista: { pagina: "dashboard", filtro: {} } });
+    const enlace = screen.getByRole("link", { name: "Equipo QA" });
+    expect(enlace).toHaveAttribute("href", "#/qa");
+    expect(enlace).not.toHaveAttribute("aria-current");
+  });
+
+  it("en la vista de equipo QA, su enlace es el activo", () => {
+    // Prueba aparte y no segunda llamada a `renderizar`: sin `cleanup`, el
+    // segundo render deja los dos enlaces en el documento y cualquier
+    // `getByRole` encuentra el del render anterior.
+    renderizar({ vista: { pagina: "qa" } });
+    expect(screen.getByRole("link", { name: "Equipo QA" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Épicas" })).not.toHaveAttribute("aria-current");
+  });
 });

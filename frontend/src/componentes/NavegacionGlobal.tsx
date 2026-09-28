@@ -53,6 +53,11 @@ export function NavegacionGlobal({
       activo: vista.pagina === "pruebas",
     },
     {
+      etiqueta: "Equipo QA",
+      destino: { pagina: "qa" },
+      activo: vista.pagina === "qa",
+    },
+    {
       etiqueta: "Analítica QA",
       destino: { pagina: "analitica" },
       activo: vista.pagina === "analitica",

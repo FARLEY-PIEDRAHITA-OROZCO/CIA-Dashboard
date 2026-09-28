@@ -77,6 +77,16 @@ describe("parsearHash", () => {
     expect(parsearHash(enlaceA(destino))).toEqual(destino);
   });
 
+  it("la vista de equipo QA no tiene filtros que perder", () => {
+    expect(parsearHash("#/qa")).toEqual({ pagina: "qa" });
+    expect(enlaceA({ pagina: "qa" })).toBe("#/qa");
+    // Un segmento de más degrada, como en las demás rutas.
+    expect(parsearHash("#/qa/extra")).toEqual({ pagina: "dashboard", filtro: {} });
+    // Una query suelta no se acepta: no hay nada que filtrar ahí y aceptarla
+    // daría la impresión de que el filtro se aplicó.
+    expect(parsearHash("#/qa?persona=g-ana")).toEqual({ pagina: "qa" });
+  });
+
   it("mapea la página de pruebas, sin filtros y con ellos", () => {
     expect(parsearHash("#/pruebas")).toEqual({ pagina: "pruebas", filtro: {}, hoja: 1 });
     expect(parsearHash("#/pruebas?sprint=Proyecto%5CSprint%2045&pagina=3")).toEqual({
