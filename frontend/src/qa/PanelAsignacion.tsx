@@ -30,6 +30,7 @@ import type { AsignacionQA, PersonaQA } from "../api/tipos";
 import { ApiError } from "../api/cliente";
 import { irA } from "../navegacion";
 import { useAsignaciones, useAsignar, usePersonasQA, useQuitarAsignacion } from "./hooks";
+import { AvisoRegistro } from "./AvisoRegistro";
 
 /** Fecha local de hoy en formato `YYYY-MM-DD`, sin pasar por UTC.
  *
@@ -235,12 +236,7 @@ export function PanelAsignacion({ epica, titulo }: { epica: number; titulo: stri
         </div>
       )}
 
-      <p className="texto-suave small nota-actividad">
-        Se guarda en <code>backend/datos/asignaciones.json</code>, que está{" "}
-        <strong>rastreado en git</strong> porque es el único sitio donde existe esta
-        información. Hay que hacer <code>git commit</code> tras cada cambio o se
-        pierde al cambiar de rama.
-      </p>
+      <AvisoRegistro />
     </section>
   );
 }

@@ -39,6 +39,7 @@ import {
   useSugerenciasQA,
 } from "./hooks";
 import { AsignacionesDePersona } from "./AsignacionesDePersona";
+import { AvisoRegistro } from "./AvisoRegistro";
 
 function explicacion(error: unknown): string {
   if (error instanceof ApiError) {
@@ -272,11 +273,7 @@ export default function PaginaQA() {
         </section>
       )}
 
-      <p className="texto-suave small nota-actividad">
-        Se guarda en <code>backend/datos/asignaciones.json</code>,{" "}
-        <strong>rastreado en git</strong> por ser el único sitio donde existe esta
-        información. Hay que hacer <code>git commit</code> tras cada cambio.
-      </p>
+      <AvisoRegistro />
     </div>
   );
 }

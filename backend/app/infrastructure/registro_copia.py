@@ -71,7 +71,15 @@ class RegistroConCopia(RegistroAsignacionesPort):
         un `aviso`: ese es el estado que hay que ver, no un `true` optimista.
         """
         destino = str(self._destino) if self._destino else ""
-        activo = bool(self._destino) and not self.ultimo_error
+        # `activo` exige las **tres** cosas, y no solo que no haya error: un
+        # destino configurado al que todavia no se le ha escrito nada no es una
+        # copia activa. Sin el tercer requisito, arrancar con la ruta puesta y
+        # la carpeta inexistente devolvia `activo: true` junto a un aviso que decia
+        # «la carpeta no existe» — dos senales que se contradicen, y la que se lee
+        # en un panel es justo la que da falsa confianza.
+        # (Encontrado probando contra el contenedor real, no en las unitarias:
+        # estas siempre guardaban antes de mirar el estado.)
+        activo = bool(self._destino) and not self.ultimo_error and bool(self.ultima_copia)
         if not self._destino:
             aviso = (
                 "No hay copia de seguridad configurada. Si este equipo se "

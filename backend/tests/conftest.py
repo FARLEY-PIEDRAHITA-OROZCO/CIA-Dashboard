@@ -1,6 +1,7 @@
 """Fixtures y dobles compartidos por las pruebas del backend."""
 
 from typing import Dict, List, Optional, Set, Tuple
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,6 +28,7 @@ from app.domain.models import (
 )
 from app.domain.ports import RegistroAsignacionesPort
 from app.infrastructure.azure.transport import AzureError
+from app.infrastructure.registro_copia import RegistroConCopia
 from app.infrastructure.registro_json import RegistroModificado
 from app.main import crear_app
 
@@ -376,6 +378,10 @@ def contenedor_con(
         indice=indice,
         indice_pruebas=indice_pruebas,
         registro_principal=registro_real,
+        # Sin destino: el decorador es un passthrough exacto y las pruebas del
+        # registro se centran en el servicio, no en la copia. La copia tiene sus
+        # propias pruebas, con ficheros de verdad, en `test_registro_copia.py`.
+        registro_copia=RegistroConCopia(registro_real, Path("datos/asignaciones.json"), None),
         servicio_registro=ServicioRegistro(registro_real, indice, indice_pruebas),
         # ttl_seg=0 como la caché del servicio: la actividad no debe sobrevivir
         # entre pruebas. El árbol sí lo aporta el servicio (mismo `cache`).

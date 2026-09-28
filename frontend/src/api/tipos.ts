@@ -473,6 +473,23 @@ export interface CargaQA {
   asignaciones: AsignacionQA[];
 }
 
+/** Dónde vive el registro local y si su copia de seguridad funciona.
+ *
+ * Existe para una sola cosa: que la interfaz **no se invente** el mensaje.
+ * `copia_activa` es `true` solo si hay destino configurado **y** la última copia
+ * se pudo escribir; con el destino puesto pero inaccesible es `false` y `aviso`
+ * viene informado.
+ */
+export interface EstadoRegistro {
+  ruta: string;
+  copia_configurada: boolean;
+  copia_ruta: string;
+  copia_activa: boolean;
+  ultima_copia: string;
+  /** Texto listo para mostrar. Vacío cuando todo va bien: la copia no molesta. */
+  aviso: string;
+}
+
 // ------------------------------------------------------------------ //
 // Actividad por épica
 //

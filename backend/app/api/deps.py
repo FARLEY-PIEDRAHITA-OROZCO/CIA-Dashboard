@@ -10,6 +10,7 @@ from ..application.indice_pruebas import IndicePruebas
 from ..application.registro import ServicioRegistro
 from ..application.services import ServicioBacklog
 from ..core.container import Contenedor
+from ..infrastructure.registro_copia import RegistroConCopia
 
 
 def obtener_contenedor(request: Request) -> Contenedor:
@@ -42,8 +43,22 @@ def obtener_actividad(
     return contenedor.actividad
 
 
+def obtener_registro_copia(
+    contenedor: Annotated[Contenedor, Depends(obtener_contenedor)]
+) -> RegistroConCopia:
+    """El decorador de copia, no el puerto.
+
+    Vive aparte de `RegistroDep` a propósito: `RegistroAsignacionesPort` es un
+    contrato de persistencia y no tiene nada que decir de dónde se guarda. El
+    estado del almacenamiento es información del adaptador concreto, y es el
+    frontend quien lo necesita para no inventarse un mensaje sobre el respaldo.
+    """
+    return contenedor.registro_copia
+
+
 ServicioDep = Annotated[ServicioBacklog, Depends(obtener_servicio)]
 IndiceDep = Annotated[IndiceWorkItems, Depends(obtener_indice)]
 IndicePruebasDep = Annotated[IndicePruebas, Depends(obtener_indice_pruebas)]
 RegistroDep = Annotated[ServicioRegistro, Depends(obtener_registro)]
 ActividadDep = Annotated[ServicioActividad, Depends(obtener_actividad)]
+RegistroCopiaDep = Annotated[RegistroConCopia, Depends(obtener_registro_copia)]

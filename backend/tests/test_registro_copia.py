@@ -23,6 +23,7 @@ import pytest
 from app.domain.models import Asignacion, Instantanea, PerfilPersona
 from app.infrastructure.registro_copia import RegistroConCopia
 from app.infrastructure.registro_json import RegistroJson
+from tests.conftest import FakeRepositorio
 
 
 def _instancia(epica: int = 1) -> Instantanea:
@@ -131,6 +132,24 @@ class TestConDestino:
         assert estado["aviso"] == ""
         assert estado["ultima_copia"] != ""
 
+    def test_destino_configurado_sin_escribir_nada_no_es_copia_activa(self, tmp_path):
+        """El caso que solo aparece con el contenedor real.
+
+        Con la ruta puesta pero **sin haber guardado nada todavía** — que es como
+        arranca el backend — el estado devolvia `copia_activa: true` junto a un
+        aviso de «la carpeta no existe». Dos señales contrarias en la misma
+        respuesta, y la que se pinta en un panel es justo la que da falsa
+        confianza. Las unitarias no lo veian porque siempre guardaban antes de
+        mirar el estado.
+        """
+        destino = tmp_path / "no-existe" / "asignaciones.json"
+        registro, _, _ = _montar(tmp_path, destino)
+        estado = registro.estado()
+        assert estado["copia_configurada"] is True
+        assert estado["copia_activa"] is False
+        assert estado["ultima_copia"] == ""
+        assert "no existe" in estado["aviso"]
+
 
 # ---------------------------------------------------------------------- #
 # El fallo que motiva todo esto
@@ -236,3 +255,57 @@ class TestRestauracion:
         await registro.leer()
         # La copia NO ha pisado el registro: quien manda es el registro.
         assert json.loads(origen.read_text())["asignaciones"][0]["epica"] == 1
+
+
+# ---------------------------------------------------------------------- #
+# El endpoint que impide que la UI vuelva a mentir
+# ---------------------------------------------------------------------- #
+class TestEndpointEstado:
+    """`GET /api/qa/registro` existe para una sola cosa: que el frontend no diga
+    «haz git commit» cuando el registro ya no está en git.
+
+    Un aviso que miente es peor que ningún aviso, porque el usuario actúa sobre
+    él: si la pantalla dice que el dato está respaldado y no lo está, nadie va a
+    mirar más ese panel.
+    """
+
+    def _cliente(self):
+        from fastapi.testclient import TestClient
+
+        from app.main import crear_app
+        from tests.conftest import contenedor_con
+
+        return TestClient(crear_app(contenedor_con(FakeRepositorio())))
+
+    def test_sin_copia_avisa_con_el_riesgo_real(self):
+        r = self._cliente().get("/api/qa/registro")
+        assert r.status_code == 200
+        datos = r.json()
+        assert datos["copia_configurada"] is False
+        assert datos["copia_activa"] is False
+        # El aviso tiene que nombrar la consecuencia, no solo la ausencia.
+        assert "se pierde" in datos["aviso"]
+        assert datos["ruta"].endswith("asignaciones.json")
+
+    def test_no_afirma_respaldo_si_no_esta_configurado(self):
+        """Con el destino vacío, `copia_activa: true` sería la forma más
+        elegante de seguir mintiendo."""
+        datos = self._cliente().get("/api/qa/registro").json()
+        assert datos["copia_activa"] is False
+        assert datos["copia_ruta"] == ""
+        assert datos["ultima_copia"] == ""
+
+    def test_no_toca_azure_ni_el_registro(self):
+        """Es solo estado de almacenamiento: no lee asignaciones ni llama a nada."""
+        repo = FakeRepositorio()
+
+        from fastapi.testclient import TestClient
+
+        from app.main import crear_app
+        from tests.conftest import contenedor_con
+
+        cliente = TestClient(crear_app(contenedor_con(repo)))
+        cliente.get("/api/qa/registro")
+        assert repo.llamadas_indice == 0
+        assert repo.llamadas_indice_pruebas == 0
+        assert repo.llamadas_historial == []

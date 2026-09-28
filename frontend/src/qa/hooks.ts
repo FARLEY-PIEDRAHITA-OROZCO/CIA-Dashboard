@@ -28,6 +28,7 @@ export const CLAVES_QA = {
   sugerencias: (minimo: number) => ["qa", "sugerencias", minimo] as const,
   asignaciones: (filtros: FiltrosAsignaciones) => ["qa", "asignaciones", filtros] as const,
   carga: ["qa", "carga"] as const,
+  registro: ["qa", "registro"] as const,
   actividad: (epica: number) => ["qa", "actividad", epica] as const,
 };
 
@@ -80,6 +81,23 @@ export function useCargaQA(activo = true) {
     queryFn: ({ signal }) => api.qaCarga(signal),
     enabled: activo,
     staleTime: 300_000,
+  });
+}
+
+/**
+ * Dónde vive el registro y si su copia funciona.
+ *
+ * TTL largo a propósito: el estado del almacenamiento cambia muy rare vez (solo
+ * al reiniciar el backend o al tocar la configuración), así que no tiene
+ * sentido repreguntarlo. Cuando cambia, «Actualizar» en la barra lo invalida
+ * junto con lo demás.
+ */
+export function useEstadoRegistro(activo = true) {
+  return useQuery({
+    queryKey: CLAVES_QA.registro,
+    queryFn: ({ signal }) => api.qaEstadoRegistro(signal),
+    enabled: activo,
+    staleTime: 900_000,
   });
 }
 

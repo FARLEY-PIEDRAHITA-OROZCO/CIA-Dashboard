@@ -45,6 +45,7 @@ class Contenedor:
     indice: IndiceWorkItems
     indice_pruebas: IndicePruebas
     registro_principal: RegistroAsignacionesPort
+    registro_copia: RegistroConCopia
     servicio_registro: ServicioRegistro
     actividad: ServicioActividad
     escritura: Optional[EscrituraBacklogPort] = None
@@ -165,6 +166,7 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
         indice=indice,
         indice_pruebas=indice_pruebas,
         registro_principal=registro_principal,
+        registro_copia=registro_con_copia,
         servicio_registro=servicio_registro,
         actividad=actividad,
         escritura=escritura,

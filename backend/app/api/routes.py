@@ -8,7 +8,14 @@ from fastapi import APIRouter, HTTPException, Path, Query
 from ..application.services import ServicioBacklog
 from ..domain.models import Epic
 from ..infrastructure.azure.transport import AzureError
-from .deps import ActividadDep, IndiceDep, IndicePruebasDep, RegistroDep, ServicioDep
+from .deps import (  # noqa: I001
+    ActividadDep,
+    IndiceDep,
+    IndicePruebasDep,
+    RegistroCopiaDep,
+    RegistroDep,
+    ServicioDep,
+)
 from .schemas import (
     ActividadEpicaOut,
     ActivosPrueba,
@@ -20,6 +27,7 @@ from .schemas import (
     DetalleBugs,
     EpicaResumen,
     EstadoAzure,
+    EstadoRegistroOut,
     Health,
     ItemIndiceOut,
     ListaAsignaciones,
@@ -771,6 +779,23 @@ async def api_actividad_epica(
         por_tipo=datos.por_tipo,
         nota=datos.nota,
     )
+
+
+# ---------------------------------------------------------------------- #
+# Estado del almacenamiento del registro
+# ---------------------------------------------------------------------- #
+@router.get(f"{QA}/registro", response_model=EstadoRegistroOut, tags=["QA"])
+async def api_qa_registro(
+    registro: RegistroCopiaDep,
+) -> EstadoRegistroOut:
+    """Dónde vive el registro de pruebas y si su copia de seguridad funciona.
+
+    Solo lectura del estado: no lee asignaciones, no llama a Azure y no falla
+    aunque el registro esté corrupto — que eso lo dice `GET /api/qa/asignaciones`.
+    Existe para que la interfaz no tenga que hardcodear «está en git», que fue
+    verdad y dejó de serlo.
+    """
+    return EstadoRegistroOut(**registro.estado())
 
 
 # ---------------------------------------------------------------------- #

@@ -8,6 +8,7 @@ import type {
   AutomatizacionPruebas,
   CampoEditable,
   CargaQA,
+  EstadoRegistro,
   FiltrosAsignaciones,
   ListaAsignaciones,
   ListaPersonasQA,
@@ -741,6 +742,18 @@ function validarCargaQA(valor: unknown): CargaQA {
   };
 }
 
+function validarEstadoRegistro(valor: unknown): EstadoRegistro {
+  const item = objeto(valor, "estado del registro");
+  return {
+    ruta: texto(item.ruta ?? "", "registro.ruta"),
+    copia_configurada: booleano(item.copia_configurada, "registro.copia_configurada"),
+    copia_ruta: texto(item.copia_ruta ?? "", "registro.copia_ruta"),
+    copia_activa: booleano(item.copia_activa, "registro.copia_activa"),
+    ultima_copia: texto(item.ultima_copia ?? "", "registro.ultima_copia"),
+    aviso: texto(item.aviso ?? "", "registro.aviso"),
+  };
+}
+
 function validarRevisionPorPersona(valor: unknown): RevisionPorPersona {
   const item = objeto(valor, "revisión por persona");
   return {
@@ -992,6 +1005,16 @@ export const api = {
 
   qaCarga: async (signal?: AbortSignal) =>
     lista(await peticion<unknown>("/qa/carga", { signal }), "carga", validarCargaQA),
+
+  /**
+   * Estado del almacenamiento del registro: dónde vive y si tiene respaldo.
+   *
+   * Se pide una vez al montar los paneles de pruebas. Si no está, la interfaz
+   * tendría que hardcodear el mensaje, y ese mensaje es justo lo que cambia con
+   * la configuración — fue «haz git commit» y dejó de ser cierto.
+   */
+  qaEstadoRegistro: async (signal?: AbortSignal) =>
+    validarEstadoRegistro(await peticion<unknown>("/qa/registro", { signal })),
 
   /**
    * Actividad registrada de una épica.

@@ -329,16 +329,60 @@ describe("fallos, uno por código", () => {
 });
 
 describe("el aviso que no es opcional", () => {
-  it("dice que el registro está en git y hay que commitear", async () => {
+  const CON_COPIA = {
+    ruta: "C:\\datos\\asignaciones.json",
+    copia_configurada: true,
+    copia_ruta: "D:\\respaldo\\asignaciones.json",
+    copia_activa: true,
+    ultima_copia: "2026-09-28T10:00:00Z",
+    aviso: "",
+  };
+  const SIN_COPIA = { ...CON_COPIA, copia_configurada: false, copia_ruta: "", copia_activa: false,
+    aviso: "No hay copia de seguridad configurada." };
+
+  it("pregunta al backend dónde está el dato, y no lo inventa", async () => {
+    montar();
+    await esperarAsignaciones("Ana Diaz");
+    await waitFor(() => {
+      expect(peticiones.some((p) => p.url.includes("/api/qa/registro"))).toBe(true);
+    });
+  });
+
+  it("no vuelve a decir «haz git commit»: el registro ya no está en git", async () => {
+    // Este texto era verdad cuando el fichero estaba versionado. Mantenerlo
+    // sería una pantalla que miente: quien lo leyera dejaría de comprobar la
+    // copia por confiar en un aviso falso.
     montar();
     await esperarAsignaciones("Ana Diaz");
     const texto = panel().textContent ?? "";
-    expect(texto).toMatch(/rastreado en git/i);
-    expect(texto).toMatch(/git commit/);
+    expect(texto).not.toMatch(/git commit/i);
+    expect(texto).not.toMatch(/rastreado en git/i);
+  });
+
+  it("con la copia funcionando es silencioso y solo dice dónde está", async () => {
+    montar((url) =>
+      url.includes("/api/qa/registro")
+        ? { estado: 200, cuerpo: CON_COPIA }
+        : { estado: 200, cuerpo: { ...LISTA_VACIA, asignaciones: [ASIGNACION], total: 1 } },
+    );
+    await esperarAsignaciones("Ana Diaz");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("muestra lo que dice el backend cuando no hay respaldo", async () => {
+    montar((url) => {
+      if (url.includes("/api/qa/registro")) return { estado: 200, cuerpo: SIN_COPIA };
+      if (url.includes("/api/qa/asignaciones")) return { estado: 200, cuerpo: LISTA_VACIA };
+      return { estado: 200, cuerpo: PERSONAS };
+    });
+    await esperarAsignaciones("nadie asignado");
+    expect(await screen.findByText(/no tienen copia de seguridad/i)).toBeTruthy();
   });
 
   it("un alta hoy se dice «hoy», no «hace 0 días»", async () => {
     montar((url) => {
+      if (url.includes("/api/qa/registro")) return { estado: 200, cuerpo: CON_COPIA };
       if (url.includes("/api/qa/asignaciones"))
         return {
           estado: 200,

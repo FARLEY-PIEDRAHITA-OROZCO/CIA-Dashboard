@@ -510,6 +510,29 @@ class ActividadEpicaOut(BaseModel):
     nota: str = ""
 
 
+class EstadoRegistroOut(BaseModel):
+    """Dónde vive el registro y si tiene respaldo.
+
+    Existe para que la interfaz **no se invente** el mensaje. Antes decía «haz
+    `git commit`» porque eso era cierto; ahora que el registro no está en git,
+    decirlo sería mentira, y un aviso que miente es peor que ninguno.
+
+    `copia_activa` es `true` solo si hay destino configurado **y** la última
+    copia se pudo escribir. Con el destino puesto pero inaccesible es `false` y
+    `aviso` viene informado: ese es el estado que hay que ver, no un `true`
+    optimista.
+    """
+
+    ruta: str
+    copia_configurada: bool = False
+    copia_ruta: str = ""
+    copia_activa: bool = False
+    ultima_copia: str = ""
+    #: Texto listo para mostrar. Vacío cuando todo está bien: la copia no molesta
+    #: si funciona.
+    aviso: str = ""
+
+
 class ResultadoEscritura(BaseModel):
     """Resultado de una escritura de QA (o de su validación en seco)."""
 

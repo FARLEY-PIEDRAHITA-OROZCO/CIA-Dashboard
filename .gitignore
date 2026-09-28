@@ -23,3 +23,15 @@ frontend/.vite/
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Registro local de pruebas: DATOS, no código.
+#
+# Es el único sitio donde existe la información de qué épica lleva cada persona, y
+# por eso necesita respaldo — pero no un commit por cada cambio. La copia se
+# configura con REGISTRO_COPIA_RUTA en el .env, y su estado se ve en
+# `GET /api/qa/registro`. Ignorar solo el JSON, no la carpeta entera, para que el
+# README siga versionado: un `git clean -fd` (sin -x) tampoco lo borra, porque un
+# fichero ignorado no lo toca.
+backend/datos/*.json
+backend/datos/*.json.*.tmp
+backend/datos/*.tmp

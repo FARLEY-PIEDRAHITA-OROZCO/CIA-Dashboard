@@ -337,10 +337,39 @@ describe("lo que la vista no inventa", () => {
     expect(document.body.textContent ?? "").not.toMatch(/\bhoras?\b/i);
   });
 
-  it("avisa de que hay que commitear el registro", async () => {
+  it("avisa del estado del registro, sin hardcodear git", async () => {
+    // Reescrito a propósito. La versión anterior de esta prueba exigía que la
+    // pantalla dijera «rastreado en git» y «git commit», y era la prueba que
+    // habría mantenido viva la mentira después de sacar el registro de git: un
+    // test verde sobre un hecho que ya no es cierto.
     montar();
     await screen.findByText("Ana Diaz");
-    expect(document.body.textContent).toMatch(/rastreado en git/i);
+    await waitFor(() => {
+      expect(pedidas.some((x) => x.url.includes("/api/qa/registro"))).toBe(true);
+    });
+    const texto = document.body.textContent ?? "";
+    expect(texto).not.toMatch(/rastreado en git/i);
+    expect(texto).not.toMatch(/git commit/i);
+  });
+
+  it("si no hay respaldo, la vista lo dice con el texto del backend", async () => {
+    montar((url) => {
+      if (url.includes("/api/qa/registro"))
+        return {
+          estado: 200,
+          cuerpo: {
+            ruta: "C:\\datos\\asignaciones.json",
+            copia_configurada: false,
+            copia_ruta: "",
+            copia_activa: false,
+            ultima_copia: "",
+            aviso: "No hay copia de seguridad configurada. Si este equipo se reinstala, se pierden.",
+          },
+        };
+      return POR_DEFECTO(url, "GET");
+    });
+    await screen.findByText("Ana Diaz");
+    expect(await screen.findByText(/no tienen copia de seguridad/i)).toBeTruthy();
   });
 
   it("con nadie marcado lo dice con un tono de aviso, no con un cero mudo", async () => {
