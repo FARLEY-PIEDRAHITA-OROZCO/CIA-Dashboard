@@ -133,15 +133,7 @@ class TestConDestino:
         assert estado["ultima_copia"] != ""
 
     def test_destino_configurado_sin_escribir_nada_no_es_copia_activa(self, tmp_path):
-        """El caso que solo aparece con el contenedor real.
-
-        Con la ruta puesta pero **sin haber guardado nada todavía** — que es como
-        arranca el backend — el estado devolvia `copia_activa: true` junto a un
-        aviso de «la carpeta no existe». Dos señales contrarias en la misma
-        respuesta, y la que se pinta en un panel es justo la que da falsa
-        confianza. Las unitarias no lo veian porque siempre guardaban antes de
-        mirar el estado.
-        """
+        """Carpeta de destino INEXISTENTE: no se puede escribir, hay que decirlo."""
         destino = tmp_path / "no-existe" / "asignaciones.json"
         registro, _, _ = _montar(tmp_path, destino)
         estado = registro.estado()
@@ -149,6 +141,32 @@ class TestConDestino:
         assert estado["copia_activa"] is False
         assert estado["ultima_copia"] == ""
         assert "no existe" in estado["aviso"]
+
+    def test_arranque_en_fresco_con_carpeta_valida_no_pinta_alarma_falsa(self, tmp_path):
+        """El caso que un proceso recién arrancado produce siempre.
+
+        `ultima_copia` vive en memoria, así que en el primer arranque está vacío.
+        Si `copia_activa` exigiera una copia escrita, el panel se pondría en rojo
+        diciendo que el respaldo no funciona con un aviso vacío: una alarma falsa
+        que entrena a ignorar las alarmas. Con la carpeta ahí, el destino está
+        disponible y eso es lo que se informa.
+        """
+        destino = tmp_path / "respaldo" / "asignaciones.json"
+        destino.parent.mkdir(parents=True)
+        registro, _, _ = _montar(tmp_path, destino)
+
+        estado = registro.estado()
+        assert estado["copia_configurada"] is True
+        assert estado["copia_activa"] is True, "la carpeta existe: el destino está disponible"
+        assert estado["aviso"] == "", "una alarma sin explicación es peor que ninguna"
+        assert estado["ultima_copia"] == "", "pero sí se dice que aún no se ha copiado"
+
+    def test_sin_destino_no_da_alarma_roja_pero_sí_aviso(self, tmp_path):
+        """Sin destino no hay respaldo, y eso es un riesgo que hay que nombrar."""
+        registro, _, _ = _montar(tmp_path, None)
+        estado = registro.estado()
+        assert estado["copia_activa"] is False
+        assert estado["aviso"] != ""
 
 
 # ---------------------------------------------------------------------- #

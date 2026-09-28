@@ -71,15 +71,20 @@ class RegistroConCopia(RegistroAsignacionesPort):
         un `aviso`: ese es el estado que hay que ver, no un `true` optimista.
         """
         destino = str(self._destino) if self._destino else ""
-        # `activo` exige las **tres** cosas, y no solo que no haya error: un
-        # destino configurado al que todavia no se le ha escrito nada no es una
-        # copia activa. Sin el tercer requisito, arrancar con la ruta puesta y
-        # la carpeta inexistente devolvia `activo: true` junto a un aviso que decia
-        # «la carpeta no existe» — dos senales que se contradicen, y la que se lee
-        # en un panel es justo la que da falsa confianza.
-        # (Encontrado probando contra el contenedor real, no en las unitarias:
-        # estas siempre guardaban antes de mirar el estado.)
-        activo = bool(self._destino) and not self.ultimo_error and bool(self.ultima_copia)
+        # `activo` NO exige que ya se haya escrito una copia, porque eso hacia
+        # falta justo cuando se consulta: en un proceso recien arrancado
+        # `ultima_copia` esta vacio en memoria, y el panel se ponia en rojo
+        # diciendo que el respaldo no funcionaba con un aviso vacio. Una alarma
+        # falsa entrena a ignorar las alarmas.
+        #
+        # Lo que decide es si el destino esta realmente disponible: configurado
+        # y sin fallo previo, mas «ya se copio» o «la carpeta existe». Si la
+        # carpeta no existe, no se puede escribir y hay que decirlo. Si existe
+        # pero luego falla al escribir, el error se registra y lo dice el aviso.
+        disponible = bool(self.ultima_copia) or (
+            self._destino is not None and self._destino.parent.is_dir()
+        )
+        activo = bool(self._destino) and not self.ultimo_error and disponible
         if not self._destino:
             aviso = (
                 "No hay copia de seguridad configurada. Si este equipo se "
