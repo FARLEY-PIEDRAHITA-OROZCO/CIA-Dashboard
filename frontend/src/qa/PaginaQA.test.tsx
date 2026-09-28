@@ -254,10 +254,16 @@ describe("marcar el rol", () => {
 });
 
 describe("la sugerencia de QA", () => {
+  /** Despliega las sugerencias, que desde la Fase 2 vienen plegadas. */
+  const desplegar = async () => {
+    fireEvent.click(await screen.findByRole("button", { name: /Ver sugerencias de QA/i }));
+  };
+
   it("se ofrece solo quien no está ya marcado", async () => {
     montar();
     await screen.findByText("Ana Diaz");
-    const zona = screen.getByRole("region", { name: /Sugerencias/ });
+    await desplegar();
+    const zona = await screen.findByRole("region", { name: /Sugerencias/ });
     expect(zona.textContent).toContain("Kar Perez");
     // Ana aparece en la sugerencia con ya_es_qa=true y no debe salir: repetirla
     // hace dudar de la pantalla entera.
@@ -268,7 +274,8 @@ describe("la sugerencia de QA", () => {
   it("aceptarla marca QA con forzado: true", async () => {
     montar();
     await screen.findByText("Ana Diaz");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar como QA" }));
+    await desplegar();
+    fireEvent.click(await screen.findByRole("button", { name: "Marcar como QA" }));
     await waitFor(() => {
       const put = pedidas.find((x) => x.metodo === "PUT");
       // `forzado: true` es lo que deja claro que la decisión fue humana y no
@@ -280,7 +287,8 @@ describe("la sugerencia de QA", () => {
   it("dice que es una heurística, no un dato", async () => {
     montar();
     await screen.findByText("Ana Diaz");
-    const zona = screen.getByRole("region", { name: /Sugerencias/ });
+    await desplegar();
+    const zona = await screen.findByRole("region", { name: /Sugerencias/ });
     expect(zona.textContent).toMatch(/heurística/);
     expect(zona.textContent).toMatch(/decisión es tuya/);
   });
@@ -370,6 +378,47 @@ describe("lo que la vista no inventa", () => {
     });
     await screen.findByText("Ana Diaz");
     expect(await screen.findByText(/no tienen copia de seguridad/i)).toBeTruthy();
+  });
+
+  it("las sugerencias NO se piden al abrir la vista", async () => {
+    // Es el ahorro de la Fase 2: el índice de pruebas son 18 lotes y ~5,5 s en
+    // frío, y son una sección secundaria. Pedirlas al abrir `#/qa` hacía que esa
+    // vista costara lo mismo que `#/pruebas` para quien solo quería el reparto.
+    montar();
+    await screen.findByText("Ana Diaz");
+    expect(pedidas.some((x) => x.url.includes("/api/qa/sugerencia-qa"))).toBe(false);
+    expect(screen.getByRole("button", { name: /Ver sugerencias de QA/i })).toBeTruthy();
+  });
+
+  it("al pedirlas, se piden y se muestran", async () => {
+    montar();
+    await screen.findByText("Ana Diaz");
+    fireEvent.click(screen.getByRole("button", { name: /Ver sugerencias de QA/i }));
+    await waitFor(() => {
+      expect(pedidas.some((x) => x.url.includes("/api/qa/sugerencia-qa"))).toBe(true);
+    });
+    expect(await screen.findByText(/parece(n)? hacer QA/i)).toBeTruthy();
+  });
+
+  it("una vez pedidas, no se vuelven a pedir al volver a la vista", async () => {
+    // React Query las guarda: volver a `#/qa` no repite los 18 lotes.
+    montar();
+    await screen.findByText("Ana Diaz");
+    fireEvent.click(screen.getByRole("button", { name: /Ver sugerencias de QA/i }));
+    await waitFor(() => {
+      expect(pedidas.some((x) => x.url.includes("/api/qa/sugerencia-qa"))).toBe(true);
+    });
+    const antes = pedidas.filter((x) => x.url.includes("/api/qa/sugerencia-qa")).length;
+    // Cerrar y volver a montar con el mismo cliente simula volver a la vista.
+    cleanup();
+    montar();
+    await screen.findByText("Ana Diaz");
+    fireEvent.click(screen.getByRole("button", { name: /Ver sugerencias de QA/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/parece(n)? hacer QA/i).textContent).toBeTruthy();
+    });
+    const despues = pedidas.filter((x) => x.url.includes("/api/qa/sugerencia-qa")).length;
+    expect(despues).toBe(antes);
   });
 
   it("con nadie marcado lo dice con un tono de aviso, no con un cero mudo", async () => {

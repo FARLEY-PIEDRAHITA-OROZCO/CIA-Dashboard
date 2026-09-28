@@ -63,7 +63,13 @@ export default function PaginaQA() {
   const [aceptada, setAceptada] = useState<string | null>(null);
 
   const personas = usePersonasQA(true);
-  const sugerencias = useSugerenciasQA(true, 3);
+  // Plegadas por defecto a propósito: necesitan el **índice de pruebas** entero
+  // (3.932 activos, 18 lotes, ~5,5 s en frío) y son una sección secundaria de la
+  // página. Pedirlas al abrir `#/qa` hacía que esa vista costara lo mismo que
+  // `#/pruebas` para quien solo quería ver el reparto de roles. Es revelado
+  // progresivo, igual que la tabla de ítems de la vista de sprints.
+  const [verSugerencias, setVerSugerencias] = useState(false);
+  const sugerencias = useSugerenciasQA(verSugerencias, 3);
   const marcar = useMarcarRolQA();
   const quitar = useQuitarAsignacion();
   // Solo se pide la lista de la persona abierta: son ~264 filas en total y este
@@ -142,7 +148,15 @@ export default function PaginaQA() {
         </div>
       )}
 
-      {sugerencia.total > 0 && (
+      {!verSugerencias ? (
+        <button
+          type="button"
+          className="btn secundario"
+          onClick={() => setVerSugerencias(true)}
+        >
+          Ver sugerencias de QA
+        </button>
+      ) : sugerencia.total > 0 ? (
         <section className="panelSugerencias" aria-label="Sugerencias de rol QA">
           <h2 className="actividad-subtitulo">
             {sugerencia.total === 1
@@ -189,6 +203,10 @@ export default function PaginaQA() {
             ))}
           </ul>
         </section>
+      ) : (
+        // Sin sugerencias no se dice «0 personas parece hacer QA»: es un dato
+        // que no aporta nada y ocupa el sitio del botón que sí hace algo.
+        <p className="texto-suave small">Nadie parece hacer QA por volumen de activos.</p>
       )}
 
       <div className="filtros-personas" role="group" aria-label="Filtrar por rol">
