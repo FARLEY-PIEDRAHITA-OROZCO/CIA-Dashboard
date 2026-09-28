@@ -331,28 +331,35 @@ class IndiceWorkItems:
         Azure guarda un único sprint por ítem (el actual), así que el trabajo
         que se quedó atrás queda oculto en el board. Ordenando los sprints por
         número, aquí se expone qué deuda arrastra cada sprint.
+
+        Se hace en **una** pasada sobre el índice, no una por sprint: antes se
+        llamaba a `filtrar()` dentro del bucle, y con 37 sprints eran 37
+        escaneos completos de los 5.651 ítems para obtener lo mismo que da un
+        solo recorrido agrupando por sprint.
         """
         catalogo = await self.sprints()
         if not catalogo:
             return {"resumen": {"sprints": 0, "rezagados": 0, "generado": ""}, "sprints": []}
         # El sprint más avanzado es la referencia: lo anterior es histórico.
         referencia = catalogo[-1]["nombre"]
-        rezagados_por_sprint: dict[str, list[ItemIndice]] = {}
-        for sprint in catalogo[:-1]:
-            pendientes = [
-                item
-                for item in await self.filtrar(sprint=sprint["ruta"], solo_abiertos=True)
-            ]
-            # `sprint` se indexa por la ruta completa, no por el nombre.
-            if pendientes:
-                rezagados_por_sprint[sprint["nombre"]] = pendientes
+        # La raíz de la jerarquía **no** es un sprint: un ítem apuntado ahí no tiene
+        # sprint que arrastrar y no puede ser rezago. El código anterior lo
+        # excluía de facto (ninguna ruta del catálogo coincide con la raíz) y hay
+        # que seguir excluyéndolo.
+        raiz = _raiz_iteracion(await self.todos())
+        rezagados: dict[str, list[ItemIndice]] = {}
+        for item in await self.filtrar(solo_abiertos=True):
+            hoja = nombre_sprint(item.sprint)
+            if not hoja or hoja == referencia or item.sprint == raiz:
+                continue
+            rezagados.setdefault(hoja, []).append(item)
         filas = [
             {
                 "sprint": nombre,
                 "abiertos": len(pendientes),
                 "items": _muestra(pendientes),
             }
-            for nombre, pendientes in rezagados_por_sprint.items()
+            for nombre, pendientes in rezagados.items()
         ]
         filas.sort(key=lambda f: f["abiertos"], reverse=True)
         return {

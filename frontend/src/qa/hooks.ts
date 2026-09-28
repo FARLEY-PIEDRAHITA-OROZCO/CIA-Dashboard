@@ -46,13 +46,19 @@ export function usePersonasQA(activo = true) {
  * Quién parece hacer QA, por volumen de activos de prueba tocados.
  *
  * No se guarda nada: es una heurística y la decisión es de quien la ve.
+ *
+ * `staleTime` de 900 s, **igual al TTL del índice de pruebas**
+ * (`INDEX_PRUEBAS_TTL_SEG`). Antes era de 300 s: el frontend renunciaba a la
+ * caché tres veces antes de que el backend la diera por vieja, y como esta
+ * consulta necesita el índice de pruebas entero (3.932 activos, 18 lotes), cada
+ * recarga era un trabajo que el backend ya tenía hecho.
  */
 export function useSugerenciasQA(activo = true, minimo = 3) {
   return useQuery({
     queryKey: CLAVES_QA.sugerencias(minimo),
     queryFn: ({ signal }) => api.qaSugerencias(minimo, signal),
     enabled: activo,
-    staleTime: 300_000,
+    staleTime: 900_000,
   });
 }
 

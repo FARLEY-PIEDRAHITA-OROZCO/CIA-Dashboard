@@ -380,3 +380,53 @@ async def test_busca_persona_por_guid():
 
     assert await idx.persona_por_guid("g-1") is not None
     assert await idx.persona_por_guid("no-existe") is None
+
+
+# --------------------------------------------------------------------- #
+# Señal ③: rezago entre sprints
+# --------------------------------------------------------------------- #
+async def test_rezagados_se_calculan_en_una_sola_pasada():
+    """Antes se llamaba a `filtrar()` **dentro del bucle** sobre los sprints.
+
+    Con 37 sprints eran 37 escaneos completos de los 5.651 ítems para obtener lo
+    mismo que da un solo recorrido agrupando por sprint. No era una llamada a
+    Azure (el índice ya estaba cargado), pero era trabajo inútil y crecía con el
+    número de sprints.
+    """
+    idx, repo, _ = indice(
+        [
+            item(1, sprint="Proyecto\\Sprint 10", estado="New"),
+            item(2, sprint="Proyecto\\Sprint 10", estado="Done"),
+            item(3, sprint="Proyecto\\Sprint 20", estado="New"),
+            item(4, sprint="Proyecto\\Sprint 30", estado="New"),
+        ]
+    )
+    # Carga el índice una vez; el rezago no puede pedirlo otra vez.
+    await idx.sprints()
+    antes = repo.llamadas
+
+    datos = await idx.rezago_entre_sprints()
+
+    assert repo.llamadas == antes, "el rezago no puede volver a cargar el índice"
+    assert datos["resumen"]["sprints"] == 3
+    # El sprint de referencia (el último) no cuenta como rezago.
+    assert datos["resumen"]["sprint_referencia"] == "Sprint 30"
+    assert datos["resumen"]["rezagados"] == 2
+    assert [f["sprint"] for f in datos["sprints"]] == ["Sprint 10", "Sprint 20"]
+    # Solo abiertos: el ítem 2 está cerrado y no cuenta.
+    assert datos["sprints"][0]["abiertos"] == 1
+
+
+async def test_rezagados_excluye_la_raiz_de_iteracion():
+    """Un ítem sin sprint real no es rezago: no tiene sprint que arrastrar."""
+    idx, _, _ = indice(
+        [
+            item(1, sprint="Proyecto", estado="New"),
+            item(2, sprint="Proyecto\\Sprint 10", estado="New"),
+            item(3, sprint="Proyecto\\Sprint 20", estado="New"),
+        ]
+    )
+    datos = await idx.rezago_entre_sprints()
+    # La raíz no es un sprint: no aparece como rezagada.
+    assert datos["resumen"]["sprints"] == 2
+    assert datos["resumen"]["rezagados"] == 1

@@ -183,20 +183,44 @@ export function usePruebasActivos(filtros: FiltrosActivos, activo = false) {
   });
 }
 
+/**
+ * Estado de la integración con Azure.
+ *
+ * `staleTime` de 300 s y no de 60 s: la configuración de Azure (organización,
+ * proyecto, PAT) no cambia durante una sesión, así que pedirlo cada minuto es
+ * pedir la misma respuesta. Y se monta en **cuatro** páginas (dashboard, épica,
+ * tareas, bugs), así que cada navegación sumaba una llamada a Azure que no
+ * aportaba nada.
+ *
+ * Sigue sin guard de `enabled` a propósito: todas las páginas lo necesitan para
+ * saber si pueden mostrar datos o el aviso de «configura Azure».
+ */
 export function useEstadoAzure() {
   return useQuery({
     queryKey: CLAVES_QUERY.estado,
     queryFn: ({ signal }) => api.estadoAzure(signal),
-    staleTime: 60_000,
+    staleTime: 300_000,
   });
 }
 
+/**
+ * Épicas del backlog.
+ *
+ * `staleTime` de 120 s, **igual al TTL del backend** (`CACHE_TTL_SEG`). Antes era
+ * de 30 s: el frontend declaraba los datos caducados cuatro veces antes de que el
+ * backend los tuviera por viejos, así que cada vuelta al dashboard generaba una
+ * petición que el backend respondía desde su caché. No era una llamada a Azure,
+ * pero era una ida y vuelta inútil.
+ *
+ * El backend cachea la lista **completa** y filtra en memoria, así que alternar
+ * `incluirCerradas` no vuelve a leer de Azure mientras el TTL esté vigente.
+ */
 export function useEpicas(activo: boolean, incluirCerradas: boolean) {
   return useQuery({
     queryKey: [...CLAVES_QUERY.epicas, incluirCerradas],
     queryFn: ({ signal }) => api.epicas(incluirCerradas, signal),
     enabled: activo,
-    staleTime: 30_000,
+    staleTime: 120_000,
   });
 }
 
