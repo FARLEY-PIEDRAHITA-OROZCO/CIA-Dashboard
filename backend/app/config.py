@@ -76,15 +76,48 @@ class Settings(BaseSettings):
     # --- Registro local de pruebas ---------------------------------------- #
     # Fichero donde viven los perfiles de rol y las asignaciones de épicas. Es
     # el ÚNICO sitio donde existe esa información: Azure no tiene ningún campo
-    # para ella, así que si el fichero se pierde, no hay de dónde recuperarla.
-    # Por eso está **rastreado en git** y no ignorado.
+    # para ella (medido: el tipo Epic de este proyecto no tiene ni `System.Tags`
+    # ni `System.HyperLink` ni ningún campo `Custom.*` propio), así que si el
+    # fichero se pierde, no hay de dónde recuperarla.
+    #
+    # **NO está rastreado en git.** Es un dato, no código: exigir un commit por
+    # cada asignación era un coste ceremonial a cambio de una copia de seguridad
+    # que no se pidió. El fichero está en `.gitignore` y el respaldo se
+    # configura aparte, con `registro_copia_ruta`.
     registro_ruta: str = "datos/asignaciones.json"
+
+    # Dónde se copia el registro después de cada guardado. Vacío = sin copia, y
+    # la interfaz lo dice, porque un registro sin respaldo es un riesgo que hay
+    # que ver.
+    #
+    # Se deja **sin valor por defecto a propósito**: adivinar la ruta de un
+    # `OneDrive` sin sesión iniciada produciría un fichero que parece respaldado
+    # y no lo está, que es peor que no tener copia. Ponerlo vacío hace que la
+    # ausencia sea visible; poner la ruta equivocada la escondería.
+    registro_copia_ruta: str = ""
 
     @field_validator("registro_ruta")
     @classmethod
     def _resolver_registro(cls, valor: str) -> str:
         """Absoluta siempre, resuelta desde la raíz del backend."""
         ruta = Path(str(valor or "")).expanduser()
+        if not ruta.is_absolute():
+            ruta = RAIZ_BACKEND / ruta
+        return str(ruta)
+
+    @field_validator("registro_copia_ruta")
+    @classmethod
+    def _resolver_copia(cls, valor: str) -> str:
+        """Igual que el registro, y vacío se queda vacío.
+
+        Un vacío se devuelve como vacío y no como la raíz del backend: si
+        «sin copia» se convirtiera en «copiar a /backend», el respaldo escribiría
+        encima de sí mismo y nadie se enteraría.
+        """
+        crudo = str(valor or "").strip()
+        if not crudo:
+            return ""
+        ruta = Path(crudo).expanduser()
         if not ruta.is_absolute():
             ruta = RAIZ_BACKEND / ruta
         return str(ruta)

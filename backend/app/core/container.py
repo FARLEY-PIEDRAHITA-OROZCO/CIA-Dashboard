@@ -7,6 +7,7 @@ pruebas, caché Redis en producción) lo hace aquí sin tocar las demás capas.
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from ..application.actividad import ServicioActividad
@@ -26,6 +27,7 @@ from ..infrastructure.azure.escritura import AzureEscrituraRepositorio
 from ..infrastructure.azure.repository import AzureBacklogRepositorio
 from ..infrastructure.azure.transport import AzureTransporte
 from ..infrastructure.cache import CacheMemoria
+from ..infrastructure.registro_copia import RegistroConCopia
 from ..infrastructure.registro_json import RegistroJson
 
 logger = logging.getLogger("devops")
@@ -103,13 +105,38 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
         )
 
     # --- Registro local de pruebas ---------------------------------------- #
-    # Perfiles de rol y asignaciones de épicas. Fichero JSON **rastreado en
-    # git**: son ~264 filas y el objetivo es que no se pierdan, porque Azure no
-    # tiene ningún campo donde vivan. No usa caché: leerlo es una operación de
-    # disco de microsegundos y cachearlo abriría la puerta a servir un registro
+    # Perfiles de rol y asignaciones de épicas. Fichero JSON **fuera de git**:
+    # son datos de trabajo, no código, y exigir un commit por cada asignación
+    # convertía el respaldo en un ritual. No usa caché: leerlo es una operación
+    # de disco de microsegundos y cachearlo abriría la puerta a servir un registro
     # viejo justo cuando otra pestaña acaba de cambiarlo.
+    #
+    # `RegistroConCopia` decora al adaptador de fichero: si no hay
+    # `REGISTRO_COPIA_RUTA`, es un passthrough exacto. Con ella, copia después de
+    # cada guardado y restaura al arrancar si el registro no está. Un fallo de
+    # copia se registra y se muestra, pero no tumba la escritura: el dato ya
+    # está guardado y decir «no se guardó» sería falso.
     registro_principal: RegistroAsignacionesPort = RegistroJson(cfg.registro_ruta)
-    servicio_registro = ServicioRegistro(registro_principal, indice, indice_pruebas)
+    registro_con_copia = RegistroConCopia(
+        registro_principal,
+        Path(cfg.registro_ruta),
+        Path(cfg.registro_copia_ruta) if cfg.registro_copia_ruta else None,
+    )
+    if cfg.registro_copia_ruta:
+        logger.info(
+            "Copia del registro configurada en %s%s",
+            cfg.registro_copia_ruta,
+            ""
+            if Path(cfg.registro_copia_ruta).parent.is_dir()
+            else "  AVISO: esa carpeta no existe; la copia NO se está escribiendo",
+        )
+    else:
+        logger.warning(
+            "Registro sin copia de seguridad (REGISTRO_COPIA_RUTA vacía). "
+            "Está en %s y no está en git: si se pierde el disco, se pierde.",
+            cfg.registro_ruta,
+        )
+    servicio_registro = ServicioRegistro(registro_con_copia, indice, indice_pruebas)
 
     servicio = ServicioBacklog(
         repositorio=repositorio,
