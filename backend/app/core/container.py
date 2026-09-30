@@ -58,14 +58,14 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
     """Ensambla el grafo de dependencias a partir de la configuración."""
     cfg = settings or obtener_settings()
 
-    transporte = AzureTransporte(
-        cfg.azure_pat,
-        timeout=cfg.timeout_seg,
-        monitor=MonitorAzure() if cfg.monitor_habilitada else None,
-    )
     monitor = MonitorAzure() if cfg.monitor_habilitada else None
     if monitor is not None:
         logger.info("Monitor de llamadas a Azure activado")
+    transporte = AzureTransporte(
+        cfg.azure_pat,
+        timeout=cfg.timeout_seg,
+        monitor=monitor,
+    )
     repositorio: RepositorioBacklogPort = AzureBacklogRepositorio(
         org_url=cfg.azure_org_url,
         proyecto=cfg.azure_proyecto,

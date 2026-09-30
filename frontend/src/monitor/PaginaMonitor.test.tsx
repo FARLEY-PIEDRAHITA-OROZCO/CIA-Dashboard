@@ -44,6 +44,7 @@ describe("PaginaMonitor", () => {
 
   it("muestra KPIs cuando hay datos", async () => {
     vi.mocked(api.monitorAzure).mockResolvedValue({
+      activa: true,
       total: 42,
       errores: 3,
       tasaError: 0.071,
@@ -76,6 +77,7 @@ describe("PaginaMonitor", () => {
 
   it("muestra tabla de llamadas recientes cuando hay datos", async () => {
     vi.mocked(api.monitorAzure).mockResolvedValue({
+      activa: true,
       total: 1,
       errores: 0,
       tasaError: 0,
@@ -108,6 +110,7 @@ describe("PaginaMonitor", () => {
 
   it("muestra mensaje cuando no hay llamadas", async () => {
     vi.mocked(api.monitorAzure).mockResolvedValue({
+      activa: true,
       total: 0,
       errores: 0,
       tasaError: 0,

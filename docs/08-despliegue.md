@@ -85,6 +85,7 @@ de `.env.example` son de ejemplo; los defaults del código son cadenas vacías.
 | `ORIGEN_CORS` | `http://localhost:5173` | Orígenes CORS extra, separados por comas (p. ej. `https://a.com,https://b.com`) |
 | `CACHE_TTL_SEG` | `120` | TTL de caché de listas/árboles |
 | `TIMEOUT_SEG` | `30` | timeout HTTP hacia Azure |
+| `MONITOR_HABILITADA` | `false` | Contador de llamadas a Azure (404 en `/api/monitor/azure` si es `false`) |
 | `LOG_NIVEL` | `INFO` | `DEBUG`/`INFO`/`WARNING`… |
 
 > `configurada: true` requiere organización, proyecto y PAT no vacíos. Sin esa

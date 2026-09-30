@@ -22,6 +22,7 @@ Ruta raíz: `backend/`. Se ejecuta con el intérprete del venv
 | `app/infrastructure/azure/transport.py` | Cliente HTTP contra Azure DevOps (única clase que toca red) |
 | `app/infrastructure/azure/queries.py` | Constantes WIQL + tipos/campos de Azure |
 | `app/infrastructure/azure/repository.py` | Orquesta transporte+queries y mapea a modelos de dominio |
+| `app/infrastructure/azure/monitor.py` | `MonitorAzure`: contador pasivo de peticiones (opcional) |
 | `app/infrastructure/cache.py` | `CacheMemoria`: diccionario con TTL |
 | `app/api/deps.py` | `Depends` para obtener el contenedor y el servicio |
 | `app/api/routes.py` | Endpoints HTTP y traducción de errores |
@@ -180,6 +181,31 @@ Detalles de robustez:
   `hierarchy_edges`, `related_edges`, `bugs`, `duration_ms`) sin incluir el
   PAT ni cuerpos upstream.
 - La API exige `epic_id` entero y positivo (`Path(gt=0)`).
+
+### `monitor.py` — `MonitorAzure` (opcional)
+
+Contador **pasivo** de peticiones HTTP hacia Azure DevOps. Es un observador: nunca
+reescribe, reintenta ni corta una petición. Si pudiera, estaría midiendo algo
+distinto de lo que se envió.
+
+| Método | Comportamiento |
+| ------ | -------------- |
+| `async entrar()` | Incrementa el contador de peticiones simultáneas |
+| `async salir()` | Decrementa el contador (siempre, incluso si la petición falla) |
+| `async registrar(metodo, url, estado, duracion_ms, error)` | Anota una llamada terminada. Nunca lanza. |
+| `async estado()` | Devuelve `EstadoMonitor` con agregados y avisos |
+
+- **Apagado por defecto** (`MONITOR_HABILITADA=false`). Con `false`, el endpoint
+  `/api/monitor/azure` devuelve **404**, no un contador a cero: un cero apagado
+  parece «todo va bien», que es justo lo que no está pasando.
+- **Errores de red también se cuentan** (con `estado: 0`). Sin esto, la tasa de
+  error quedaría por debajo de la real.
+- **La concurrencia se libera con `finally`**, no solo en errores de red: si una
+  petición levanta una excepción que no es de red, el contador baja igualmente.
+- **Tope de 200 llamadas recientes** (~50 kB). Una sesión larga con el panel abierto
+  no crece sin límite.
+- **Avisos por umbral**: tasa de error > 10 %, presencia de 429, concurrencia ≥ 80 %
+  del límite (300), o latencia p95 > 5 s.
 
 ### `escritura.py` — `AzureEscrituraRepositorio` (opt-in, ADR-11)
 
@@ -370,10 +396,11 @@ hijos) para no saturar la red — el detalle solo sale en `/arbol`.
 ```python
 crear_contenedor() -> Contenedor
 # 1. Settings
-# 2. AzureTransporte(settings.azure_pat, timeout_seg)
-# 3. AzureBacklogRepositorio(cfg.azure_org_url, cfg.azure_proyecto, cfg.area_path_efectivo, transporte)
-# 4. CacheMemoria()
-# 5. ServicioBacklog(repositorio, cache, cfg.cache_ttl_seg, configurado=cfg.configurado, …)
+# 2. MonitorAzure() si cfg.monitor_habilitada (una sola instancia compartida)
+# 3. AzureTransporte(settings.azure_pat, timeout_seg, monitor=monitor)
+# 4. AzureBacklogRepositorio(cfg.azure_org_url, cfg.azure_proyecto, cfg.area_path_efectivo, transporte, monitor)
+# 5. CacheMemoria()
+# 6. ServicioBacklog(repositorio, cache, cfg.cache_ttl_seg, configurado=cfg.configurado, …)
 ```
 
 `crear_contenedor(settings=…)` acepta settings inyectables para pruebas.

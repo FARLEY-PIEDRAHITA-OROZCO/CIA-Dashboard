@@ -386,6 +386,9 @@ Principios:
   `estado-nuevo`, `estado-progreso`, `estado-terminado`, `estado-removido`,
   `estado-pendiente`, `estado-neutro`.
 - **Clases utilitarias**: `.texto-suave`, `.small`, `.monospace`, `.td-der`.
+- **Listas de muestras** (`.arbol-hus li`): `display: block` para que el contenido
+  fluya verticalmente y se ajuste al ancho de la tarjeta. Antes era `display: flex`,
+  que forzaba todo en una línea horizontal y desbordaba con títulos largos.
 - **Resumen de features** (panel expandido): `.lista-features`, `.item-feature`
   (borde-izquierdo acento), `.item-feature-cabecera`, `.fila-resumen`; acciones
   de fila con `.acciones-fila`.

@@ -750,10 +750,9 @@ code {
 }
 
 .arbol-hus li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: block;
   padding: 2px 0;
+  line-height: 1.5;
 }
 
 /* ------------------------------------------------------------------ */

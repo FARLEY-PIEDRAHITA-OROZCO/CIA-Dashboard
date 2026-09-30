@@ -136,7 +136,9 @@ class EstadoMonitor:
             "limite_concurrentes": self.limite_concurrentes,
             "llamadas_recientes": [
                 {
-                    "hora": p.hora,
+                    "hora": time.strftime(
+                        "%Y-%m-%dT%H:%M:%S", time.localtime(p.hora)
+                    ),
                     "metodo": p.metodo,
                     "categoria": p.categoria,
                     "estado": p.estado,
