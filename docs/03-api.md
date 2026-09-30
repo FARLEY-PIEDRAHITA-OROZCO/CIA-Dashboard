@@ -38,6 +38,7 @@ Todos los endpoints devuelven **JSON** (`application/json`).
 | DELETE | `/api/qa/asignaciones/{epica}/{persona}/{rol}` | Quita (idempotente) | experimental |
 | GET | `/api/qa/carga` | Quién lleva qué épicas, por volumen | experimental |
 | GET | `/api/qa/epicas/{id}/actividad` | Revisiones por persona y tipo. **No son horas**; 1 llamada a Azure por ítem | experimental |
+| GET | `/api/monitor/azure` | Contador de llamadas a Azure (peticiones, errores, latencia, concurrencia). 404 si `MONITOR_HABILITADA=false` | experimental |
 | PATCH | `/api/workitems/{id}` | Escritura QA (opt-in, ADR-11) | experimental |
 | GET | `/api/workitems/{id}/rev` | Revisión actual, para control de concurrencia | experimental |
 | POST | `/api/epics/refresh` | Invalida la caché **y los dos índices locales** | estable |
@@ -973,7 +974,81 @@ otra causa, y **422** si el `epic_id` no es un entero positivo.
 
 ---
 
-## 13. Modelo de errores
+## 13. `GET /api/monitor/azure`
+
+Contador de peticiones HTTP hacia Azure DevOps. Es una herramienta de
+diagnóstico para entender el coste real de cada vista.
+
+**Parámetros**: ninguno.
+
+**200 OK** (con `MONITOR_HABILITADA=true`)
+```json
+{
+  "activa": true,
+  "total": 42,
+  "por_categoria": { "wit/wiql": 20, "wit/workitems": 22 },
+  "por_estado": { "200": 40, "404": 2 },
+  "errores": 2,
+  "tasa_error": 0.048,
+  "latencia_p50_ms": 250,
+  "latencia_p95_ms": 1200,
+  "latencia_max_ms": 3400,
+  "concurrentes": 0,
+  "concurrentes_pico": 3,
+  "limite_concurrentes": 300,
+  "llamadas_recientes": [
+    {
+      "hora": "2026-09-29T12:34:56.000Z",
+      "metodo": "POST",
+      "categoria": "wit/wiql",
+      "estado": 200,
+      "duracion_ms": 350,
+      "error": ""
+    }
+  ],
+  "avisos": []
+}
+```
+
+| Campo | Tipo | Significado |
+| ----- | ---- | ----------- |
+| `activa` | bool | `true` si el monitor está encendido |
+| `total` | int | peticiones totales desde el último reinicio |
+| `por_categoria` | object | peticiones por recurso (WIQL, Lote, Work item, Historial, Proyecto) |
+| `por_estado` | object | peticiones por código de estado HTTP |
+| `errores` | int | peticiones con estado ≥ 400 o error de red |
+| `tasa_error` | float | `errores / total` (0 si `total == 0`) |
+| `latencia_p50_ms` | int | percentil 50 de duración |
+| `latencia_p95_ms` | int | percentil 95 de duración |
+| `latencia_max_ms` | int | duración máxima |
+| `concurrentes` | int | peticiones simultáneas ahora mismo |
+| `concurrentes_pico` | int | pico de peticiones simultáneas |
+| `limite_concurrentes` | int | límite de Azure DevOps (300) |
+| `llamadas_recientes` | array | últimas 200 peticiones (con tope de memoria) |
+| `avisos` | array | avisos de umbral (tasa de error, 429, concurrencia, latencia) |
+
+**Errores**
+
+| Código | Caso | Cuerpo `detail` |
+| ------ | ---- | --------------- |
+| `404` | `MONITOR_HABILITADA=false` | instrucciones para activarlo |
+
+- El monitor está **apagado por defecto** (`MONITOR_HABILITADA=false`). Un
+  contador a cero apagado parece «todo va bien»; un 404 no.
+- El monitor es un **observador pasivo**: no reescribe, reintenta ni corta
+  una petición. Si pudiera, estaría midiendo algo distinto de lo que se envió.
+- Los errores de red también se cuentan (con `estado: 0` y el nombre de la
+  excepción en `error`). Sin esto, la tasa de error quedaría por debajo de la
+  real.
+- La concurrencia se libera con `finally`, no solo en los errores de red: si
+  una petición levanta una excepción que no es de red, el contador baja
+  igualmente.
+- Los avisos disparan por umbral, no son números sueltos: tasa de error > 10 %,
+  presencia de 429, concurrencia ≥ 80 % del límite, o latencia p95 > 5 s.
+
+---
+
+## 14. Modelo de errores
 
 Todos los errores siguen el contrato de FastAPI: respuesta JSON con campo
 `detail` (string, o array de detalles de validación).

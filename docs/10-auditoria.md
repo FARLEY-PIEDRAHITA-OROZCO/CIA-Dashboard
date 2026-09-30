@@ -558,6 +558,18 @@ Medido el 2026-09-27 contra el proyecto real, no supuesto:
 | La actividad de Azure no sabe nada del registro local de roles | El panel **no** separa QA de dev. Cruzar «rol declarado» con «tocó el ítem» sería un reparto que parece medido y mezcla dos fuentes |
 | `Persona` de `revisedBy` usa `id`/`displayName`, no `guid`/`nombre` | Traducción propia en `_a_autor_revision`. Reutilizar `_a_persona` no da error: da `None` en todas las revisiones y la respuesta sería «0 personas» sin una sola queja |
 
+### Límites conocidos del monitor de Azure
+
+| Límite | Consecuencia |
+| ------ | ------------ |
+| El monitor está **apagado por defecto** (`MONITOR_HABILITADA=false`) | Un contador a cero apagado parece «todo va bien». El endpoint devuelve **404**, no un estado con ceros |
+| El monitor es un **observador pasivo** | No reescribe, reintenta ni corta una petición. Si pudiera, estaría midiendo algo distinto de lo que se envió |
+| Los errores de red también se cuentan (con `estado: 0`) | Sin esto, la tasa de error quedaría por debajo de la real |
+| La concurrencia se libera con `finally` | Si una petición levanta una excepción que no es de red, el contador baja igualmente. Si no, el pico sería mentira |
+| Las llamadas recientes tienen un tope de **200** | Una sesión larga con el panel abierto no crece sin límite. 200 entradas son ~50 kB |
+| Los avisos disparan por umbral | Tasa de error > 10 %, presencia de 429, concurrencia ≥ 80 % del límite (300), o latencia p95 > 5 s |
+| El monitor **no** separa QA de dev | La actividad de Azure no sabe nada del registro local de roles. Cruzarlos produciría un reparto que parece medido y mezcla dos fuentes |
+
 ## 8. Criterios de cierre recomendados
 
 - `backend`: `pytest`, `pip check` y auditoría de dependencias en verde.

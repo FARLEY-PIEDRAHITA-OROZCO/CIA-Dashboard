@@ -63,6 +63,10 @@ frontend/src/
 │   ├── EdicionInline.tsx     # formulario de edición QA (presentacional)
 │   ├── useEdicionQA.tsx      # hook compartido: guardar, validar, errores y aviso
 │   └── index.ts              # barril de exportación
+├── monitor/                   # monitor de llamadas a Azure
+│   ├── hooks.ts               # useMonitorAzure (React Query)
+│   ├── PaginaMonitor.tsx      # página #/monitor: KPIs, categorías y llamadas
+│   └── PaginaMonitor.test.tsx # 5 tests del monitor
 ├── pages/
 │   └── Dashboard.tsx         # página principal (KPI + tabla)
 └── test/
@@ -88,6 +92,7 @@ router; soporta botón atrás, enlace directo y recarga):
 | `#/epicas/{id}` | `PaginaEpica` | página dedicada: features + tablero completo de historias |
 | `#/epicas/{id}/tareas` | `PaginaTareas` | página dedicada: tablero de tareas del backlog |
 | `#/epicas/{id}/bugs` | `PaginaBugs` | página dedicada: KPIs, filtros y tablero de bugs |
+| `#/monitor` | `PaginaMonitor` | contador de llamadas a Azure: KPIs, categorías y llamadas recientes |
 
 API mínima:
 
