@@ -1951,6 +1951,69 @@ code {
   font-size: 13px;
 }
 
+/* ------------------------------------------------------------------ *
+ * Monitor de llamadas a Azure
+ * ------------------------------------------------------------------ */
+.panel-monitor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+}
+
+.lista-avisos {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lista-barras {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.barra-fila {
+  display: grid;
+  grid-template-columns: 90px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.barra-etiqueta {
+  color: var(--texto-suave);
+}
+
+.barra-pista {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  overflow: hidden;
+}
+
+.barra-relleno {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--acento);
+}
+
+.barra-valor {
+  text-align: right;
+}
+
 /* Lista de activos editables: el título es un botón que despliega el formulario
    debajo. Sin un botón «Editar» por fila, que con 50 filas sería 50 botones
    compitiendo con el título. */

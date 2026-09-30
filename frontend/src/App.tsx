@@ -7,6 +7,7 @@ import { PaginaEpica } from "./epicas/PaginaEpica";
 import { PaginaTareas } from "./epicas/PaginaTareas";
 import { useEstadoAzure, useRefrescar } from "./epicas/hooks";
 import { useVista } from "./navegacion";
+import PaginaMonitor from "./monitor/PaginaMonitor";
 import PaginaQA from "./qa/PaginaQA";
 import Dashboard from "./pages/Dashboard";
 import { PaginaPruebas } from "./pruebas/PaginaPruebas";
@@ -45,6 +46,8 @@ export default function App() {
           <Dashboard filtro={vista.filtro} />
         ) : vista.pagina === "qa" ? (
           <PaginaQA />
+        ) : vista.pagina === "monitor" ? (
+          <PaginaMonitor />
         ) : vista.pagina === "epica" ? (
           <PaginaEpica key={vista.azureId} azureId={vista.azureId} />
         ) : vista.pagina === "epicaTareas" ? (

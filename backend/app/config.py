@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     # Reescribir un ítem invalida su caché.
     actividad_ttl_seg: float = 900.0
 
+    # --- Monitor de llamadas a Azure (opcional) --------------------------- #
+    # Cuenta las peticiones que el sistema hace a Azure: cuántas, de qué tipo,
+    # cuánto tardan, cuántas fallan y cuántas van simultáneas.
+    #
+    # Apagada por defecto a propósito. No es un adorno: es la única forma de
+    # medir el coste real de una vista, y para eso hay que poder encenderla,
+    # mirar y apagarla. Un monitor que no se puede apagar acaba siempre encendido,
+    # y un monitor siempre encendido es ruido que se ignora.
+    monitor_habilitada: bool = False
+
     # --- Registro local de pruebas ---------------------------------------- #
     # Fichero donde viven los perfiles de rol y las asignaciones de épicas. Es
     # el ÚNICO sitio donde existe esa información: Azure no tiene ningún campo

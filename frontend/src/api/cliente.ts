@@ -8,8 +8,10 @@ import type {
   AutomatizacionPruebas,
   CampoEditable,
   CargaQA,
+  EstadoMonitor,
   EstadoRegistro,
   FiltrosAsignaciones,
+  LlamadaAzure,
   ListaAsignaciones,
   ListaPersonasQA,
   PersonaQA,
@@ -97,6 +99,13 @@ function lista<T>(valor: unknown, nombre: string, validar: (item: unknown) => T)
     throw new ApiError(`Respuesta inválida: ${nombre} no es una lista`);
   }
   return valor.map(validar);
+}
+
+function listaDeTexto(valor: unknown, nombre: string): string[] {
+  if (!Array.isArray(valor)) {
+    throw new ApiError(`Respuesta inválida: ${nombre} no es una lista`);
+  }
+  return valor.map((item) => texto(item, nombre));
 }
 
 function opcionalTexto(valor: unknown, nombre: string): string | undefined {
@@ -742,6 +751,42 @@ function validarCargaQA(valor: unknown): CargaQA {
   };
 }
 
+function validarLlamadaAzure(valor: unknown): LlamadaAzure {
+  const item = objeto(valor, "llamada de Azure");
+  return {
+    hora: texto(item.hora ?? "", "llamada.hora"),
+    metodo: texto(item.metodo ?? "", "llamada.metodo"),
+    categoria: texto(item.categoria ?? "", "llamada.categoria"),
+    estado: numero(item.estado ?? 0, "llamada.estado"),
+    duracionMs: numero(item.duracion_ms ?? 0, "llamada.duracion_ms"),
+    error: texto(item.error ?? "", "llamada.error"),
+  };
+}
+
+function validarEstadoMonitor(valor: unknown): EstadoMonitor {
+  const item = objeto(valor, "estado del monitor");
+  return {
+    activa: booleano(item.activa, "monitor.activa"),
+    total: numero(item.total ?? 0, "monitor.total"),
+    porCategoria: mapaNumeros(item.por_categoria, "monitor.por_categoria"),
+    porEstado: mapaNumeros(item.por_estado, "monitor.por_estado"),
+    errores: numero(item.errores ?? 0, "monitor.errores"),
+    tasaError: numero(item.tasa_error ?? 0, "monitor.tasa_error"),
+    latenciaP50Ms: numero(item.latencia_p50_ms ?? 0, "monitor.latencia_p50_ms"),
+    latenciaP95Ms: numero(item.latencia_p95_ms ?? 0, "monitor.latencia_p95_ms"),
+    latenciaMaxMs: numero(item.latencia_max_ms ?? 0, "monitor.latencia_max_ms"),
+    concurrentes: numero(item.concurrentes ?? 0, "monitor.concurrentes"),
+    concurrentesPico: numero(item.concurrentes_pico ?? 0, "monitor.concurrentes_pico"),
+    limiteConcurrentes: numero(item.limite_concurrentes ?? 0, "monitor.limite_concurrentes"),
+    llamadasRecientes: lista(
+      item.llamadas_recientes,
+      "monitor.llamadas_recientes",
+      validarLlamadaAzure,
+    ),
+    avisos: listaDeTexto(item.avisos, "monitor.avisos"),
+  };
+}
+
 function validarEstadoRegistro(valor: unknown): EstadoRegistro {
   const item = objeto(valor, "estado del registro");
   return {
@@ -1015,6 +1060,24 @@ export const api = {
    */
   qaEstadoRegistro: async (signal?: AbortSignal) =>
     validarEstadoRegistro(await peticion<unknown>("/qa/registro", { signal })),
+
+  /**
+   * Estado del monitor de llamadas a Azure.
+   *
+   * Devuelve `null` cuando el monitor está apagado, y no un estado con ceros:
+   * un contador a cero apagado parece «todo va bien», que es justo lo que no
+   * está pasando. El 404 del backend se traduce aquí en `null`.
+   */
+  monitorAzure: async (signal?: AbortSignal): Promise<EstadoMonitor | null> => {
+    try {
+      return validarEstadoMonitor(
+        await peticion<unknown>("/monitor/azure", { signal }),
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  },
 
   /**
    * Actividad registrada de una épica.

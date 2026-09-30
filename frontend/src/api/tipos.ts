@@ -490,6 +490,46 @@ export interface EstadoRegistro {
   aviso: string;
 }
 
+/** Una llamada a Azure, tal como se ve en el monitor.
+ *
+ * No lleva la URL completa a propósito: lleva la **categoría**, que es lo que
+ * permite comparar. La URL tiene el id del ítem y no dice nada que no sepa
+ * quien la está mirando.
+ */
+export interface LlamadaAzure {
+  hora: string;
+  metodo: string;
+  categoria: string;
+  estado: number;
+  duracionMs: number;
+  /** Mensaje de error si lo hubo. Vacío = sin error. */
+  error: string;
+}
+
+/** Estado del monitor de llamadas a Azure.
+ *
+ * `avisos` es la pieza que convierte números en decisiones: sin ella, la página
+ * sería una colección de contadores que cada uno interpretaría como pudiera.
+ */
+export interface EstadoMonitor {
+  activa: boolean;
+  total: number;
+  porCategoria: Record<string, number>;
+  porEstado: Record<string, number>;
+  errores: number;
+  /** Entre 0 y 1. */
+  tasaError: number;
+  latenciaP50Ms: number;
+  latenciaP95Ms: number;
+  latenciaMaxMs: number;
+  concurrentes: number;
+  concurrentesPico: number;
+  limiteConcurrentes: number;
+  llamadasRecientes: LlamadaAzure[];
+  /** Texto listo para mostrar. Vacío cuando todo va bien. */
+  avisos: string[];
+}
+
 // ------------------------------------------------------------------ //
 // Actividad por épica
 //

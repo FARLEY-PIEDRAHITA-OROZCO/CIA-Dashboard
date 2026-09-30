@@ -12,6 +12,7 @@ from .deps import (  # noqa: I001
     ActividadDep,
     IndiceDep,
     IndicePruebasDep,
+    MonitorDep,
     RegistroCopiaDep,
     RegistroDep,
     ServicioDep,
@@ -27,6 +28,7 @@ from .schemas import (
     DetalleBugs,
     EpicaResumen,
     EstadoAzure,
+    EstadoMonitorOut,
     EstadoRegistroOut,
     Health,
     ItemIndiceOut,
@@ -779,6 +781,32 @@ async def api_actividad_epica(
         por_tipo=datos.por_tipo,
         nota=datos.nota,
     )
+
+
+# ---------------------------------------------------------------------- #
+# Monitor de llamadas a Azure
+# ---------------------------------------------------------------------- #
+@router.get("/api/monitor/azure", response_model=EstadoMonitorOut, tags=["Monitor"])
+async def api_monitor_azure(monitor: MonitorDep) -> EstadoMonitorOut:
+    """Estado del monitor de llamadas a Azure.
+
+    Es la única forma de responder «¿cuántas peticiones está haciendo el sistema
+    a Azure?» sin leer el log de httpx línea por línea. Y solo existe si el monitor
+    está encendido: con `MONITOR_HABILITADA=false` devuelve 404, que es la forma
+    honesta de decir «esto no está midiendo nada».
+
+    No es un endpoint de datos: no lee asignaciones, no llama a Azure y no
+    depende del índice. Es solo el contador.
+    """
+    if monitor is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "El monitor de llamadas está apagado. Actívalo con "
+                "MONITOR_HABILITADA=true en el .env del backend y reinicia."
+            ),
+        )
+    return EstadoMonitorOut(**(await monitor.estado()).model_dump())
 
 
 # ---------------------------------------------------------------------- #

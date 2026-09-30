@@ -510,6 +510,45 @@ class ActividadEpicaOut(BaseModel):
     nota: str = ""
 
 
+class LlamadaAzureOut(BaseModel):
+    """Una llamada a Azure, tal como se ve en el monitor.
+
+    No lleva la URL completa a propósito: lleva la **categoría**, que es lo que
+    permite comparar. La URL tiene el id del ítem y no dice nada que no sepa
+    quien la está mirando.
+    """
+
+    hora: str
+    metodo: str
+    categoria: str
+    estado: int
+    duracion_ms: int
+    error: str = ""
+
+
+class EstadoMonitorOut(BaseModel):
+    """Estado del monitor de llamadas a Azure.
+
+    `avisos` es la pieza que convierte números en decisiones: sin ella, la página
+    sería una colección de contadores que cada uno interpretaría como pudiera.
+    """
+
+    activa: bool
+    total: int
+    por_categoria: Dict[str, int]
+    por_estado: Dict[str, int]
+    errores: int
+    tasa_error: float
+    latencia_p50_ms: int
+    latencia_p95_ms: int
+    latencia_max_ms: int
+    concurrentes: int
+    concurrentes_pico: int
+    limite_concurrentes: int
+    llamadas_recientes: List[LlamadaAzureOut]
+    avisos: List[str] = Field(default_factory=list)
+
+
 class EstadoRegistroOut(BaseModel):
     """Dónde vive el registro y si tiene respaldo.
 

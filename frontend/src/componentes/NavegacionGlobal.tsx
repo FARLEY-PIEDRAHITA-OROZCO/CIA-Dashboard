@@ -58,6 +58,11 @@ export function NavegacionGlobal({
       activo: vista.pagina === "qa",
     },
     {
+      etiqueta: "Monitor",
+      destino: { pagina: "monitor" },
+      activo: vista.pagina === "monitor",
+    },
+    {
       etiqueta: "Analítica QA",
       destino: { pagina: "analitica" },
       activo: vista.pagina === "analitica",

@@ -24,6 +24,7 @@ from ..domain.ports import (
     TransportePort,
 )
 from ..infrastructure.azure.escritura import AzureEscrituraRepositorio
+from ..infrastructure.azure.monitor import MonitorAzure
 from ..infrastructure.azure.repository import AzureBacklogRepositorio
 from ..infrastructure.azure.transport import AzureTransporte
 from ..infrastructure.cache import CacheMemoria
@@ -39,6 +40,7 @@ class Contenedor:
 
     settings: Settings
     transporte: TransportePort
+    monitor: Optional[MonitorAzure]
     repositorio: RepositorioBacklogPort
     cache: CachePort
     servicio: ServicioBacklog
@@ -56,12 +58,20 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
     """Ensambla el grafo de dependencias a partir de la configuración."""
     cfg = settings or obtener_settings()
 
-    transporte = AzureTransporte(cfg.azure_pat, timeout=cfg.timeout_seg)
+    transporte = AzureTransporte(
+        cfg.azure_pat,
+        timeout=cfg.timeout_seg,
+        monitor=MonitorAzure() if cfg.monitor_habilitada else None,
+    )
+    monitor = MonitorAzure() if cfg.monitor_habilitada else None
+    if monitor is not None:
+        logger.info("Monitor de llamadas a Azure activado")
     repositorio: RepositorioBacklogPort = AzureBacklogRepositorio(
         org_url=cfg.azure_org_url,
         proyecto=cfg.azure_proyecto,
         area_path=cfg.area_path_efectivo,
         transporte=transporte,
+        monitor=monitor,
     )
     cache: CachePort = CacheMemoria()
 
@@ -160,6 +170,7 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
     return Contenedor(
         settings=cfg,
         transporte=transporte,
+        monitor=monitor,
         repositorio=repositorio,
         cache=cache,
         servicio=servicio,

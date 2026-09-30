@@ -50,6 +50,9 @@ export type Destino =
   | { pagina: "sprints"; filtros: FiltrosSprint; hoja: number; desplegado: boolean }
   | { pagina: "pruebas"; filtro: FiltrosPruebas; hoja: number }
   | { pagina: "analitica" }
+  // Monitor de llamadas a Azure. Sin filtros: es un contador, no una vista con
+  // parámetros.
+  | { pagina: "monitor" }
   // La gestión del proceso de pruebas: quién prueba qué y con qué rol. Sin
   // filtros: la lista de personas son 35 filas, una sola lectura, y filtrarla
   // sería esconder 30 personas detrás de un desplegable sin ganar nada.
@@ -160,6 +163,9 @@ export function parsearHash(hash: string): Destino {
   }
   if (raiz === "qa" && partes.length === 1) {
     return { pagina: "qa" };
+  }
+  if (raiz === "monitor" && partes.length === 1) {
+    return { pagina: "monitor" };
   }
   if (raiz === "sprints" && partes.length === 1) {
     const busca = new URLSearchParams(query);
@@ -311,6 +317,8 @@ function aRuta(destino: Destino): string {
   switch (destino.pagina) {
     case "qa":
       return "#/qa";
+    case "monitor":
+      return "#/monitor";
     case "dashboard": {
       const query = filtrosDashboardAQuery(destino.filtro);
       return query === "" ? "#/dashboard" : `#/dashboard?${query}`;

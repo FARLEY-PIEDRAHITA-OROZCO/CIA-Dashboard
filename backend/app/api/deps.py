@@ -10,6 +10,7 @@ from ..application.indice_pruebas import IndicePruebas
 from ..application.registro import ServicioRegistro
 from ..application.services import ServicioBacklog
 from ..core.container import Contenedor
+from ..infrastructure.azure.monitor import MonitorAzure
 from ..infrastructure.registro_copia import RegistroConCopia
 
 
@@ -56,9 +57,23 @@ def obtener_registro_copia(
     return contenedor.registro_copia
 
 
+def obtener_monitor(
+    contenedor: Annotated[Contenedor, Depends(obtener_contenedor)]
+) -> Optional[MonitorAzure]:
+    """El monitor de llamadas, o `None` si está apagado.
+
+    Se devuelve `None` y no un monitor vacío a propósito: la interfaz tiene que
+    poder decir «esto está apagado» sin que el frontend tenga que adivinarlo
+    mirando si el contador está a cero. Un monitor apagado y un monitor que no
+    ha visto nada son cosas distintas.
+    """
+    return contenedor.monitor
+
+
 ServicioDep = Annotated[ServicioBacklog, Depends(obtener_servicio)]
 IndiceDep = Annotated[IndiceWorkItems, Depends(obtener_indice)]
 IndicePruebasDep = Annotated[IndicePruebas, Depends(obtener_indice_pruebas)]
 RegistroDep = Annotated[ServicioRegistro, Depends(obtener_registro)]
 ActividadDep = Annotated[ServicioActividad, Depends(obtener_actividad)]
 RegistroCopiaDep = Annotated[RegistroConCopia, Depends(obtener_registro_copia)]
+MonitorDep = Annotated[Optional[MonitorAzure], Depends(obtener_monitor)]

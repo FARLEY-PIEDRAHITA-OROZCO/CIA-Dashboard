@@ -31,6 +31,7 @@ from ...domain.models import (
 )
 from ...domain.ports import RepositorioBacklogPort, TransportePort
 from . import queries
+from .monitor import MonitorAzure
 from .transport import AzureError
 
 logger = logging.getLogger("devops")
@@ -52,11 +53,16 @@ class AzureBacklogRepositorio(RepositorioBacklogPort):
         proyecto: str,
         area_path: str,
         transporte: TransportePort,
+        monitor: Optional["MonitorAzure"] = None,
     ) -> None:
         self._org_url = (org_url or "").strip().rstrip("/")
         self._proyecto = (proyecto or "").strip()
         self._area_path = (area_path or "").strip()
         self._transporte = transporte
+        #: Monitor de llamadas, opcional. Sin él el repositorio se comporta
+        #: exactamente igual que antes: el monitor es un observador, no un
+        #: participante, y no puede alterar una petición ni su respuesta.
+        self._monitor = monitor
         if not self._area_path:
             self._area_path = self._proyecto
 

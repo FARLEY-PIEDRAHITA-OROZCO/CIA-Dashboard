@@ -27,6 +27,7 @@ from app.domain.models import (
     UserStory,
 )
 from app.domain.ports import RegistroAsignacionesPort
+from app.infrastructure.azure.monitor import MonitorAzure
 from app.infrastructure.azure.transport import AzureError
 from app.infrastructure.registro_copia import RegistroConCopia
 from app.infrastructure.registro_json import RegistroModificado
@@ -343,6 +344,7 @@ def contenedor_con(
     *,
     escritura: Optional[FakeEscritura] = None,
     registro: Optional[RegistroAsignacionesPort] = None,
+    monitor: Optional["MonitorAzure"] = None,
 ) -> Contenedor:
     from app.infrastructure.cache import CacheMemoria
 
@@ -372,6 +374,9 @@ def contenedor_con(
     return Contenedor(
         settings=settings,
         transporte=SabanaTransporte([], []),
+        # Monitor apagado en las pruebas: es un observador y no debe influir en lo
+        # que se está probando. El monitor tiene sus propias pruebas.
+        monitor=monitor,
         repositorio=repo,
         cache=cache,
         servicio=servicio,
