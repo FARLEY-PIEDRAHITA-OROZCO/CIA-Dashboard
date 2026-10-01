@@ -615,3 +615,33 @@ export interface ActivosPrueba {
    */
   estados: Record<string, string[]>;
 }
+
+// ------------------------------------------------------------------ //
+// Iniciativas: carpetas de OneDrive
+// ------------------------------------------------------------------ //
+
+export interface IniciativaCarpeta {
+  epica_id: number;
+  numero: string;
+  nombre: string;
+  ruta: string;
+  creada: string;
+}
+
+export interface EstadoRutaOnedrive {
+  ruta: string;
+  existe: boolean;
+  escribible: boolean;
+  total_iniciativas: number;
+}
+
+export interface ArchivoIniciativa {
+  nombre: string;
+  tamano: number;
+  modificado: string;
+}
+
+export interface ListaIniciativas {
+  iniciativas: IniciativaCarpeta[];
+  subcarpetas: string[];
+}

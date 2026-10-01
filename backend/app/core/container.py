@@ -13,6 +13,7 @@ from typing import Optional
 from ..application.actividad import ServicioActividad
 from ..application.indice import IndiceWorkItems
 from ..application.indice_pruebas import IndicePruebas
+from ..application.iniciativas import ServicioIniciativas
 from ..application.registro import ServicioRegistro
 from ..application.services import ServicioBacklog
 from ..config import Settings, obtener_settings
@@ -52,6 +53,7 @@ class Contenedor:
     actividad: ServicioActividad
     escritura: Optional[EscrituraBacklogPort] = None
     transporte_escritura: Optional[TransportePort] = None
+    servicio_iniciativas: Optional[ServicioIniciativas] = None
 
 
 def crear_contenedor(settings: Settings | None = None) -> Contenedor:
@@ -167,6 +169,13 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
     # de la épica, que ya está en memoria de la vista anterior.
     actividad = ServicioActividad(repositorio, servicio, cache, ttl_seg=cfg.actividad_ttl_seg)
 
+    # --- Iniciativas: carpetas de OneDrive ------------------------------- #
+    # Registro local de iniciativas a cargo con su carpeta sincronizada.
+    # No está en git: son datos de trabajo, no código.
+    servicio_iniciativas: Optional[ServicioIniciativas] = None
+    ruta_iniciativas = Path(cfg.registro_ruta).parent / "iniciativas.json"
+    servicio_iniciativas = ServicioIniciativas(str(ruta_iniciativas))
+
     return Contenedor(
         settings=cfg,
         transporte=transporte,
@@ -182,4 +191,5 @@ def crear_contenedor(settings: Settings | None = None) -> Contenedor:
         actividad=actividad,
         escritura=escritura,
         transporte_escritura=transporte_escritura,
+        servicio_iniciativas=servicio_iniciativas,
     )

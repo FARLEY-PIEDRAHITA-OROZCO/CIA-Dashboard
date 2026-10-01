@@ -2,6 +2,8 @@ import type { Epic } from "../api/tipos";
 import { ContenidoRico } from "../componentes/ContenidoRico";
 import { EstadoTrabajo } from "../componentes/EstadoTrabajo";
 import { CajaVacia, Cargando, ErrorAlerta } from "../componentes/retroalimentacion";
+import { useIniciativaCarpeta } from "../iniciativas/hooks";
+import { PanelCarpetas } from "./PanelCarpetas";
 import { enlaceA } from "../navegacion";
 import { PanelActividad } from "../qa/PanelActividad";
 import { PanelAsignacion } from "../qa/PanelAsignacion";
@@ -62,6 +64,7 @@ export function PaginaEpica({ azureId }: { azureId: number }) {
   // configurado no puede haber escritura y las tarjetas lo explican.
   const estadoAzure = useEstadoAzure();
   const edicionHabilitada = Boolean(estadoAzure.data?.configurada);
+  const carpeta = useIniciativaCarpeta(azureId);
 
   return (
     <div className="pagina">
@@ -86,6 +89,12 @@ export function PaginaEpica({ azureId }: { azureId: number }) {
           return (
             <>
               <CabeceraEpica epica={epica} />
+              <PanelCarpetas
+                epicaId={epica.azure_id}
+                nombreEpica={epica.titulo}
+                carpeta={carpeta.data ?? null}
+                onCambio={() => carpeta.refetch()}
+              />
               {historias.length > 0 ? (
                 <TableroHistorias
         historias={historias}

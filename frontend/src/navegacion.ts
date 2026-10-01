@@ -56,7 +56,11 @@ export type Destino =
   // La gestión del proceso de pruebas: quién prueba qué y con qué rol. Sin
   // filtros: la lista de personas son 35 filas, una sola lectura, y filtrarla
   // sería esconder 30 personas detrás de un desplegable sin ganar nada.
-  | { pagina: "qa" };
+  | { pagina: "qa" }
+  // Configuración del sistema: rutas y ajustes no secretos.
+  | { pagina: "configuracion" }
+  // Iniciativas a cargo con su carpeta de OneDrive.
+  | { pagina: "iniciativas" };
 
 /**
  * Filtros de la vista de pruebas.
@@ -166,6 +170,12 @@ export function parsearHash(hash: string): Destino {
   }
   if (raiz === "monitor" && partes.length === 1) {
     return { pagina: "monitor" };
+  }
+  if (raiz === "configuracion" && partes.length === 1) {
+    return { pagina: "configuracion" };
+  }
+  if (raiz === "iniciativas" && partes.length === 1) {
+    return { pagina: "iniciativas" };
   }
   if (raiz === "sprints" && partes.length === 1) {
     const busca = new URLSearchParams(query);
@@ -319,6 +329,10 @@ function aRuta(destino: Destino): string {
       return "#/qa";
     case "monitor":
       return "#/monitor";
+    case "configuracion":
+      return "#/configuracion";
+    case "iniciativas":
+      return "#/iniciativas";
     case "dashboard": {
       const query = filtrosDashboardAQuery(destino.filtro);
       return query === "" ? "#/dashboard" : `#/dashboard?${query}`;

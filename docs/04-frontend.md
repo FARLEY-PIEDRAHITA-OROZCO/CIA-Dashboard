@@ -67,6 +67,11 @@ frontend/src/
 │   ├── hooks.ts               # useMonitorAzure (React Query)
 │   ├── PaginaMonitor.tsx      # página #/monitor: KPIs, categorías y llamadas
 │   └── PaginaMonitor.test.tsx # 5 tests del monitor
+├── iniciativas/                # iniciativas a cargo con carpeta de OneDrive
+│   ├── hooks.ts               # useIniciativaCarpeta (React Query)
+│   └── PaginaIniciativas.tsx  # página #/iniciativas: lista de iniciativas
+├── configuracion/             # configuración del sistema
+│   └── PaginaConfiguracion.tsx # página #/configuracion: ruta de OneDrive
 ├── pages/
 │   └── Dashboard.tsx         # página principal (KPI + tabla)
 └── test/

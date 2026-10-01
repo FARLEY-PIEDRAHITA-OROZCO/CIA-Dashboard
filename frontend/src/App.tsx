@@ -2,10 +2,12 @@ import { useEffect } from "react";
 
 import { PaginaAnalitica } from "./analitica/PaginaAnalitica";
 import { NavegacionGlobal } from "./componentes/NavegacionGlobal";
+import PaginaConfiguracion from "./configuracion/PaginaConfiguracion";
 import { PaginaBugs } from "./epicas/PaginaBugs";
 import { PaginaEpica } from "./epicas/PaginaEpica";
 import { PaginaTareas } from "./epicas/PaginaTareas";
 import { useEstadoAzure, useRefrescar } from "./epicas/hooks";
+import PaginaIniciativas from "./iniciativas/PaginaIniciativas";
 import { useVista } from "./navegacion";
 import PaginaMonitor from "./monitor/PaginaMonitor";
 import PaginaQA from "./qa/PaginaQA";
@@ -48,6 +50,10 @@ export default function App() {
           <PaginaQA />
         ) : vista.pagina === "monitor" ? (
           <PaginaMonitor />
+        ) : vista.pagina === "configuracion" ? (
+          <PaginaConfiguracion />
+        ) : vista.pagina === "iniciativas" ? (
+          <PaginaIniciativas />
         ) : vista.pagina === "epica" ? (
           <PaginaEpica key={vista.azureId} azureId={vista.azureId} />
         ) : vista.pagina === "epicaTareas" ? (

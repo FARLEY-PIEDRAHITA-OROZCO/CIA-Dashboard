@@ -23,6 +23,7 @@ Ruta raíz: `backend/`. Se ejecuta con el intérprete del venv
 | `app/infrastructure/azure/queries.py` | Constantes WIQL + tipos/campos de Azure |
 | `app/infrastructure/azure/repository.py` | Orquesta transporte+queries y mapea a modelos de dominio |
 | `app/infrastructure/azure/monitor.py` | `MonitorAzure`: contador pasivo de peticiones (opcional) |
+| `app/application/iniciativas.py` | `ServicioIniciativas`: gestión de carpetas de OneDrive por iniciativa |
 | `app/infrastructure/cache.py` | `CacheMemoria`: diccionario con TTL |
 | `app/api/deps.py` | `Depends` para obtener el contenedor y el servicio |
 | `app/api/routes.py` | Endpoints HTTP y traducción de errores |

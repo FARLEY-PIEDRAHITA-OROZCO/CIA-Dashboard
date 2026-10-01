@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Path, Query
 from ..application.services import ServicioBacklog
 from ..domain.models import Epic
 from ..infrastructure.azure.transport import AzureError
+from .rutas_iniciativas import router as iniciativas_router
 from .deps import (  # noqa: I001
     ActividadDep,
     IndiceDep,
@@ -900,3 +901,9 @@ async def api_revision_work_item(
     except AzureError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return Mensaje(ok=True, detalle=str(rev))
+
+
+# ---------------------------------------------------------------------- #
+# Iniciativas: carpetas de OneDrive
+# ---------------------------------------------------------------------- #
+router.include_router(iniciativas_router)

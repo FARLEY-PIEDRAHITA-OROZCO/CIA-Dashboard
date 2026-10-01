@@ -39,6 +39,15 @@ Todos los endpoints devuelven **JSON** (`application/json`).
 | GET | `/api/qa/carga` | Quién lleva qué épicas, por volumen | experimental |
 | GET | `/api/qa/epicas/{id}/actividad` | Revisiones por persona y tipo. **No son horas**; 1 llamada a Azure por ítem | experimental |
 | GET | `/api/monitor/azure` | Contador de llamadas a Azure (peticiones, errores, latencia, concurrencia). 404 si `MONITOR_HABILITADA=false` | experimental |
+| GET | `/api/configuracion/ruta-onedrive` | Estado de la ruta base de OneDrive | experimental |
+| PUT | `/api/configuracion/ruta-onedrive` | Actualiza la ruta base de OneDrive (body JSON: `{"ruta": "..."}`) | experimental |
+| GET | `/api/iniciativas` | Lista de iniciativas a cargo con su carpeta | experimental |
+| POST | `/api/iniciativas/{epica_id}/crear?nombre=...` | Crea la estructura de carpetas (numeración automática) | experimental |
+| DELETE | `/api/iniciativas/{epica_id}` | Elimina la carpeta y el registro | experimental |
+| GET | `/api/iniciativas/{epica_id}/archivos?carpeta=...` | Lista archivos de una subcarpeta | experimental |
+| POST | `/api/iniciativas/{epica_id}/archivos?carpeta=...` | Sube un archivo (multipart/form-data) | experimental |
+| DELETE | `/api/iniciativas/{epica_id}/archivos/{nombre}?carpeta=...` | Elimina un archivo | experimental |
+| GET | `/api/iniciativas/{epica_id}/abrir` | Abre la carpeta en el explorador de archivos | experimental |
 | PATCH | `/api/workitems/{id}` | Escritura QA (opt-in, ADR-11) | experimental |
 | GET | `/api/workitems/{id}/rev` | Revisión actual, para control de concurrencia | experimental |
 | POST | `/api/epics/refresh` | Invalida la caché **y los dos índices locales** | estable |

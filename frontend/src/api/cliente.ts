@@ -5,14 +5,18 @@ import type {
   ActivoDePrueba,
   ActividadEpica,
   ActivosPrueba,
+  ArchivoIniciativa,
   AutomatizacionPruebas,
   CampoEditable,
   CargaQA,
   EstadoMonitor,
   EstadoRegistro,
+  EstadoRutaOnedrive,
   FiltrosAsignaciones,
+  IniciativaCarpeta,
   LlamadaAzure,
   ListaAsignaciones,
+  ListaIniciativas,
   ListaPersonasQA,
   PersonaQA,
   RevisionPorPersona,
@@ -855,8 +859,17 @@ function validarAccion(valor: unknown): RespuestaAccion {
 }
 
 async function peticion<T>(ruta: string, opciones: RequestInit = {}): Promise<T> {
+  // Cuando el body es FormData, el navegador debe establecer el Content-Type
+  // automáticamente (multipart/form-data con boundary). Forzar application/json
+  // hace que FastAPI espere JSON pero reciba FormData → 422.
+  const esFormData = opciones.body instanceof FormData;
+  const headers: Record<string, string> = {};
+  if (!esFormData) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const respuesta = await fetch(`${BASE}${ruta}`, {
-    headers: { "Content-Type": "application/json" },
+    headers,
     ...opciones,
   });
 
@@ -1091,6 +1104,80 @@ export const api = {
       await peticion<unknown>(`/qa/epicas/${epica}/actividad`, { signal }),
     ),
 
+  // ------------------------------------------------------------------ //
+  // Iniciativas: carpetas de OneDrive
+  // ------------------------------------------------------------------ //
+
+  obtenerRutaOnedrive: async (signal?: AbortSignal) =>
+    validarEstadoRutaOnedrive(
+      await peticion<unknown>("/configuracion/ruta-onedrive", { signal }),
+    ),
+
+  actualizarRutaOnedrive: async (ruta: string) =>
+    validarEstadoRutaOnedrive(
+      await peticion<unknown>("/configuracion/ruta-onedrive", {
+        method: "PUT",
+        body: JSON.stringify({ ruta }),
+      }),
+    ),
+
+  listarIniciativas: async (signal?: AbortSignal) =>
+    validarListaIniciativas(
+      await peticion<unknown>("/iniciativas", { signal }),
+    ),
+
+  crearEstructuraIniciativa: async (epicaId: number, nombre: string) =>
+    validarIniciativaCarpeta(
+      await peticion<unknown>(
+        `/iniciativas/${epicaId}/crear?nombre=${encodeURIComponent(nombre)}`,
+        { method: "POST" },
+      ),
+    ),
+
+  eliminarEstructuraIniciativa: async (epicaId: number) =>
+    validarAccion(
+      await peticion<unknown>(`/iniciativas/${epicaId}`, { method: "DELETE" }),
+    ),
+
+  listarArchivosIniciativa: async (epicaId: number, carpeta: string) =>
+    validarListaArchivos(
+      await peticion<unknown>(
+        `/iniciativas/${epicaId}/archivos?carpeta=${encodeURIComponent(carpeta)}`,
+      ),
+    ),
+
+  subirArchivoIniciativa: async (
+    epicaId: number,
+    carpeta: string,
+    archivo: File,
+  ) => {
+    const formData = new FormData();
+    formData.append("archivo", archivo);
+    return validarArchivoIniciativa(
+      await peticion<unknown>(
+        `/iniciativas/${epicaId}/archivos?carpeta=${encodeURIComponent(carpeta)}`,
+        { method: "POST", body: formData },
+      ),
+    );
+  },
+
+  eliminarArchivoIniciativa: async (
+    epicaId: number,
+    carpeta: string,
+    nombre: string,
+  ) =>
+    validarAccion(
+      await peticion<unknown>(
+        `/iniciativas/${epicaId}/archivos/${encodeURIComponent(nombre)}?carpeta=${encodeURIComponent(carpeta)}`,
+        { method: "DELETE" },
+      ),
+    ),
+
+  abrirIniciativa: async (epicaId: number) =>
+    validarAbrirIniciativa(
+      await peticion<unknown>(`/iniciativas/${epicaId}/abrir`),
+    ),
+
   qaMarcarRol: async (
     guid: string,
     cambios: RolActualizable,
@@ -1149,3 +1236,64 @@ export const api = {
     );
   },
 };
+
+// ------------------------------------------------------------------ //
+// Validadores de iniciativas
+// ------------------------------------------------------------------ //
+
+function validarEstadoRutaOnedrive(valor: unknown): EstadoRutaOnedrive {
+  const item = objeto(valor, "estado de ruta onedrive");
+  return {
+    ruta: texto(item.ruta ?? "", "ruta"),
+    existe: booleano(item.existe, "existe"),
+    escribible: booleano(item.escribible, "escribible"),
+    total_iniciativas: numero(item.total_iniciativas ?? 0, "total_iniciativas"),
+  };
+}
+
+function validarIniciativaCarpeta(valor: unknown): IniciativaCarpeta {
+  const item = objeto(valor, "iniciativa");
+  return {
+    epica_id: numero(item.epica_id ?? 0, "epica_id"),
+    numero: texto(item.numero ?? "", "numero"),
+    nombre: texto(item.nombre ?? "", "nombre"),
+    ruta: texto(item.ruta ?? "", "ruta"),
+    creada: texto(item.creada ?? "", "creada"),
+  };
+}
+
+function validarListaIniciativas(valor: unknown): ListaIniciativas {
+  const item = objeto(valor, "lista de iniciativas");
+  return {
+    iniciativas: lista(
+      item.iniciativas,
+      "iniciativas",
+      validarIniciativaCarpeta,
+    ),
+    subcarpetas: listaDeTexto(item.subcarpetas, "subcarpetas"),
+  };
+}
+
+function validarArchivoIniciativa(valor: unknown): ArchivoIniciativa {
+  const item = objeto(valor, "archivo");
+  return {
+    nombre: texto(item.nombre ?? "", "nombre"),
+    tamano: numero(item.tamano ?? 0, "tamano"),
+    modificado: texto(item.modificado ?? "", "modificado"),
+  };
+}
+
+function validarListaArchivos(valor: unknown): { carpeta: string; archivos: ArchivoIniciativa[] } {
+  const item = objeto(valor, "lista de archivos");
+  return {
+    carpeta: texto(item.carpeta ?? "", "carpeta"),
+    archivos: lista(item.archivos, "archivos", validarArchivoIniciativa),
+  };
+}
+
+function validarAbrirIniciativa(valor: unknown): { ruta: string } {
+  const item = objeto(valor, "abrir iniciativa");
+  return {
+    ruta: texto(item.ruta ?? "", "ruta"),
+  };
+}

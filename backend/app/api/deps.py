@@ -7,6 +7,7 @@ from fastapi import Depends, Request
 from ..application.actividad import ServicioActividad
 from ..application.indice import IndiceWorkItems
 from ..application.indice_pruebas import IndicePruebas
+from ..application.iniciativas import ServicioIniciativas
 from ..application.registro import ServicioRegistro
 from ..application.services import ServicioBacklog
 from ..core.container import Contenedor
@@ -70,6 +71,13 @@ def obtener_monitor(
     return contenedor.monitor
 
 
+def obtener_iniciativas(
+    contenedor: Annotated[Contenedor, Depends(obtener_contenedor)]
+) -> ServicioIniciativas:
+    """El servicio de gestión de carpetas de iniciativas."""
+    return contenedor.servicio_iniciativas
+
+
 ServicioDep = Annotated[ServicioBacklog, Depends(obtener_servicio)]
 IndiceDep = Annotated[IndiceWorkItems, Depends(obtener_indice)]
 IndicePruebasDep = Annotated[IndicePruebas, Depends(obtener_indice_pruebas)]
@@ -77,3 +85,4 @@ RegistroDep = Annotated[ServicioRegistro, Depends(obtener_registro)]
 ActividadDep = Annotated[ServicioActividad, Depends(obtener_actividad)]
 RegistroCopiaDep = Annotated[RegistroConCopia, Depends(obtener_registro_copia)]
 MonitorDep = Annotated[Optional[MonitorAzure], Depends(obtener_monitor)]
+IniciativasDep = Annotated[ServicioIniciativas, Depends(obtener_iniciativas)]
